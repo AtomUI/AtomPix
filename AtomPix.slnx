@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AtomPix.Core/AtomPix.Core.csproj" />
+    <Project Path="src/AtomPix.Imaging.Abstractions/AtomPix.Imaging.Abstractions.csproj" />
+    <Project Path="src/AtomPix.Imaging.Magick/AtomPix.Imaging.Magick.csproj" />
+    <Project Path="src/AtomPix.Infrastructure/AtomPix.Infrastructure.csproj" />
+    <Project Path="src/AtomPix.Workflows/AtomPix.Workflows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AtomPix.Core.Tests/AtomPix.Core.Tests.csproj" />
+    <Project Path="tests/AtomPix.Imaging.Abstractions.Tests/AtomPix.Imaging.Abstractions.Tests.csproj" />
+    <Project Path="tests/AtomPix.Imaging.Magick.Tests/AtomPix.Imaging.Magick.Tests.csproj" />
+    <Project Path="tests/AtomPix.Infrastructure.Tests/AtomPix.Infrastructure.Tests.csproj" />
+    <Project Path="tests/AtomPix.Workflows.Tests/AtomPix.Workflows.Tests.csproj" />
+  </Folder>
+</Solution>
