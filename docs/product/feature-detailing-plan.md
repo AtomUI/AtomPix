@@ -1,14 +1,16 @@
 # AtomPix 功能细化讨论计划
 
-> 文档状态：讨论过程基线
+> 文档状态：历史讨论顺序（已完成）
 >
 > 基线时间：2026-06-25
 >
-> 文档用途：记录需求与架构细化的讨论顺序，作为后续协商细节时的依据；本文档不是代码实现方案。
+> 文档用途：保留需求与架构细化的历史讨论顺序；本文档不是现行功能规范，也不是待办清单。
+
+> 当前结论：下述七个主题均已完成讨论并落入 Product、Architecture、Modules、Implementation 与 UI Prototype 正式文档。若本文中的早期问题或示例与正式文档冲突，以 [文档一致性规则](../document-consistency.md) 指定的权威来源为准。
 
 ## 1. 目标
 
-本文档用于约定 AtomPix 在进入代码实现前，需求和架构细节应按什么顺序继续细化。
+本文档记录 AtomPix 在进入代码实现前曾采用的需求和架构细化顺序。
 
 当前已有文档已经明确：
 
@@ -16,11 +18,11 @@
 - 顶层架构和模块边界：`docs/architecture/overview.md`
 - 模块职责和依赖方向：`docs/modules/overview.md`
 
-后续讨论不应直接跳到 UI 或具体图片库调用细节，而应先把稳定的业务语言、图片处理契约和用户流程定清楚。
+该顺序已经执行完成。当前的 Resize、Crop、文件夹浏览、批量输入、实时进度、资源保护和诊断设计不再由本文重复描述。
 
 ## 2. 推荐讨论顺序
 
-推荐按以下顺序展开：
+历史上按以下顺序展开：
 
 ```text
 1. Core 业务模型
@@ -34,29 +36,28 @@
 
 ## 3. 顺序理由
 
-`Core` 决定 AtomPix 的业务语言，例如压缩策略、转换策略、任务状态、授权权益和错误模型。
+`Core` 决定 AtomPix 的业务语言，例如压缩策略、转换策略、任务状态和错误模型。
 
 `Imaging.Abstractions` 决定图片引擎如何被调用，以及图片处理能力如何被 Workflows 消费。
 
 `Workflows` 决定用户动作如何串联 Core 规则、图片处理契约和外部存储能力。
 
-`Infrastructure` 决定设置、订阅状态、额度、日志、文件系统等外部能力如何落地。
+`Infrastructure` 决定设置、日志、文件系统等外部能力如何落地。
 
 `Imaging.Magick` 是第一阶段图片引擎实现，应被抽象契约约束，而不是反向污染契约和业务层。
 
-`Desktop` 应该最后讨论。Core、Imaging.Abstractions、Workflows、Infrastructure 和 Imaging.Magick 都可以先以 headless 方式实现和测试，不需要等待 UI 设计。
+`Desktop` 当时最后讨论；当前信息架构、原型和交互状态已经完成设计，见 `docs/ui-prototype/` 与 `docs/modules/desktop/interaction-state-design.md`。
 
 ## 4. 第一阶段细化主题
 
-第一轮优先细化 `Core` 业务模型，包含：
+第一轮曾优先细化 `Core` 业务模型，原始主题包含：
 
 ```text
 1. CompressionProfile
 2. ConversionProfile
 3. OutputPolicy
 4. ImageJob / BatchJob
-5. Subscription / Feature Access
-6. AppSettings / OperationResult / Error
+5. AppSettings / OperationResult / Error
 ```
 
 需要回答的问题：
@@ -69,11 +70,10 @@
 - 批量任务如何表达？
 - 设置项默认值是什么？
 - 错误如何统一表达？
-- 订阅和权益如何占位但不过度复杂化？
 
 ## 5. 第二阶段细化主题
 
-第二轮细化 `Imaging.Abstractions` 图片处理契约，包含：
+第二轮曾细化 `Imaging.Abstractions` 图片处理契约，原始主题包含：
 
 ```text
 IImageProcessor
@@ -100,7 +100,7 @@ AtomPixError
 
 ## 6. 第三阶段细化主题
 
-第三轮细化 `Workflows` 用户流程，包含：
+第三轮曾细化 `Workflows` 用户流程，原始主题包含：
 
 ```text
 OpenImageWorkflow
@@ -117,19 +117,15 @@ SaveSettingsWorkflow
 
 - 每个流程输入什么？
 - 每个流程输出什么？
-- 权益检查在哪里发生？
-- 第一阶段是否需要使用额度？结论：不需要，后续如引入再单独设计。
 - 失败如何返回？
 - 批量任务如何统计？
 - 是否允许部分成功？
 
-## 7. 后续细化主题
+## 7. 当时的后续细化主题
 
 `Infrastructure`：
 
 - 设置文件格式。
-- 订阅状态本地保存。
-- 使用额度本地保存。
 - 应用数据目录。
 - 临时目录。
 - 日志策略。
@@ -163,6 +159,7 @@ SaveSettingsWorkflow
 ## 8. 文档维护规则
 
 - 本文档只记录讨论顺序和待细化主题，不承载最终功能细节。
+- 本文列出的“需要回答的问题”是历史问题，不表示当前仍未决定。
 - 某个主题讨论完成后，应把最终结论落入对应正式文档。
 - 产品范围变化更新 `docs/product/mvp-scope.md`。
 - 架构边界变化更新 `docs/architecture/overview.md` 和对应模块文档。

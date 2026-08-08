@@ -1,0 +1,102 @@
+<atom:Window xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
+             xmlns:antdicons="https://atomui.net/icons/antdesign"
+             xmlns:nav="using:AtomPix.Desktop.Navigation"
+             xmlns:shell="using:AtomPix.Desktop.Shell"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             xmlns:views="using:AtomPix.Desktop.Views"
+             x:Class="AtomPix.Desktop.Shell.MainWindow"
+             x:DataType="shell:ShellViewModel"
+             Title="AtomPix"
+             Width="1280"
+             Height="820"
+             MinWidth="960"
+             MinHeight="640"
+             WindowStartupLocation="CenterScreen">
+    <atom:Window.DataTemplates>
+        <DataTemplate DataType="vm:HomePageViewModel">
+            <views:HomePageView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:ImageBrowserViewModel">
+            <views:ImageBrowserView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:CompressionEditorViewModel">
+            <views:CompressionEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:ConversionEditorViewModel">
+            <views:ConversionEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:ResizeEditorViewModel">
+            <views:ResizeEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:CropEditorViewModel">
+            <views:CropEditorView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:BatchTaskViewModel">
+            <views:BatchTaskView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:SettingsPageViewModel">
+            <views:SettingsPageView />
+        </DataTemplate>
+    </atom:Window.DataTemplates>
+
+    <Grid ColumnDefinitions="232,*" Background="{atom:SharedTokenResource ColorBgLayout}">
+        <Border Grid.Column="0"
+                Background="{atom:SharedTokenResource ColorBgContainer}"
+                BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
+                BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="84,*">
+                <StackPanel Margin="24,18,16,12" Spacing="2">
+                    <TextBlock Text="AtomPix" FontSize="24" FontWeight="SemiBold" />
+                    <TextBlock Text="本地图片工具" Opacity="0.58" FontSize="12" />
+                </StackPanel>
+
+                <atom:NavMenu x:Name="NavigationMenu"
+                              AutomationProperties.Name="主导航"
+                              Grid.Row="1"
+                              Mode="Inline"
+                              HorizontalAlignment="Stretch"
+                              Padding="10,4">
+                    <atom:NavMenuNode Header="浏览"
+                                      ItemKey="browse"
+                                      Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
+                                      Command="{Binding NavigateCommand}"
+                                      CommandParameter="{x:Static nav:DesktopRoute.Browse}" />
+                    <atom:NavMenuNode Header="压缩"
+                                      ItemKey="compress"
+                                      Icon="{antdicons:AntDesignIconProvider Kind=CompressOutlined}"
+                                      Command="{Binding NavigateCommand}"
+                                      CommandParameter="{x:Static nav:DesktopRoute.Compress}" />
+                    <atom:NavMenuNode Header="转换"
+                                      ItemKey="convert"
+                                      Icon="{antdicons:AntDesignIconProvider Kind=SwapOutlined}"
+                                      Command="{Binding NavigateCommand}"
+                                      CommandParameter="{x:Static nav:DesktopRoute.Convert}" />
+                    <atom:NavMenuNode Header="调整尺寸"
+                                      ItemKey="resize"
+                                      Icon="{antdicons:AntDesignIconProvider Kind=ColumnWidthOutlined}"
+                                      Command="{Binding NavigateCommand}"
+                                      CommandParameter="{x:Static nav:DesktopRoute.Resize}" />
+                    <atom:NavMenuNode Header="裁剪"
+                                      ItemKey="crop"
+                                      Icon="{antdicons:AntDesignIconProvider Kind=ScissorOutlined}"
+                                      Command="{Binding NavigateCommand}"
+                                      CommandParameter="{x:Static nav:DesktopRoute.Crop}" />
+                    <atom:NavMenuNode Header="批量任务"
+                                      ItemKey="batch"
+                                      Icon="{antdicons:AntDesignIconProvider Kind=FolderOpenOutlined}"
+                                      Command="{Binding NavigateCommand}"
+                                      CommandParameter="{x:Static nav:DesktopRoute.Batch}" />
+                    <atom:NavMenuNode Header="设置"
+                                      ItemKey="settings"
+                                      Icon="{antdicons:AntDesignIconProvider Kind=SettingOutlined}"
+                                      Command="{Binding NavigateCommand}"
+                                      CommandParameter="{x:Static nav:DesktopRoute.Settings}" />
+                </atom:NavMenu>
+            </Grid>
+        </Border>
+
+        <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" />
+    </Grid>
+</atom:Window>

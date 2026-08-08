@@ -7,6 +7,10 @@ using AtomPix.Core.ValueObjects;
 
 public sealed class LocalFileSystemService : IFileSystemService
 {
+    private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
+
     public bool FileExists(LocalPath path) => File.Exists(path.Value);
 
     public bool DirectoryExists(LocalPath path) => Directory.Exists(path.Value);
@@ -52,6 +56,77 @@ public sealed class LocalFileSystemService : IFileSystemService
         }
     }
 
+    public Task<OperationResult<IReadOnlyList<LocalPath>>> EnumerateFilesAsync(
+        LocalPath directory,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Directory.Exists(directory.Value))
+            {
+                return Task.FromResult(InfrastructureErrors.Failure<IReadOnlyList<LocalPath>>(
+                    AtomPixErrorCode.InputDirectoryNotFound,
+                    AtomPixErrorCategory.FileSystem,
+                    "Input directory does not exist."));
+            }
+
+            var files = Directory
+                .EnumerateFiles(directory.Value, "*", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFullPath)
+                .Select(path => new LocalPath(path))
+                .ToArray();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(OperationResult<IReadOnlyList<LocalPath>>.Success(files));
+        }
+        catch (OperationCanceledException)
+        {
+            return Task.FromResult(InfrastructureErrors.Canceled<IReadOnlyList<LocalPath>>());
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Task.FromResult(InfrastructureErrors.Failure<IReadOnlyList<LocalPath>>(
+                AtomPixErrorCode.Unknown,
+                AtomPixErrorCategory.Permission,
+                "Access to the input directory was denied.",
+                ex));
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException)
+        {
+            return Task.FromResult(InfrastructureErrors.Failure<IReadOnlyList<LocalPath>>(
+                AtomPixErrorCode.Unknown,
+                AtomPixErrorCategory.FileSystem,
+                "Failed to enumerate input directory.",
+                ex));
+        }
+    }
+
+    public OperationResult<LocalPath> NormalizePath(LocalPath path)
+    {
+        try
+        {
+            return OperationResult<LocalPath>.Success(new LocalPath(Path.GetFullPath(path.Value)));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return InfrastructureErrors.Failure<LocalPath>(
+                AtomPixErrorCode.InvalidInputPath,
+                AtomPixErrorCategory.Validation,
+                "Path cannot be normalized.",
+                ex);
+        }
+    }
+
+    public bool PathsEqual(LocalPath left, LocalPath right)
+    {
+        return PathComparer.Equals(Path.GetFullPath(left.Value), Path.GetFullPath(right.Value));
+    }
+
+    public int ComparePaths(LocalPath left, LocalPath right)
+    {
+        return PathComparer.Compare(Path.GetFullPath(left.Value), Path.GetFullPath(right.Value));
+    }
+
     public LocalPath Combine(LocalPath directory, string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName))
@@ -66,6 +141,8 @@ public sealed class LocalFileSystemService : IFileSystemService
 
         return new LocalPath(Path.Combine(directory.Value, fileName));
     }
+
+    public string GetFileName(LocalPath path) => Path.GetFileName(path.Value);
 
     public string GetFileNameWithoutExtension(LocalPath path) => Path.GetFileNameWithoutExtension(path.Value);
 

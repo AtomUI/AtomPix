@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AtomPix.Core\AtomPix.Core.csproj" />
+    <ProjectReference Include="..\..\src\AtomPix.Imaging.Abstractions\AtomPix.Imaging.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\AtomPix.Imaging.Magick\AtomPix.Imaging.Magick.csproj" />
+    <ProjectReference Include="..\..\src\AtomPix.Infrastructure\AtomPix.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\AtomPix.Workflows\AtomPix.Workflows.csproj" />
+  </ItemGroup>
+
+</Project>

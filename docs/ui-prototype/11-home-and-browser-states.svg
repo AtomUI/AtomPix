@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs><style>text{font-family:"Segoe UI","Microsoft YaHei",sans-serif;fill:#263142}.muted{fill:#718096}.tiny{font-size:12px}.small{font-size:14px}.body{font-size:16px}.title{font-size:22px;font-weight:650}.heading{font-size:16px;font-weight:650}.btn{font-size:13px;font-weight:600}.state{font-size:11px;font-weight:650}</style><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="18" flood-color="#233044" flood-opacity=".12"/></filter></defs>
+  <rect width="1440" height="900" fill="#e8edf3"/><rect x="40" y="30" width="1360" height="840" rx="18" fill="#fff" filter="url(#s)"/>
+  <text x="80" y="78" class="title">首页与图片浏览器 · 关键交互状态</text><text x="80" y="106" class="small muted">来源打开、最近记录、文件夹载入与错误项目均独立建模；浏览集合不允许追加输入。</text>
+  <rect x="1170" y="52" width="190" height="36" rx="18" fill="#eef2ff"/><text x="1265" y="75" text-anchor="middle" class="tiny" fill="#4f6bed">原型 11 · 状态画板</text>
+
+  <!-- open source loading -->
+  <rect x="80" y="140" width="396" height="290" rx="14" fill="#fff" stroke="#dce3eb"/><rect x="80" y="140" width="396" height="48" rx="14" fill="#f8fafc"/><rect x="80" y="174" width="396" height="14" fill="#f8fafc"/>
+  <text x="100" y="171" class="heading">首页 · 正在打开来源</text><rect x="374" y="154" width="82" height="24" rx="12" fill="#eef2ff"/><text x="415" y="171" text-anchor="middle" class="state" fill="#4f6bed">LOADING</text>
+  <rect x="106" y="216" width="344" height="102" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="5 4"/><circle cx="178" cy="267" r="16" fill="none" stroke="#4f6bed" stroke-width="3" stroke-dasharray="20 9"/><text x="214" y="260" class="small" font-weight="650">正在读取“旅行照片”</text><text x="214" y="283" class="tiny muted">打开图片、文件夹和快捷卡暂时禁用</text>
+  <rect x="106" y="342" width="154" height="38" rx="8" fill="#f1f4f8"/><text x="183" y="366" text-anchor="middle" class="small muted">打开图片</text><rect x="272" y="342" width="154" height="38" rx="8" fill="#f1f4f8"/><text x="349" y="366" text-anchor="middle" class="small muted">打开文件夹</text>
+  <text x="106" y="405" class="tiny muted">选择器取消：恢复首页 Ready，不显示错误。</text>
+
+  <!-- recent drawer -->
+  <rect x="500" y="140" width="396" height="290" rx="14" fill="#fff" stroke="#dce3eb"/><rect x="500" y="140" width="396" height="48" rx="14" fill="#f8fafc"/><rect x="500" y="174" width="396" height="14" fill="#f8fafc"/>
+  <text x="520" y="171" class="heading">最近记录 · 右侧抽屉</text><rect x="794" y="154" width="82" height="24" rx="12" fill="#e7f6ec"/><text x="835" y="171" text-anchor="middle" class="state" fill="#2f855a">READY</text>
+  <text x="520" y="216" class="tiny muted">文件与文件夹</text><text x="866" y="216" text-anchor="end" class="tiny" fill="#4f6bed">清空记录</text>
+  <rect x="520" y="230" width="356" height="62" rx="9" fill="#fff" stroke="#dce3eb"/><text x="538" y="255" class="small" font-weight="650">cover-photo.png</text><text x="538" y="277" class="tiny muted">昨天 18:42 · 可打开</text><text x="858" y="267" text-anchor="end" class="tiny" fill="#4f6bed">移除</text>
+  <rect x="520" y="302" width="356" height="78" rx="9" fill="#fff7ed" stroke="#f2d2a2"/><text x="538" y="328" class="small" font-weight="650">旧照片目录</text><text x="538" y="350" class="tiny" fill="#9a5a13">路径不可用 · 不会静默删除</text><text x="538" y="370" class="tiny" fill="#4f6bed">重新定位</text><text x="858" y="370" text-anchor="end" class="tiny" fill="#4f6bed">移除</text>
+  <text x="520" y="405" class="tiny muted">移除只修改最近记录，不触碰磁盘文件。</text>
+
+  <!-- collection loading -->
+  <rect x="920" y="140" width="440" height="290" rx="14" fill="#fff" stroke="#dce3eb"/><rect x="920" y="140" width="440" height="48" rx="14" fill="#f8fafc"/><rect x="920" y="174" width="440" height="14" fill="#f8fafc"/>
+  <text x="940" y="171" class="heading">浏览器 · 文件夹载入</text><rect x="1258" y="154" width="82" height="24" rx="12" fill="#eef2ff"/><text x="1299" y="171" text-anchor="middle" class="state" fill="#4f6bed">LOADING</text>
+  <rect x="940" y="210" width="126" height="190" rx="10" fill="#fbfcfe" stroke="#dce3eb"/><rect x="956" y="230" width="94" height="52" rx="7" fill="#e8edf3"/><rect x="956" y="294" width="94" height="52" rx="7" fill="#e8edf3"/><rect x="956" y="358" width="94" height="22" rx="7" fill="#eef2ff"/>
+  <rect x="1084" y="210" width="256" height="150" rx="10" fill="#202733"/><circle cx="1212" cy="285" r="20" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="24 10"/><text x="1212" y="390" text-anchor="middle" class="tiny muted">缩略图与当前预览分别异步加载</text>
+  <text x="940" y="414" class="tiny muted">返回可用；四项处理在当前图片 Ready 前禁用。</text>
+
+  <!-- browser ready -->
+  <rect x="80" y="456" width="606" height="354" rx="14" fill="#fff" stroke="#dce3eb"/><rect x="80" y="456" width="606" height="48" rx="14" fill="#f8fafc"/><rect x="80" y="490" width="606" height="14" fill="#f8fafc"/>
+  <text x="100" y="487" class="heading">浏览器 · 当前图片可用</text><rect x="584" y="470" width="82" height="24" rx="12" fill="#e7f6ec"/><text x="625" y="487" text-anchor="middle" class="state" fill="#2f855a">READY</text>
+  <rect x="102" y="526" width="126" height="222" rx="10" fill="#fbfcfe" stroke="#dce3eb"/><rect x="114" y="540" width="102" height="58" rx="8" fill="#edf2ff" stroke="#4f6bed"/><text x="165" y="575" text-anchor="middle" class="tiny">DSC_2048</text><rect x="114" y="608" width="102" height="58" rx="8" fill="#fff" stroke="#dce3eb"/><text x="165" y="643" text-anchor="middle" class="tiny">portrait</text><rect x="114" y="676" width="102" height="58" rx="8" fill="#fff" stroke="#dce3eb"/><text x="165" y="711" text-anchor="middle" class="tiny">banner</text>
+  <rect x="246" y="526" width="418" height="188" rx="10" fill="#202733"/><path d="M246 660c80-80 160-20 216-86 44 52 96 34 202 86v54H246z" fill="#6f96a5"/><circle cx="566" cy="572" r="23" fill="#f3dfb9"/>
+  <text x="258" y="741" class="tiny muted">处理当前图片</text><rect x="258" y="752" width="88" height="32" rx="7" fill="#4f6bed"/><text x="302" y="773" text-anchor="middle" class="tiny" fill="#fff">压缩</text><rect x="354" y="752" width="88" height="32" rx="7" fill="#fff" stroke="#b8c4d0"/><text x="398" y="773" text-anchor="middle" class="tiny">转换</text><rect x="450" y="752" width="96" height="32" rx="7" fill="#fff" stroke="#b8c4d0"/><text x="498" y="773" text-anchor="middle" class="tiny">调整尺寸</text><rect x="554" y="752" width="88" height="32" rx="7" fill="#fff" stroke="#b8c4d0"/><text x="598" y="773" text-anchor="middle" class="tiny">裁剪</text>
+
+  <!-- unavailable -->
+  <rect x="710" y="456" width="650" height="354" rx="14" fill="#fff" stroke="#dce3eb"/><rect x="710" y="456" width="650" height="48" rx="14" fill="#f8fafc"/><rect x="710" y="490" width="650" height="14" fill="#f8fafc"/>
+  <text x="730" y="487" class="heading">浏览器 · 当前项目不可用</text><rect x="1230" y="470" width="110" height="24" rx="12" fill="#fee2e2"/><text x="1285" y="487" text-anchor="middle" class="state" fill="#c53030">UNAVAILABLE</text>
+  <rect x="732" y="526" width="132" height="220" rx="10" fill="#fbfcfe" stroke="#dce3eb"/><rect x="744" y="540" width="108" height="60" rx="8" fill="#fff7ed" stroke="#d69e2e"/><text x="798" y="565" text-anchor="middle" class="tiny" fill="#9a5a13">holiday.jpg</text><text x="798" y="584" text-anchor="middle" class="tiny muted">预览失败</text><rect x="744" y="612" width="108" height="60" rx="8" fill="#fff" stroke="#dce3eb"/><text x="798" y="648" text-anchor="middle" class="tiny">下一张可用</text>
+  <rect x="884" y="526" width="454" height="150" rx="10" fill="#f8fafc" stroke="#dce3eb"/><circle cx="950" cy="590" r="24" fill="#fee2e2"/><path d="M950 576v20M950 605h.1" stroke="#c53030" stroke-width="3"/><text x="994" y="574" class="small" font-weight="650">无法预览当前图片</text><text x="994" y="598" class="tiny muted">文件损坏或已经不可读取</text><text x="994" y="622" class="tiny" fill="#4f6bed">选择其他缩略图继续浏览</text>
+  <rect x="884" y="694" width="162" height="36" rx="8" fill="#fff" stroke="#b8c4d0"/><text x="965" y="717" text-anchor="middle" class="small">移出浏览集合</text><rect x="1058" y="694" width="128" height="36" rx="8" fill="#f1f4f8"/><text x="1122" y="717" text-anchor="middle" class="small muted">四项处理禁用</text>
+  <text x="884" y="766" class="tiny muted">错误项保留用于解释；移出不会删除磁盘文件。</text>
+  <text x="80" y="844" class="tiny muted">原型 11 · 首页与图片浏览器状态 · 中保真</text>
+</svg>

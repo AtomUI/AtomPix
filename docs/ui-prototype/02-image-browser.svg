@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <style>
+      text { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; fill: #263142; }
+      .muted { fill:#718096 }.tiny{font-size:12px}.small{font-size:14px}.body{font-size:16px}.title{font-size:20px;font-weight:650}.heading{font-size:16px;font-weight:650}.nav{font-size:14px}.btn{font-size:14px;font-weight:600}
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="18" flood-color="#233044" flood-opacity=".12"/></filter>
+    <pattern id="checker" width="20" height="20" patternUnits="userSpaceOnUse"><rect width="20" height="20" fill="#edf1f5"/><rect width="10" height="10" fill="#dfe5ec"/><rect x="10" y="10" width="10" height="10" fill="#dfe5ec"/></pattern>
+  </defs>
+  <rect width="1440" height="900" fill="#e8edf3"/><rect x="40" y="30" width="1360" height="840" rx="18" fill="#fff" filter="url(#shadow)"/>
+  <path d="M58 30h1324a18 18 0 0 1 18 18v48H40V48a18 18 0 0 1 18-18z" fill="#f8fafc"/><line x1="40" y1="96" x2="1400" y2="96" stroke="#dce3eb"/>
+  <rect x="62" y="50" width="28" height="28" rx="8" fill="#4f6bed"/><circle cx="76" cy="64" r="7" fill="none" stroke="#fff" stroke-width="3"/><circle cx="76" cy="64" r="2" fill="#fff"/><text x="102" y="69" class="heading">AtomPix</text>
+  <path d="M249 64h12M255 58l-6 6 6 6" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round"/><text x="280" y="69" class="small">旅行照片</text><text x="352" y="69" class="small muted">/ 海边</text>
+
+  <!-- compact navigation -->
+  <rect x="40" y="96" width="68" height="774" fill="#f8fafc"/><line x1="108" y1="96" x2="108" y2="870" stroke="#dce3eb"/>
+  <rect x="52" y="120" width="44" height="44" rx="10" fill="#e9efff"/><rect x="64" y="132" width="20" height="17" rx="3" fill="none" stroke="#4f6bed" stroke-width="2"/><path d="M65 148l6-6 4 4 4-5 4 7" fill="none" stroke="#4f6bed"/>
+  <circle cx="74" cy="199" r="10" fill="none" stroke="#78869a" stroke-width="2"/><path d="M70 199h8M74 195v8" stroke="#78869a" stroke-width="2"/>
+  <path d="M64 249h20M77 244l7 5-7 5M71 260H61M67 255l-6 5 6 5" fill="none" stroke="#78869a" stroke-width="2"/>
+  <path d="M64 294h20M64 304h20M68 290v18M80 290v18" fill="none" stroke="#78869a" stroke-width="1.8"/>
+  <path d="M65 342h18v18H65zM61 347h9M78 355h10" fill="none" stroke="#78869a" stroke-width="1.8"/>
+  <rect x="64" y="394" width="20" height="17" rx="3" fill="none" stroke="#78869a" stroke-width="2"/><path d="M68 399h12M68 405h8" stroke="#78869a"/>
+  <circle cx="74" cy="820" r="10" fill="none" stroke="#78869a" stroke-width="2"/><path d="M74 806v6M74 828v6M60 820h6M82 820h6" stroke="#78869a"/>
+
+  <!-- thumbnails -->
+  <rect x="108" y="96" width="252" height="774" fill="#fbfcfe"/><line x1="360" y1="96" x2="360" y2="870" stroke="#dce3eb"/>
+  <text x="130" y="132" class="heading">海边</text><text x="330" y="132" text-anchor="end" class="tiny muted">24 张</text>
+  <rect x="126" y="151" width="216" height="80" rx="10" fill="#edf2ff" stroke="#4f6bed" stroke-width="2"/>
+  <rect x="136" y="161" width="76" height="60" rx="7" fill="#cdd9e3"/><circle cx="194" cy="177" r="6" fill="#fff"/><path d="M141 213l22-21 14 12 10-16 20 25z" fill="#9aafc0"/>
+  <text x="224" y="181" class="small" font-weight="650">DSC_2048.jpg</text><text x="224" y="202" class="tiny muted">6000 × 4000</text><text x="224" y="219" class="tiny muted">8.4 MB · JPEG</text>
+  <g>
+    <rect x="126" y="241" width="216" height="80" rx="10" fill="#fff" stroke="#dce3eb"/><rect x="136" y="251" width="76" height="60" rx="7" fill="#d8d1c8"/><path d="M141 303l20-26 14 15 12-18 20 29z" fill="#b9aa9a"/><text x="224" y="271" class="small" font-weight="600">DSC_2049.jpg</text><text x="224" y="292" class="tiny muted">6000 × 4000</text><text x="224" y="309" class="tiny muted">7.9 MB · JPEG</text>
+    <rect x="126" y="331" width="216" height="80" rx="10" fill="#fff" stroke="#dce3eb"/><rect x="136" y="341" width="76" height="60" rx="7" fill="#d5e1dc"/><circle cx="162" cy="365" r="13" fill="#a7bbb1"/><text x="224" y="361" class="small" font-weight="600">portrait.png</text><text x="224" y="382" class="tiny muted">2400 × 3200</text><text x="224" y="399" class="tiny muted">12.1 MB · PNG</text>
+    <rect x="126" y="421" width="216" height="80" rx="10" fill="#fff" stroke="#dce3eb"/><rect x="136" y="431" width="76" height="60" rx="7" fill="#dbe2eb"/><path d="M142 484l18-20 15 13 12-16 19 23z" fill="#aab8c9"/><text x="224" y="451" class="small" font-weight="600">banner.webp</text><text x="224" y="472" class="tiny muted">1920 × 1080</text><text x="224" y="489" class="tiny muted">1.6 MB · WebP</text>
+  </g>
+  <rect x="126" y="518" width="216" height="58" rx="8" fill="#f3f6f9"/><text x="234" y="541" text-anchor="middle" class="tiny muted">浏览集合固定为当前来源</text><text x="234" y="561" text-anchor="middle" class="tiny muted">更换来源请返回首页</text>
+
+  <!-- preview toolbar -->
+  <rect x="360" y="96" width="692" height="58" fill="#fff"/><line x1="360" y1="154" x2="1052" y2="154" stroke="#e2e7ed"/>
+  <text x="384" y="132" class="title">DSC_2048.jpg</text>
+  <rect x="772" y="111" width="36" height="30" rx="7" fill="#f5f7fa"/><text x="790" y="132" text-anchor="middle" class="body">−</text>
+  <text x="831" y="132" text-anchor="middle" class="small">43%</text>
+  <rect x="855" y="111" width="36" height="30" rx="7" fill="#f5f7fa"/><text x="873" y="132" text-anchor="middle" class="body">＋</text>
+  <rect x="903" y="111" width="62" height="30" rx="7" fill="#f5f7fa"/><text x="934" y="131" text-anchor="middle" class="tiny">适应</text>
+  <rect x="973" y="111" width="62" height="30" rx="7" fill="#f5f7fa"/><text x="1004" y="131" text-anchor="middle" class="tiny">1 : 1</text>
+
+  <rect x="382" y="176" width="648" height="564" rx="12" fill="#202733"/>
+  <rect x="455" y="226" width="502" height="464" rx="3" fill="#c8d7e1"/>
+  <circle cx="832" cy="316" r="36" fill="#f4e7c9" opacity=".75"/>
+  <path d="M455 552C540 470 605 516 677 430c72 78 118 34 280 122v138H455z" fill="#7fa3ad"/>
+  <path d="M455 592c110-35 196-24 271 2 77 27 144 33 231-5v101H455z" fill="#547c89"/>
+  <path d="M455 622c144-26 285 51 502 2v66H455z" fill="#d7c7aa"/>
+  <circle cx="402" cy="460" r="22" fill="#fff" opacity=".9"/><path d="M409 451l-9 9 9 9" fill="none" stroke="#526176" stroke-width="2"/>
+  <circle cx="1010" cy="460" r="22" fill="#fff" opacity=".9"/><path d="M1003 451l9 9-9 9" fill="none" stroke="#526176" stroke-width="2"/>
+  <rect x="382" y="758" width="648" height="76" rx="10" fill="#f8fafc" stroke="#dce3eb"/>
+  <text x="400" y="783" class="tiny muted">处理当前图片</text>
+  <rect x="400" y="795" width="112" height="30" rx="7" fill="#4f6bed"/><text x="456" y="815" text-anchor="middle" class="tiny" fill="#fff" font-weight="600">压缩</text>
+  <rect x="520" y="795" width="112" height="30" rx="7" fill="#fff" stroke="#aeb9c7"/><text x="576" y="815" text-anchor="middle" class="tiny" font-weight="600">转换</text>
+  <rect x="640" y="795" width="112" height="30" rx="7" fill="#fff" stroke="#aeb9c7"/><text x="696" y="815" text-anchor="middle" class="tiny" font-weight="600">调整尺寸</text>
+  <rect x="760" y="795" width="112" height="30" rx="7" fill="#fff" stroke="#aeb9c7"/><text x="816" y="815" text-anchor="middle" class="tiny" font-weight="600">裁剪</text>
+  <text x="1010" y="815" text-anchor="end" class="tiny muted">1 / 24</text>
+
+  <!-- inspector -->
+  <rect x="1052" y="96" width="348" height="774" fill="#fbfcfe"/><line x1="1052" y1="96" x2="1052" y2="870" stroke="#dce3eb"/>
+  <text x="1076" y="135" class="heading">图片信息</text><line x1="1076" y1="154" x2="1376" y2="154" stroke="#e1e7ee"/>
+  <text x="1076" y="185" class="small muted">格式</text><text x="1376" y="185" text-anchor="end" class="small">JPEG</text>
+  <text x="1076" y="218" class="small muted">尺寸</text><text x="1376" y="218" text-anchor="end" class="small">6000 × 4000 px</text>
+  <text x="1076" y="251" class="small muted">文件大小</text><text x="1376" y="251" text-anchor="end" class="small">8.4 MB</text>
+  <text x="1076" y="284" class="small muted">透明通道</text><text x="1376" y="284" text-anchor="end" class="small">无</text>
+  <text x="1076" y="317" class="small muted">拍摄信息</text><text x="1376" y="317" text-anchor="end" class="small">包含 EXIF</text>
+  <text x="1076" y="350" class="small muted">色彩配置</text><text x="1376" y="350" text-anchor="end" class="small">sRGB ICC</text>
+  <text x="1076" y="383" class="small muted">动画 / 多帧</text><text x="1376" y="383" text-anchor="end" class="small">否</text>
+  <line x1="1076" y1="407" x2="1376" y2="407" stroke="#e1e7ee"/>
+  <text x="1076" y="440" class="heading">文件位置</text>
+  <rect x="1076" y="458" width="300" height="62" rx="8" fill="#fff" stroke="#dce3eb"/>
+  <text x="1089" y="481" class="tiny muted">D:\Photos\旅行照片\海边\</text><text x="1089" y="501" class="tiny">DSC_2048.jpg</text>
+  <rect x="1076" y="532" width="144" height="34" rx="8" fill="#fff" stroke="#b9c4d1"/><text x="1148" y="554" text-anchor="middle" class="tiny">在文件夹中显示</text>
+  <text x="1076" y="615" class="heading">预览说明</text>
+  <rect x="1076" y="633" width="300" height="88" rx="10" fill="#eef2f7"/>
+  <text x="1092" y="657" class="tiny">已自动应用 EXIF 方向</text><text x="1092" y="679" class="tiny muted">预览最长边限制为 2048 px，</text><text x="1092" y="699" class="tiny muted">不会改变原始文件。</text>
+  <rect x="1076" y="760" width="300" height="46" rx="9" fill="#f3f6f9"/><text x="1226" y="789" text-anchor="middle" class="small muted">当前来源 · 旅行照片 / 海边</text>
+  <text x="1076" y="839" class="tiny muted">原型 02 · 图片浏览 / 已加载态</text>
+</svg>

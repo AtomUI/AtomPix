@@ -14,25 +14,37 @@
 
 | 模块 | 文档 | 物理项目 | 核心职责 |
 | --- | --- | --- | --- |
-| Core | [core/overview.md](core/overview.md) | `AtomPix.Core` | 产品业务核心，定义模型、值对象、策略、授权、额度、错误、结果和纯业务规则。 |
+| Core | [core/overview.md](core/overview.md) | `AtomPix.Core` | 产品业务核心，定义模型、值对象、策略、错误、结果和纯业务规则。 |
 | Workflows | [workflows/overview.md](workflows/overview.md) | `AtomPix.Workflows` | 用户流程编排，把 UI 动作转换为应用流程。 |
 | Imaging Abstractions | [imaging-abstractions/overview.md](imaging-abstractions/overview.md) | `AtomPix.Imaging.Abstractions` | 图片处理契约，定义图片引擎对外能力和请求/结果模型。 |
 | Imaging Magick | [imaging-magick/overview.md](imaging-magick/overview.md) | `AtomPix.Imaging.Magick` | 基于 Magick.NET 实现图片处理契约。 |
-| Infrastructure | [infrastructure/overview.md](infrastructure/overview.md) | `AtomPix.Infrastructure` | 配置、授权、额度、日志、文件系统、本地存储等技术实现。 |
+| Infrastructure | [infrastructure/overview.md](infrastructure/overview.md) | `AtomPix.Infrastructure` | 配置、日志、文件系统、本地存储等技术实现。 |
 | Desktop | [desktop/overview.md](desktop/overview.md) | `AtomPix.Desktop` | Avalonia / AtomUI UI、ViewModel、桌面交互和组合根。 |
+
+Workflows 如何驱动 Core `ImageJob` / `BatchJob`，见 [Workflow 任务状态机编排设计](workflows/job-state-orchestration.md)。
+
+Desktop 如何把 01–13 原型落实为 AtomUI 组件、独立包和必要自定义控件，见 [AtomUI 组件映射与实现基线](desktop/atomui-component-mapping.md)。
+
+跨 Desktop、Workflows、Imaging.Magick 与 Infrastructure 的诊断关联、日志落盘和隐私边界，见 [诊断与本地日志设计](infrastructure/diagnostics-and-logging.md)。
 
 ## 2. 推荐阅读顺序
 
 ```text
-1. docs/product/mvp-scope.md
-2. docs/architecture/overview.md
-3. docs/modules/overview.md
-4. docs/modules/core/overview.md
-5. docs/modules/imaging-abstractions/overview.md
-6. docs/modules/workflows/overview.md
-7. docs/modules/imaging-magick/overview.md
-8. docs/modules/infrastructure/overview.md
-9. docs/modules/desktop/overview.md
+1. docs/document-consistency.md
+2. docs/product/mvp-scope.md
+3. docs/architecture/overview.md
+4. docs/modules/overview.md
+5. docs/modules/core/overview.md
+6. docs/modules/imaging-abstractions/overview.md
+7. docs/modules/workflows/overview.md
+8. docs/modules/workflows/job-state-orchestration.md
+9. docs/modules/imaging-magick/overview.md
+10. docs/modules/infrastructure/overview.md
+11. docs/modules/infrastructure/diagnostics-and-logging.md
+12. docs/modules/desktop/overview.md
+13. docs/modules/desktop/interaction-state-design.md
+14. docs/modules/desktop/atomui-component-mapping.md
+15. docs/ui-prototype/README.md
 ```
 
 ## 3. 模块依赖摘要
@@ -51,6 +63,10 @@ AtomPix.Workflows
 
 AtomPix.Imaging.Magick
   -> AtomPix.Imaging.Abstractions
+  -> AtomPix.Core
+
+AtomPix.Imaging.Abstractions
+  -> AtomPix.Core
 
 AtomPix.Infrastructure
   -> AtomPix.Core
@@ -60,11 +76,12 @@ AtomPix.Infrastructure
 
 | 任务 | 应修改模块 |
 | --- | --- |
-| 新增压缩策略、转换策略、任务状态、授权权益、额度规则 | Core |
+| 新增压缩策略、转换策略、任务状态和错误规则 | Core |
 | 新增打开图片、生成预览、压缩、转换、批处理、保存设置等用户流程 | Workflows |
 | 新增图片处理接口、请求/结果 DTO、格式枚举、预览数据结构 | Imaging Abstractions |
 | 修改 Magick.NET 调用、格式映射、图片库异常转换 | Imaging Magick |
-| 修改配置文件保存、订阅状态存储、订阅状态存储、路径解析、日志 | Infrastructure |
+| 调整图片文件/像素硬边界或 Memory/Map/Disk/Thread 上限 | 先更新 Imaging Abstractions 能力与 Product 范围，再更新 Imaging Magick；Core 只增加稳定错误语义 |
+| 修改配置文件保存、最近记录存储、路径解析、本地日志 Provider 或隐私过滤 | Infrastructure |
 | 新增窗口、页面、ViewModel、AtomUI 控件、主题资源、拖拽交互 | Desktop |
 | 调整模块引用关系或项目拆分 | Architecture 文档和对应模块文档 |
 | 调整第一阶段功能范围、暂缓功能或验收口径 | Product 文档，优先更新 `docs/product/mvp-scope.md` |

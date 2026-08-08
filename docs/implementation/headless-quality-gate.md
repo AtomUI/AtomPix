@@ -1,10 +1,12 @@
-# AtomPix Headless 质量闸门
+# AtomPix Headless 质量闸门（历史验收记录）
 
-> 文档状态：发布前 headless 工程卫生基线
+> 文档状态：进入 UI 原型前的历史 headless 工程卫生基线
 >
 > 基线时间：2026-06-26
 >
 > 范围：Core、Imaging.Abstractions、Infrastructure、Imaging.Magick、Workflows；不包含 Desktop / UI。
+
+> 当前状态：本文证明当时的 Headless 基线足以进入 UI 原型阶段；UI 原型和交互设计现已完成。本文不覆盖后来冻结的独立 Resize/Crop、实时批量进度、资源保护和诊断目标契约，现行测试计划见 `testing-and-release.md` 第 32–46 节。
 
 ## 1. 目标
 
@@ -24,7 +26,7 @@
 
 不代表：
 
-- 可以发布商业版本。
+- 可以发布正式版本。
 - 可以承诺跨平台真实安装包稳定。
 - 可以承诺 NativeAOT 成功。
 - 可以承诺真实大图、权限异常、跨平台路径都已充分验证。
@@ -113,7 +115,6 @@ coverlet.collector
 
 - Core 模型不变量。
 - 压缩、转换、输出策略模型。
-- 功能访问和订阅状态。
 - 设置、最近记录、任务、批量进度。
 - 图片处理抽象契约。
 - Magick 真实图片探测、预览、压缩、转换。
@@ -132,30 +133,28 @@ Desktop / ViewModel 不能绕过以下契约：
 - 用户可预期失败使用 `OperationResult`。
 - 错误展示根据 `AtomPixErrorCode` 做本地化映射。
 - 输出目录、命名和覆盖行为通过 `OutputPolicy` 表达。
-- 收费功能判断通过 `FeatureAccessPolicy` 和 Workflows 入口完成。
 - 图片处理只能通过 `IImageProcessor` 间接使用。
 - Desktop 组合根负责组合 Infrastructure、Imaging.Magick 和 Workflows。
-- ViewModel 不直接 new `MagickImageProcessor`、`JsonAppSettingsStore`、`LocalSubscriptionStore` 等具体实现。
+- ViewModel 不直接 new `MagickImageProcessor`、`JsonAppSettingsStore` 等具体实现。
 
-## 6. 当前仍未覆盖的风险
+## 6. 进入 UI 前仍未覆盖的风险（历史快照）
 
-进入 UI 前仍可接受，但发布前必须继续评估：
+以下内容是 2026-06-26 进入 UI 前的风险快照，不代表当前实现缺口；各项现状和未完成发布门禁以 `testing-and-release.md` 最新快照为准：
 
-- 真实大图、超大图和高内存压力。
+- 真实大图、超大图和高内存压力；当时目标资源契约已经冻结为 `512 MiB / 32768 px / 128 MP`，但代码尚未实现轻量探测、进程级按需上限和对应压力验证。
 - 大批量处理性能和取消响应延迟。
 - Windows/macOS/Linux 真实路径、权限和文件锁差异。
 - 只读目录、网络盘、移动盘、云同步目录。
 - 原生 Magick.NET 包体积和平台特定包策略。
 - 真实 Desktop single-file/self-contained 发布。
 - NativeAOT 与 Avalonia、AtomUI、Magick.NET 的实际兼容性。
-- 商业订阅服务端、激活、签名、防篡改和离线校验。
-- 崩溃日志、用户诊断日志和隐私策略。
+- 本地诊断与隐私目标契约已经冻结，但当时代码仍缺少日志作用域、滚动 Provider、脱敏过滤和故障隔离测试。
 
-## 7. 发布验证口径
+## 7. 进入 UI 前的发布验证口径（历史快照）
 
-当前没有可执行 Desktop 项目，因此发布验证只覆盖类库 publish，不覆盖真实应用产物。
+该基线时尚无可执行 Desktop 项目，因此当次发布验证只覆盖类库 publish，不覆盖真实应用产物。当前 Desktop 发布证据见 `testing-and-release.md` 最新快照。
 
-当前可执行验证：
+当时执行的验证：
 
 ```text
 dotnet restore AtomPix.slnx
@@ -165,7 +164,7 @@ dotnet publish src/AtomPix.Workflows/AtomPix.Workflows.csproj -c Release -r win-
 dotnet publish src/AtomPix.Imaging.Magick/AtomPix.Imaging.Magick.csproj -c Release -r win-x64 --self-contained true
 ```
 
-Desktop 出现后必须新增：
+后续进入 Desktop 阶段要求新增（当前已纳入发布验证）：
 
 ```text
 dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
@@ -199,8 +198,6 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 默认压缩流程。
 - 批量压缩流程。
 - 批量转换流程。
-- 免费用户批量功能拦截。
-- 有效订阅批量功能放行。
 - 最近记录写入。
 
 当前 headless 测试基线：
@@ -248,6 +245,6 @@ tests/TestOutputs/Images/
 边界：
 
 ```text
-这不是商业发布就绪结论。Desktop、安装包、NativeAOT、真实跨平台权限、大图性能、订阅服务端、授权加固和真实用户图片质量验收仍未完成。
+这不是正式发布就绪结论。Desktop、安装包、NativeAOT、真实跨平台权限、大图性能和真实用户图片质量验收仍未完成。
 ```
 

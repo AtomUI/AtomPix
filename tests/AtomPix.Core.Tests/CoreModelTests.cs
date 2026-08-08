@@ -2,11 +2,12 @@ namespace AtomPix.Core.Tests;
 
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
+using AtomPix.Core.Crop;
 using AtomPix.Core.Errors;
 using AtomPix.Core.Jobs;
-using AtomPix.Core.Licensing;
 using AtomPix.Core.Output;
 using AtomPix.Core.Results;
+using AtomPix.Core.Resize;
 using AtomPix.Core.Settings;
 using AtomPix.Core.ValueObjects;
 
@@ -46,7 +47,6 @@ public sealed class CoreModelTests
 
         Assert.Equal(CompressionMode.Smart, profile.Mode);
         Assert.Null(profile.Quality);
-        Assert.Equal(ResizeMode.None, profile.ResizePolicy.Mode);
         Assert.Equal(MetadataPolicy.Remove, profile.MetadataPolicy);
     }
 
@@ -57,8 +57,8 @@ public sealed class CoreModelTests
 
         Assert.Equal(OutputImageFormat.WebP, profile.OutputFormat);
         Assert.Equal(80, profile.Quality?.Value);
-        Assert.Equal(ResizeMode.None, profile.ResizePolicy.Mode);
         Assert.Equal(MetadataPolicy.Remove, profile.MetadataPolicy);
+        Assert.Equal(RgbColor.White, profile.TransparencyPolicy.OpaqueBackgroundColor);
     }
 
     [Fact]
@@ -74,99 +74,6 @@ public sealed class CoreModelTests
     }
 
     [Fact]
-    public void Feature_access_policy_allows_all_features_for_active_subscription()
-    {
-        var policy = new DefaultFeatureAccessPolicy();
-        var active = new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddMonths(1));
-
-        var decision = policy.CanUse(FeatureId.BatchCompress, active);
-
-        Assert.True(decision.Allowed);
-        Assert.Null(decision.BlockReason);
-    }
-
-    [Fact]
-    public void Feature_access_policy_denies_paid_feature_for_free_subscription()
-    {
-        var policy = new DefaultFeatureAccessPolicy();
-
-        var decision = policy.CanUse(FeatureId.BatchCompress, SubscriptionState.Free);
-
-        Assert.False(decision.Allowed);
-        Assert.Equal(FeatureAccessBlockReason.SubscriptionRequired, decision.BlockReason);
-    }
-
-    [Fact]
-    public void Feature_access_policy_allows_single_compress_for_free_subscription()
-    {
-        var policy = new DefaultFeatureAccessPolicy();
-
-        var decision = policy.CanUse(FeatureId.SingleCompress, SubscriptionState.Free);
-
-        Assert.True(decision.Allowed);
-    }
-
-    [Fact]
-    public void Feature_access_policy_allows_every_declared_feature_for_active_subscription()
-    {
-        var policy = new DefaultFeatureAccessPolicy();
-        var active = new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Yearly, DateTimeOffset.UtcNow.AddYears(1));
-
-        foreach (var feature in Enum.GetValues<FeatureId>())
-        {
-            Assert.True(policy.CanUse(feature, active).Allowed, $"Active subscription should allow {feature}.");
-        }
-    }
-
-    [Theory]
-    [InlineData(FeatureId.BatchCompress)]
-    [InlineData(FeatureId.BatchConvert)]
-    [InlineData(FeatureId.WebpExport)]
-    [InlineData(FeatureId.MetadataControl)]
-    [InlineData(FeatureId.ResizeOnExport)]
-    [InlineData(FeatureId.AdvancedCompressionProfile)]
-    public void Feature_access_policy_denies_non_free_features_for_free_subscription(FeatureId feature)
-    {
-        var policy = new DefaultFeatureAccessPolicy();
-
-        var decision = policy.CanUse(feature, SubscriptionState.Free);
-
-        Assert.False(decision.Allowed);
-        Assert.Equal(FeatureAccessBlockReason.SubscriptionRequired, decision.BlockReason);
-    }
-
-    [Theory]
-    [InlineData(FeatureId.SingleCompress)]
-    [InlineData(FeatureId.SingleConvert)]
-    public void Feature_access_policy_allows_free_features_for_expired_subscription(FeatureId feature)
-    {
-        var policy = new DefaultFeatureAccessPolicy();
-        var expired = new SubscriptionState(SubscriptionStatus.Expired, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddDays(-1));
-
-        var decision = policy.CanUse(feature, expired);
-
-        Assert.True(decision.Allowed);
-        Assert.Null(decision.BlockReason);
-    }
-
-    [Theory]
-    [InlineData(FeatureId.BatchCompress)]
-    [InlineData(FeatureId.BatchConvert)]
-    [InlineData(FeatureId.WebpExport)]
-    [InlineData(FeatureId.MetadataControl)]
-    [InlineData(FeatureId.ResizeOnExport)]
-    [InlineData(FeatureId.AdvancedCompressionProfile)]
-    public void Feature_access_policy_denies_paid_features_for_expired_subscription(FeatureId feature)
-    {
-        var policy = new DefaultFeatureAccessPolicy();
-        var expired = new SubscriptionState(SubscriptionStatus.Expired, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddDays(-1));
-
-        var decision = policy.CanUse(feature, expired);
-
-        Assert.False(decision.Allowed);
-        Assert.Equal(FeatureAccessBlockReason.SubscriptionExpired, decision.BlockReason);
-    }
-    [Fact]
     public void AppSettings_default_matches_product_defaults()
     {
         var settings = AppSettings.Default;
@@ -176,6 +83,8 @@ public sealed class CoreModelTests
         Assert.True(settings.RecentItems.Enabled);
         Assert.Equal(20, settings.RecentItems.MaxCount);
         Assert.Equal(OutputImageFormat.WebP, settings.DefaultConversionProfile.OutputFormat);
+        Assert.Equal(90, settings.DefaultSameFormatEncodingPolicy.LossyQuality.Value);
+        Assert.Equal(MetadataPolicy.Remove, settings.DefaultSameFormatEncodingPolicy.MetadataPolicy);
     }
 
 
@@ -259,7 +168,7 @@ public sealed class CoreModelTests
             new ImageJobResult(ImageJobId.New(), ImageJobType.Compress, input, null, ImageJobStatus.Canceled, null, null, canceled)
         };
 
-        var result = new BatchResult(BatchJobId.New(), ImageJobType.Compress, BatchJobStatus.Canceled, items, totalCount: 4);
+        var result = new BatchResult(BatchJobId.New(), ImageJobType.Compress, BatchJobStatus.Canceled, 4, items, canceled);
         var progress = BatchProgressSnapshot.FromResults(result.BatchId, result.Type, result.TotalCount, result.Items, null);
 
         Assert.Equal(4, result.TotalCount);
@@ -271,7 +180,7 @@ public sealed class CoreModelTests
         Assert.Equal(0.5, progress.CompletionRatio);
     }
     [Fact]
-    public void BatchResult_calculates_counts_and_saved_bytes()
+    public void BatchResult_calculates_counts_and_neutral_size_changes_from_comparable_successes_only()
     {
         var input = new LocalPath("input.jpg");
         var output = new LocalPath("output.jpg");
@@ -280,19 +189,71 @@ public sealed class CoreModelTests
             new ImageJobResult(ImageJobId.New(), ImageJobType.Compress, input, output, ImageJobStatus.Succeeded, 100, 70, null),
             new ImageJobResult(ImageJobId.New(), ImageJobType.Compress, input, null, ImageJobStatus.Failed, 100, null,
                 new AtomPixError(AtomPixErrorCode.ImageCompressFailed, AtomPixErrorCategory.ImageProcessing, "failed")),
-            new ImageJobResult(ImageJobId.New(), ImageJobType.Compress, input, null, ImageJobStatus.Skipped, 100, null, null)
+            new ImageJobResult(ImageJobId.New(), ImageJobType.Compress, input, output, ImageJobStatus.Skipped, 100, null,
+                new AtomPixError(AtomPixErrorCode.OutputFileAlreadyExists, AtomPixErrorCategory.FileSystem, "exists"))
         };
 
-        var result = new BatchResult(BatchJobId.New(), ImageJobType.Compress, BatchJobStatus.PartiallySucceeded, items);
+        var result = new BatchResult(BatchJobId.New(), ImageJobType.Compress, BatchJobStatus.PartiallySucceeded, 3, items, null);
 
         Assert.Equal(3, result.TotalCount);
         Assert.Equal(1, result.SucceededCount);
         Assert.Equal(1, result.FailedCount);
         Assert.Equal(1, result.SkippedCount);
-        Assert.Equal(300, result.TotalInputSizeBytes);
-        Assert.Equal(70, result.TotalOutputSizeBytes);
-        Assert.Equal(230, result.TotalSavedBytes);
-        Assert.Equal(230 / 300d, result.TotalSavedRatio);
+        Assert.Equal(1, result.SizeComparedItemCount);
+        Assert.Equal(100, result.ProcessedInputSizeBytes);
+        Assert.Equal(70, result.ProcessedOutputSizeBytes);
+        Assert.Equal(-30, result.TotalSizeDeltaBytes);
+        Assert.Equal(-0.3, result.TotalSizeDeltaRatio);
+        Assert.Equal(FileSizeChangeKind.Reduced, result.TotalSizeChangeKind);
+        Assert.Equal(1, result.ReducedItemCount);
+        Assert.Equal(0, result.UnchangedItemCount);
+        Assert.Equal(0, result.IncreasedItemCount);
+    }
+
+    [Theory]
+    [InlineData(100, 50, -50, FileSizeChangeKind.Reduced)]
+    [InlineData(100, 100, 0, FileSizeChangeKind.Unchanged)]
+    [InlineData(100, 125, 25, FileSizeChangeKind.Increased)]
+    public void ImageJobResult_uses_neutral_size_delta_semantics(long inputBytes, long outputBytes, long delta, FileSizeChangeKind kind)
+    {
+        var result = new ImageJobResult(
+            ImageJobId.New(),
+            ImageJobType.Resize,
+            new LocalPath("input.jpg"),
+            new LocalPath("output.jpg"),
+            ImageJobStatus.Succeeded,
+            inputBytes,
+            outputBytes,
+            null);
+
+        Assert.Equal(delta, result.SizeDeltaBytes);
+        Assert.Equal(delta / (double)inputBytes, result.SizeDeltaRatio);
+        Assert.Equal(kind, result.SizeChangeKind);
+    }
+
+    [Fact]
+    public void Resize_policies_resolve_pixel_and_percentage_requests_deterministically()
+    {
+        var input = new ImageSize(4000, 3000);
+
+        Assert.Equal(new ResolvedResizeSize(1000, 750), new PixelResizePolicy(1000, 2500, true).Resolve(input));
+        Assert.Equal(new ResolvedResizeSize(1000, 750), new PixelResizePolicy(1000, null, true).Resolve(input));
+        Assert.Equal(new ResolvedResizeSize(1000, 500), new PixelResizePolicy(1000, 500, false).Resolve(input));
+        Assert.Equal(new ResolvedResizeSize(500, 375), new PercentageResizePolicy(12.5m).Resolve(input));
+    }
+
+    [Fact]
+    public void Crop_rules_validate_logical_image_bounds_without_changing_the_rectangle()
+    {
+        var crop = new CropRectangle(10, 20, 100, 80);
+
+        var valid = CropRules.ValidateCropRectangle(new ImageSize(200, 200), crop);
+        var invalid = CropRules.ValidateCropRectangle(new ImageSize(100, 100), crop);
+
+        Assert.True(valid.Succeeded);
+        Assert.Same(crop, valid.Value);
+        Assert.False(invalid.Succeeded);
+        Assert.Equal(AtomPixErrorCode.InvalidCropOptions, invalid.Error?.Code);
     }
 }
 

@@ -6,3 +6,4 @@ TestResults/
 *.suo
 .vs/
 .idea
+out-lib

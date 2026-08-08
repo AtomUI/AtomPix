@@ -2,15 +2,18 @@ namespace AtomPix.Workflows.Images;
 
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
+using AtomPix.Core.Crop;
 using AtomPix.Core.Errors;
 using AtomPix.Core.Jobs;
-using AtomPix.Core.Licensing;
 using AtomPix.Core.Output;
 using AtomPix.Core.Ports;
 using AtomPix.Core.Results;
+using AtomPix.Core.Resize;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
+using AtomPix.Workflows.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 public sealed record OpenImageRequest(LocalPath InputPath);
 public sealed record OpenImageResult(ImageProbeResult ProbeResult);
@@ -18,10 +21,18 @@ public sealed record OpenImageResult(ImageProbeResult ProbeResult);
 public sealed class OpenImageWorkflow
 {
     private readonly IImageProcessor _imageProcessor;
+    private readonly ILogger<OpenImageWorkflow>? _logger;
 
-    public OpenImageWorkflow(IImageProcessor imageProcessor) => _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
+    public OpenImageWorkflow(IImageProcessor imageProcessor, ILogger<OpenImageWorkflow>? logger = null)
+    {
+        _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
+        _logger = logger;
+    }
 
-    public async Task<OperationResult<OpenImageResult>> ExecuteAsync(OpenImageRequest request, CancellationToken cancellationToken)
+    public Task<OperationResult<OpenImageResult>> ExecuteAsync(OpenImageRequest request, CancellationToken cancellationToken) =>
+        WorkflowDiagnostics.RunAsync(_logger, nameof(OpenImageWorkflow), () => ExecuteCoreAsync(request, cancellationToken));
+
+    private async Task<OperationResult<OpenImageResult>> ExecuteCoreAsync(OpenImageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -38,10 +49,18 @@ public sealed record CreatePreviewResult(ImagePreviewResult Preview);
 public sealed class CreatePreviewWorkflow
 {
     private readonly IImageProcessor _imageProcessor;
+    private readonly ILogger<CreatePreviewWorkflow>? _logger;
 
-    public CreatePreviewWorkflow(IImageProcessor imageProcessor) => _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
+    public CreatePreviewWorkflow(IImageProcessor imageProcessor, ILogger<CreatePreviewWorkflow>? logger = null)
+    {
+        _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
+        _logger = logger;
+    }
 
-    public async Task<OperationResult<CreatePreviewResult>> ExecuteAsync(CreatePreviewRequest request, CancellationToken cancellationToken)
+    public Task<OperationResult<CreatePreviewResult>> ExecuteAsync(CreatePreviewRequest request, CancellationToken cancellationToken) =>
+        WorkflowDiagnostics.RunAsync(_logger, nameof(CreatePreviewWorkflow), () => ExecuteCoreAsync(request, cancellationToken));
+
+    private async Task<OperationResult<CreatePreviewResult>> ExecuteCoreAsync(CreatePreviewRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -58,22 +77,27 @@ public sealed class CreatePreviewWorkflow
 }
 
 public sealed record CompressImageRequest(LocalPath InputPath, CompressionProfile Profile, OutputPolicy OutputPolicy);
-public sealed record CompressImageResult(ImageJobResult JobResult);
+public sealed record CompressImageResult(ImageJobResult JobResult, ImageQuality? AppliedQuality);
 
 public sealed class CompressImageWorkflow
 {
     private readonly ImageWorkflowServices _services;
+    private readonly ILogger<CompressImageWorkflow>? _logger;
 
-    public CompressImageWorkflow(ImageWorkflowServices services) => _services = services ?? throw new ArgumentNullException(nameof(services));
+    public CompressImageWorkflow(ImageWorkflowServices services, ILogger<CompressImageWorkflow>? logger = null)
+    {
+        _services = services ?? throw new ArgumentNullException(nameof(services));
+        _logger = logger;
+    }
 
-    public async Task<OperationResult<CompressImageResult>> ExecuteAsync(CompressImageRequest request, CancellationToken cancellationToken)
+    public Task<OperationResult<CompressImageResult>> ExecuteAsync(CompressImageRequest request, CancellationToken cancellationToken) =>
+        WorkflowDiagnostics.RunAsync(_logger, nameof(CompressImageWorkflow), () => ExecuteCoreAsync(request, cancellationToken));
+
+    private async Task<OperationResult<CompressImageResult>> ExecuteCoreAsync(CompressImageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Profile);
         ArgumentNullException.ThrowIfNull(request.OutputPolicy);
-
-        var access = await _services.CheckAccessAsync(FeatureId.SingleCompress, cancellationToken).ConfigureAwait(false);
-        if (!access.Succeeded) return OperationResult<CompressImageResult>.Failure(access.Error!);
 
         var probe = await _services.ValidateInputForSingleFrameProcessingAsync(request.InputPath, cancellationToken).ConfigureAwait(false);
         if (!probe.Succeeded) return OperationResult<CompressImageResult>.Failure(probe.Error!);
@@ -89,31 +113,48 @@ public sealed class CompressImageWorkflow
             return OperationResult<CompressImageResult>.Failure(new AtomPixError(AtomPixErrorCode.UnsupportedOutputFormat, AtomPixErrorCategory.UnsupportedFormat, "Compression output extension cannot be resolved from input path."));
         }
 
-        var inputSize = await _services.GetInputSizeAsync(request.InputPath, cancellationToken).ConfigureAwait(false);
-        if (!inputSize.Succeeded) return OperationResult<CompressImageResult>.Failure(inputSize.Error!);
+        var inputSize = probe.Value!.FileSizeBytes;
 
         var jobId = ImageJobId.New();
         var output = await _services.ResolveOutputPathAsync(request.InputPath, request.OutputPolicy, extension, cancellationToken).ConfigureAwait(false);
         if (!output.Succeeded) return OperationResult<CompressImageResult>.Failure(output.Error!);
 
+        var job = new ImageJob(jobId, ImageJobType.Compress, request.InputPath, DateTimeOffset.UtcNow);
+
         if (output.Value!.Skipped)
         {
-            var skipped = new ImageJobResult(jobId, ImageJobType.Compress, request.InputPath, output.Value.Path, ImageJobStatus.Skipped, inputSize.Value, null, null);
-            return OperationResult<CompressImageResult>.Success(new CompressImageResult(skipped));
+            var error = WorkflowHelpers.OutputExistsError(output.Value.Path.GetValueOrDefault());
+            job.MarkSkipped(output.Value.Path.GetValueOrDefault(), error, DateTimeOffset.UtcNow);
+            var skipped = WorkflowHelpers.ToResult(job, output.Value.Path, inputSize, null);
+            return OperationResult<CompressImageResult>.Success(new CompressImageResult(skipped, null));
         }
 
+        job.MarkRunning(DateTimeOffset.UtcNow);
         var compress = await _services.ImageProcessor.CompressAsync(new ImageCompressRequest(request.InputPath, output.Value.Path.GetValueOrDefault(), request.Profile), cancellationToken).ConfigureAwait(false);
-        var jobResult = compress.Succeeded
-            ? new ImageJobResult(jobId, ImageJobType.Compress, request.InputPath, compress.Value!.OutputPath, ImageJobStatus.Succeeded, compress.Value.InputSizeBytes, compress.Value.OutputSizeBytes, null)
-            : WorkflowHelpers.IsCanceled(compress.Error)
-                ? new ImageJobResult(jobId, ImageJobType.Compress, request.InputPath, output.Value.Path, ImageJobStatus.Canceled, inputSize.Value, null, compress.Error)
-                : new ImageJobResult(jobId, ImageJobType.Compress, request.InputPath, output.Value.Path, ImageJobStatus.Failed, inputSize.Value, null, compress.Error);
-        return OperationResult<CompressImageResult>.Success(new CompressImageResult(jobResult));
+        if (compress.Succeeded)
+        {
+            job.MarkSucceeded(compress.Value!.OutputPath, DateTimeOffset.UtcNow);
+        }
+        else if (WorkflowHelpers.IsCanceled(compress.Error))
+        {
+            job.MarkCanceled(compress.Error!, DateTimeOffset.UtcNow);
+        }
+        else
+        {
+            job.MarkFailed(compress.Error!, DateTimeOffset.UtcNow);
+        }
+
+        var jobResult = WorkflowHelpers.ToResult(
+            job,
+            compress.Succeeded ? compress.Value!.OutputPath : output.Value.Path,
+            compress.Succeeded ? compress.Value!.InputSizeBytes : inputSize,
+            compress.Succeeded ? compress.Value!.OutputSizeBytes : null);
+        return OperationResult<CompressImageResult>.Success(new CompressImageResult(jobResult, compress.Succeeded ? compress.Value!.AppliedQuality : null));
     }
 
     private static string GetCompressionExtension(LocalPath inputPath) => Path.GetExtension(inputPath.Value);
 
-    private static bool TryGetCompressionOutputFormat(ImageFormatKind format, out OutputImageFormat outputFormat)
+    internal static bool TryGetCompressionOutputFormat(ImageFormatKind format, out OutputImageFormat outputFormat)
     {
         outputFormat = format switch
         {
@@ -127,22 +168,27 @@ public sealed class CompressImageWorkflow
 }
 
 public sealed record ConvertImageRequest(LocalPath InputPath, ConversionProfile Profile, OutputPolicy OutputPolicy);
-public sealed record ConvertImageResult(ImageJobResult JobResult);
+public sealed record ConvertImageResult(ImageJobResult JobResult, TransparencyProcessingResult? Transparency);
 
 public sealed class ConvertImageWorkflow
 {
     private readonly ImageWorkflowServices _services;
+    private readonly ILogger<ConvertImageWorkflow>? _logger;
 
-    public ConvertImageWorkflow(ImageWorkflowServices services) => _services = services ?? throw new ArgumentNullException(nameof(services));
+    public ConvertImageWorkflow(ImageWorkflowServices services, ILogger<ConvertImageWorkflow>? logger = null)
+    {
+        _services = services ?? throw new ArgumentNullException(nameof(services));
+        _logger = logger;
+    }
 
-    public async Task<OperationResult<ConvertImageResult>> ExecuteAsync(ConvertImageRequest request, CancellationToken cancellationToken)
+    public Task<OperationResult<ConvertImageResult>> ExecuteAsync(ConvertImageRequest request, CancellationToken cancellationToken) =>
+        WorkflowDiagnostics.RunAsync(_logger, nameof(ConvertImageWorkflow), () => ExecuteCoreAsync(request, cancellationToken));
+
+    private async Task<OperationResult<ConvertImageResult>> ExecuteCoreAsync(ConvertImageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Profile);
         ArgumentNullException.ThrowIfNull(request.OutputPolicy);
-
-        var access = await _services.CheckAccessAsync(FeatureId.SingleConvert, cancellationToken).ConfigureAwait(false);
-        if (!access.Succeeded) return OperationResult<ConvertImageResult>.Failure(access.Error!);
 
         if (!_services.SupportsOutputFormat(request.Profile.OutputFormat))
         {
@@ -157,26 +203,43 @@ public sealed class ConvertImageWorkflow
             return OperationResult<ConvertImageResult>.Failure(new AtomPixError(AtomPixErrorCode.UnsupportedOutputFormat, AtomPixErrorCategory.UnsupportedFormat, "Unsupported conversion output format."));
         }
 
-        var inputSize = await _services.GetInputSizeAsync(request.InputPath, cancellationToken).ConfigureAwait(false);
-        if (!inputSize.Succeeded) return OperationResult<ConvertImageResult>.Failure(inputSize.Error!);
+        var inputSize = probe.Value!.FileSizeBytes;
 
         var jobId = ImageJobId.New();
         var output = await _services.ResolveOutputPathAsync(request.InputPath, request.OutputPolicy, extension, cancellationToken).ConfigureAwait(false);
         if (!output.Succeeded) return OperationResult<ConvertImageResult>.Failure(output.Error!);
 
+        var job = new ImageJob(jobId, ImageJobType.Convert, request.InputPath, DateTimeOffset.UtcNow);
+
         if (output.Value!.Skipped)
         {
-            var skipped = new ImageJobResult(jobId, ImageJobType.Convert, request.InputPath, output.Value.Path, ImageJobStatus.Skipped, inputSize.Value, null, null);
-            return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(skipped));
+            var error = WorkflowHelpers.OutputExistsError(output.Value.Path.GetValueOrDefault());
+            job.MarkSkipped(output.Value.Path.GetValueOrDefault(), error, DateTimeOffset.UtcNow);
+            var skipped = WorkflowHelpers.ToResult(job, output.Value.Path, inputSize, null);
+            return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(skipped, null));
         }
 
+        job.MarkRunning(DateTimeOffset.UtcNow);
         var convert = await _services.ImageProcessor.ConvertAsync(new ImageConvertRequest(request.InputPath, output.Value.Path.GetValueOrDefault(), request.Profile), cancellationToken).ConfigureAwait(false);
-        var jobResult = convert.Succeeded
-            ? new ImageJobResult(jobId, ImageJobType.Convert, request.InputPath, convert.Value!.OutputPath, ImageJobStatus.Succeeded, convert.Value.InputSizeBytes, convert.Value.OutputSizeBytes, null)
-            : WorkflowHelpers.IsCanceled(convert.Error)
-                ? new ImageJobResult(jobId, ImageJobType.Convert, request.InputPath, output.Value.Path, ImageJobStatus.Canceled, inputSize.Value, null, convert.Error)
-                : new ImageJobResult(jobId, ImageJobType.Convert, request.InputPath, output.Value.Path, ImageJobStatus.Failed, inputSize.Value, null, convert.Error);
-        return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(jobResult));
+        if (convert.Succeeded)
+        {
+            job.MarkSucceeded(convert.Value!.OutputPath, DateTimeOffset.UtcNow);
+        }
+        else if (WorkflowHelpers.IsCanceled(convert.Error))
+        {
+            job.MarkCanceled(convert.Error!, DateTimeOffset.UtcNow);
+        }
+        else
+        {
+            job.MarkFailed(convert.Error!, DateTimeOffset.UtcNow);
+        }
+
+        var jobResult = WorkflowHelpers.ToResult(
+            job,
+            convert.Succeeded ? convert.Value!.OutputPath : output.Value.Path,
+            convert.Succeeded ? convert.Value!.InputSizeBytes : inputSize,
+            convert.Succeeded ? convert.Value!.OutputSizeBytes : null);
+        return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(jobResult, convert.Succeeded ? convert.Value!.Transparency : null));
     }
 
     internal static string OutputExtension(OutputImageFormat format) => TryGetOutputExtension(format, out var extension)
@@ -196,129 +259,323 @@ public sealed class ConvertImageWorkflow
     }
 }
 
-public sealed record BatchCompressRequest(IReadOnlyList<LocalPath> InputPaths, CompressionProfile Profile, OutputPolicy OutputPolicy);
-public sealed record BatchCompressResult(BatchResult BatchResult, BatchProgressSnapshot FinalProgress);
+public sealed record ResizeImageRequest(
+    LocalPath InputPath,
+    ResizePolicy ResizePolicy,
+    OutputPolicy OutputPolicy,
+    SameFormatEncodingPolicy EncodingPolicy);
 
-public sealed class BatchCompressWorkflow
+public sealed record ResizeImageResult(
+    ImageJobResult JobResult,
+    ImageFormatKind Format,
+    ImageSize InputSize,
+    ResolvedResizeSize TargetSize,
+    ImageSize? ActualOutputSize);
+
+public sealed class ResizeImageWorkflow
 {
     private readonly ImageWorkflowServices _services;
-    private readonly CompressImageWorkflow _single;
+    private readonly ILogger<ResizeImageWorkflow>? _logger;
 
-    public BatchCompressWorkflow(ImageWorkflowServices services)
+    public ResizeImageWorkflow(ImageWorkflowServices services, ILogger<ResizeImageWorkflow>? logger = null)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
-        _single = new CompressImageWorkflow(services);
+        _logger = logger;
     }
 
-    public async Task<OperationResult<BatchCompressResult>> ExecuteAsync(BatchCompressRequest request, CancellationToken cancellationToken)
+    public Task<OperationResult<ResizeImageResult>> ExecuteAsync(ResizeImageRequest request, CancellationToken cancellationToken) =>
+        WorkflowDiagnostics.RunAsync(_logger, nameof(ResizeImageWorkflow), () => ExecuteCoreAsync(request, cancellationToken));
+
+    private async Task<OperationResult<ResizeImageResult>> ExecuteCoreAsync(ResizeImageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.InputPaths);
-        ArgumentNullException.ThrowIfNull(request.Profile);
+        ArgumentNullException.ThrowIfNull(request.ResizePolicy);
         ArgumentNullException.ThrowIfNull(request.OutputPolicy);
+        ArgumentNullException.ThrowIfNull(request.EncodingPolicy);
 
-        var access = await _services.CheckAccessAsync(FeatureId.BatchCompress, cancellationToken).ConfigureAwait(false);
-        if (!access.Succeeded) return OperationResult<BatchCompressResult>.Failure(access.Error!);
-        if (request.InputPaths.Count == 0) return OperationResult<BatchCompressResult>.Failure(WorkflowHelpers.ValidationError("Input path list cannot be empty."));
-        if (cancellationToken.IsCancellationRequested) return OperationResult<BatchCompressResult>.Failure(WorkflowHelpers.CanceledError());
+        var probe = await _services.ValidateInputForSingleFrameProcessingAsync(request.InputPath, cancellationToken).ConfigureAwait(false);
+        if (!probe.Succeeded) return OperationResult<ResizeImageResult>.Failure(probe.Error!);
 
-        var results = new List<ImageJobResult>();
-        foreach (var path in request.InputPaths)
+        var inputSize = new ImageSize(probe.Value!.Width, probe.Value.Height);
+        ResolvedResizeSize targetSize;
+        try
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                results.Add(WorkflowHelpers.CanceledJob(ImageJobType.Compress, path));
-                break;
-            }
-
-            var result = await _single.ExecuteAsync(new CompressImageRequest(path, request.Profile, request.OutputPolicy), cancellationToken).ConfigureAwait(false);
-            if (result.Succeeded) results.Add(result.Value!.JobResult);
-            else if (WorkflowHelpers.IsCanceled(result.Error)) results.Add(WorkflowHelpers.CanceledJob(ImageJobType.Compress, path));
-            else results.Add(new ImageJobResult(ImageJobId.New(), ImageJobType.Compress, path, null, ImageJobStatus.Failed, null, null, result.Error));
+            targetSize = request.ResizePolicy.Resolve(inputSize);
+        }
+        catch (Exception exception) when (exception is ArgumentException or OverflowException)
+        {
+            return OperationResult<ResizeImageResult>.Failure(new AtomPixError(
+                AtomPixErrorCode.InvalidResizeOptions,
+                AtomPixErrorCategory.Validation,
+                "Resize options cannot be resolved for this image."));
         }
 
-        var batch = new BatchResult(BatchJobId.New(), ImageJobType.Compress, WorkflowHelpers.DeriveBatchStatus(results), results, request.InputPaths.Count);
-        var progress = BatchProgressSnapshot.FromResults(batch.BatchId, batch.Type, batch.TotalCount, batch.Items, currentInputPath: null);
-        return OperationResult<BatchCompressResult>.Success(new BatchCompressResult(batch, progress));
+        var capabilityError = ValidateResizeCapabilities(_services.ImageProcessor.Capabilities, probe.Value, targetSize);
+        if (capabilityError is not null) return OperationResult<ResizeImageResult>.Failure(capabilityError);
+
+        if (!TryGetSameFormatExtension(probe.Value.Format, out var extension))
+        {
+            return OperationResult<ResizeImageResult>.Failure(new AtomPixError(
+                AtomPixErrorCode.UnsupportedOutputFormat,
+                AtomPixErrorCategory.UnsupportedFormat,
+                "Resize output format is not supported."));
+        }
+
+        var output = await _services.ResolveOutputPathAsync(request.InputPath, request.OutputPolicy, extension, cancellationToken).ConfigureAwait(false);
+        if (!output.Succeeded) return OperationResult<ResizeImageResult>.Failure(output.Error!);
+
+        var job = new ImageJob(ImageJobId.New(), ImageJobType.Resize, request.InputPath, DateTimeOffset.UtcNow);
+        if (output.Value!.Skipped)
+        {
+            var error = WorkflowHelpers.OutputExistsError(output.Value.Path.GetValueOrDefault());
+            job.MarkSkipped(output.Value.Path.GetValueOrDefault(), error, DateTimeOffset.UtcNow);
+            return OperationResult<ResizeImageResult>.Success(new ResizeImageResult(
+                WorkflowHelpers.ToResult(job, output.Value.Path, probe.Value.FileSizeBytes, null),
+                probe.Value.Format,
+                inputSize,
+                targetSize,
+                null));
+        }
+
+        job.MarkRunning(DateTimeOffset.UtcNow);
+        var resize = await _services.ImageProcessor.ResizeAsync(
+            new ImageResizeRequest(request.InputPath, output.Value.Path.GetValueOrDefault(), targetSize, request.EncodingPolicy),
+            cancellationToken).ConfigureAwait(false);
+
+        ImageSize? actualOutputSize = null;
+        if (resize.Succeeded)
+        {
+            var validOutput = resize.Value!.Format == probe.Value.Format
+                && resize.Value.OutputSize.Width == targetSize.Width
+                && resize.Value.OutputSize.Height == targetSize.Height;
+            if (validOutput)
+            {
+                actualOutputSize = resize.Value.OutputSize;
+                job.MarkSucceeded(resize.Value.OutputPath, DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                job.MarkFailed(WorkflowHelpers.ImageProcessingError(AtomPixErrorCode.ImageResizeFailed, "Resize output did not match the accepted plan."), DateTimeOffset.UtcNow);
+            }
+        }
+        else if (WorkflowHelpers.IsCanceled(resize.Error))
+        {
+            job.MarkCanceled(resize.Error!, DateTimeOffset.UtcNow);
+        }
+        else
+        {
+            job.MarkFailed(resize.Error!, DateTimeOffset.UtcNow);
+        }
+
+        var jobResult = WorkflowHelpers.ToResult(
+            job,
+            resize.Succeeded && job.Status == ImageJobStatus.Succeeded ? resize.Value!.OutputPath : output.Value.Path,
+            resize.Succeeded ? resize.Value!.InputSizeBytes : probe.Value.FileSizeBytes,
+            resize.Succeeded && job.Status == ImageJobStatus.Succeeded ? resize.Value!.OutputSizeBytes : null);
+        return OperationResult<ResizeImageResult>.Success(new ResizeImageResult(
+            jobResult,
+            probe.Value.Format,
+            inputSize,
+            targetSize,
+            actualOutputSize));
+    }
+
+    internal static AtomPixError? ValidateResizeCapabilities(
+        ImageProcessorCapabilities capabilities,
+        ImageProbeResult probe,
+        ResolvedResizeSize targetSize)
+    {
+        var resize = capabilities.Resize;
+        if (resize is null || !resize.SupportedSameFormatFormats.Contains(probe.Format))
+        {
+            return new AtomPixError(AtomPixErrorCode.UnsupportedInputFormat, AtomPixErrorCategory.UnsupportedFormat, "Input format does not support same-format resize.");
+        }
+
+        var pixels = checked((long)targetSize.Width * targetSize.Height);
+        if (targetSize.Width > resize.MaxWidth
+            || targetSize.Height > resize.MaxHeight
+            || pixels > resize.MaxPixelCount
+            || targetSize.Width > capabilities.Resources.MaxOutputWidth
+            || targetSize.Height > capabilities.Resources.MaxOutputHeight
+            || pixels > capabilities.Resources.MaxOutputPixelCount)
+        {
+            return new AtomPixError(AtomPixErrorCode.ImageDimensionsExceedLimit, AtomPixErrorCategory.Validation, "Requested resize dimensions exceed image processor limits.");
+        }
+
+        return null;
+    }
+
+    internal static bool TryGetSameFormatExtension(ImageFormatKind format, out string extension)
+    {
+        extension = format switch
+        {
+            ImageFormatKind.Jpeg => ".jpg",
+            ImageFormatKind.Png => ".png",
+            ImageFormatKind.WebP => ".webp",
+            ImageFormatKind.Bmp => ".bmp",
+            _ => string.Empty
+        };
+        return extension.Length > 0;
     }
 }
 
-public sealed record BatchConvertRequest(IReadOnlyList<LocalPath> InputPaths, ConversionProfile Profile, OutputPolicy OutputPolicy);
-public sealed record BatchConvertResult(BatchResult BatchResult, BatchProgressSnapshot FinalProgress);
+public sealed record CropImageRequest(
+    LocalPath InputPath,
+    CropRectangle CropArea,
+    OutputPolicy OutputPolicy,
+    SameFormatEncodingPolicy EncodingPolicy);
 
-public sealed class BatchConvertWorkflow
+public sealed record CropImageResult(
+    ImageJobResult JobResult,
+    ImageFormatKind Format,
+    ImageSize InputSize,
+    CropRectangle CropArea,
+    ImageSize? ActualOutputSize);
+
+public sealed class CropImageWorkflow
 {
     private readonly ImageWorkflowServices _services;
-    private readonly ConvertImageWorkflow _single;
+    private readonly ILogger<CropImageWorkflow>? _logger;
 
-    public BatchConvertWorkflow(ImageWorkflowServices services)
+    public CropImageWorkflow(ImageWorkflowServices services, ILogger<CropImageWorkflow>? logger = null)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
-        _single = new ConvertImageWorkflow(services);
+        _logger = logger;
     }
 
-    public async Task<OperationResult<BatchConvertResult>> ExecuteAsync(BatchConvertRequest request, CancellationToken cancellationToken)
+    public Task<OperationResult<CropImageResult>> ExecuteAsync(CropImageRequest request, CancellationToken cancellationToken) =>
+        WorkflowDiagnostics.RunAsync(_logger, nameof(CropImageWorkflow), () => ExecuteCoreAsync(request, cancellationToken));
+
+    private async Task<OperationResult<CropImageResult>> ExecuteCoreAsync(CropImageRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.InputPaths);
-        ArgumentNullException.ThrowIfNull(request.Profile);
+        ArgumentNullException.ThrowIfNull(request.CropArea);
         ArgumentNullException.ThrowIfNull(request.OutputPolicy);
+        ArgumentNullException.ThrowIfNull(request.EncodingPolicy);
 
-        var access = await _services.CheckAccessAsync(FeatureId.BatchConvert, cancellationToken).ConfigureAwait(false);
-        if (!access.Succeeded) return OperationResult<BatchConvertResult>.Failure(access.Error!);
-        if (request.InputPaths.Count == 0) return OperationResult<BatchConvertResult>.Failure(WorkflowHelpers.ValidationError("Input path list cannot be empty."));
-        if (cancellationToken.IsCancellationRequested) return OperationResult<BatchConvertResult>.Failure(WorkflowHelpers.CanceledError());
+        var probe = await _services.ValidateInputForSingleFrameProcessingAsync(request.InputPath, cancellationToken).ConfigureAwait(false);
+        if (!probe.Succeeded) return OperationResult<CropImageResult>.Failure(probe.Error!);
 
-        var results = new List<ImageJobResult>();
-        foreach (var path in request.InputPaths)
+        var inputSize = new ImageSize(probe.Value!.Width, probe.Value.Height);
+        var cropValidation = CropRules.ValidateCropRectangle(inputSize, request.CropArea);
+        if (!cropValidation.Succeeded) return OperationResult<CropImageResult>.Failure(cropValidation.Error!);
+
+        var capabilityError = ValidateCropCapabilities(_services.ImageProcessor.Capabilities, probe.Value);
+        if (capabilityError is not null) return OperationResult<CropImageResult>.Failure(capabilityError);
+
+        if (!ResizeImageWorkflow.TryGetSameFormatExtension(probe.Value.Format, out var extension))
         {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                results.Add(WorkflowHelpers.CanceledJob(ImageJobType.Convert, path));
-                break;
-            }
-
-            var result = await _single.ExecuteAsync(new ConvertImageRequest(path, request.Profile, request.OutputPolicy), cancellationToken).ConfigureAwait(false);
-            if (result.Succeeded) results.Add(result.Value!.JobResult);
-            else if (WorkflowHelpers.IsCanceled(result.Error)) results.Add(WorkflowHelpers.CanceledJob(ImageJobType.Convert, path));
-            else results.Add(new ImageJobResult(ImageJobId.New(), ImageJobType.Convert, path, null, ImageJobStatus.Failed, null, null, result.Error));
+            return OperationResult<CropImageResult>.Failure(new AtomPixError(
+                AtomPixErrorCode.UnsupportedOutputFormat,
+                AtomPixErrorCategory.UnsupportedFormat,
+                "Crop output format is not supported."));
         }
 
-        var batch = new BatchResult(BatchJobId.New(), ImageJobType.Convert, WorkflowHelpers.DeriveBatchStatus(results), results, request.InputPaths.Count);
-        var progress = BatchProgressSnapshot.FromResults(batch.BatchId, batch.Type, batch.TotalCount, batch.Items, currentInputPath: null);
-        return OperationResult<BatchConvertResult>.Success(new BatchConvertResult(batch, progress));
+        var output = await _services.ResolveOutputPathAsync(request.InputPath, request.OutputPolicy, extension, cancellationToken).ConfigureAwait(false);
+        if (!output.Succeeded) return OperationResult<CropImageResult>.Failure(output.Error!);
+
+        var job = new ImageJob(ImageJobId.New(), ImageJobType.Crop, request.InputPath, DateTimeOffset.UtcNow);
+        if (output.Value!.Skipped)
+        {
+            var error = WorkflowHelpers.OutputExistsError(output.Value.Path.GetValueOrDefault());
+            job.MarkSkipped(output.Value.Path.GetValueOrDefault(), error, DateTimeOffset.UtcNow);
+            return OperationResult<CropImageResult>.Success(new CropImageResult(
+                WorkflowHelpers.ToResult(job, output.Value.Path, probe.Value.FileSizeBytes, null),
+                probe.Value.Format,
+                inputSize,
+                request.CropArea,
+                null));
+        }
+
+        job.MarkRunning(DateTimeOffset.UtcNow);
+        var crop = await _services.ImageProcessor.CropAsync(
+            new ImageCropRequest(request.InputPath, output.Value.Path.GetValueOrDefault(), request.CropArea, request.EncodingPolicy),
+            cancellationToken).ConfigureAwait(false);
+
+        ImageSize? actualOutputSize = null;
+        if (crop.Succeeded)
+        {
+            var validOutput = crop.Value!.Format == probe.Value.Format
+                && crop.Value.OutputSize.Width == request.CropArea.Width
+                && crop.Value.OutputSize.Height == request.CropArea.Height;
+            if (validOutput)
+            {
+                actualOutputSize = crop.Value.OutputSize;
+                job.MarkSucceeded(crop.Value.OutputPath, DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                job.MarkFailed(WorkflowHelpers.ImageProcessingError(AtomPixErrorCode.ImageCropFailed, "Crop output did not match the accepted plan."), DateTimeOffset.UtcNow);
+            }
+        }
+        else if (WorkflowHelpers.IsCanceled(crop.Error))
+        {
+            job.MarkCanceled(crop.Error!, DateTimeOffset.UtcNow);
+        }
+        else
+        {
+            job.MarkFailed(crop.Error!, DateTimeOffset.UtcNow);
+        }
+
+        var jobResult = WorkflowHelpers.ToResult(
+            job,
+            crop.Succeeded && job.Status == ImageJobStatus.Succeeded ? crop.Value!.OutputPath : output.Value.Path,
+            crop.Succeeded ? crop.Value!.InputSizeBytes : probe.Value.FileSizeBytes,
+            crop.Succeeded && job.Status == ImageJobStatus.Succeeded ? crop.Value!.OutputSizeBytes : null);
+        return OperationResult<CropImageResult>.Success(new CropImageResult(
+            jobResult,
+            probe.Value.Format,
+            inputSize,
+            request.CropArea,
+            actualOutputSize));
+    }
+
+    private static AtomPixError? ValidateCropCapabilities(ImageProcessorCapabilities capabilities, ImageProbeResult probe)
+    {
+        var crop = capabilities.Crop;
+        if (crop is null || !crop.SupportedSameFormatFormats.Contains(probe.Format))
+        {
+            return new AtomPixError(AtomPixErrorCode.UnsupportedInputFormat, AtomPixErrorCategory.UnsupportedFormat, "Input format does not support same-format crop.");
+        }
+
+        var pixels = checked((long)probe.Width * probe.Height);
+        if (probe.Width > crop.MaxInputWidth
+            || probe.Height > crop.MaxInputHeight
+            || pixels > crop.MaxInputPixelCount)
+        {
+            return new AtomPixError(AtomPixErrorCode.ImageDimensionsExceedLimit, AtomPixErrorCategory.Validation, "Input dimensions exceed crop limits.");
+        }
+
+        return null;
     }
 }
 
 public sealed class ImageWorkflowServices
 {
-    private readonly ISubscriptionStore _subscriptionStore;
-    private readonly IFeatureAccessPolicy _featureAccessPolicy;
     private readonly IFileSystemService _fileSystem;
+    private readonly BatchOutputPlanner _batchOutputPlanner;
 
     public ImageWorkflowServices(
         IImageProcessor imageProcessor,
-        ISubscriptionStore subscriptionStore,
-        IFeatureAccessPolicy featureAccessPolicy,
         IFileSystemService fileSystem)
     {
         ImageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
-        _subscriptionStore = subscriptionStore ?? throw new ArgumentNullException(nameof(subscriptionStore));
-        _featureAccessPolicy = featureAccessPolicy ?? throw new ArgumentNullException(nameof(featureAccessPolicy));
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+        _batchOutputPlanner = new BatchOutputPlanner(_fileSystem);
     }
 
     public IImageProcessor ImageProcessor { get; }
 
-    public async Task<OperationResult> CheckAccessAsync(FeatureId feature, CancellationToken cancellationToken)
-    {
-        var subscription = await _subscriptionStore.LoadAsync(cancellationToken).ConfigureAwait(false);
-        if (!subscription.Succeeded) return OperationResult.Failure(subscription.Error!);
-        var decision = _featureAccessPolicy.CanUse(feature, subscription.Value!);
-        if (decision.Allowed) return OperationResult.Success();
-        var code = decision.BlockReason == FeatureAccessBlockReason.SubscriptionExpired ? AtomPixErrorCode.SubscriptionExpired : AtomPixErrorCode.FeatureNotAvailable;
-        return OperationResult.Failure(new AtomPixError(code, AtomPixErrorCategory.FeatureAccess, "Feature is not available for the current subscription."));
-    }
+    public OperationResult<BatchOutputPlan> CreateBatchOutputPlan(
+        IReadOnlyList<LocalPath> inputPaths,
+        OutputPolicy outputPolicy,
+        Func<LocalPath, string?> outputExtension) =>
+        _batchOutputPlanner.CreatePlan(inputPaths, outputPolicy, outputExtension);
+
+    public Task<OperationResult> PrepareBatchOutputDirectoriesAsync(
+        BatchOutputPlan plan,
+        CancellationToken cancellationToken) =>
+        _batchOutputPlanner.PrepareOutputDirectoriesAsync(plan, cancellationToken);
 
 
     public bool SupportsOutputFormat(OutputImageFormat outputFormat) =>
@@ -326,13 +583,51 @@ public sealed class ImageWorkflowServices
 
     public async Task<OperationResult<ImageProbeResult>> ValidateInputForSingleFrameProcessingAsync(LocalPath inputPath, CancellationToken cancellationToken)
     {
+        var fileSize = await _fileSystem.GetFileSizeAsync(inputPath, cancellationToken).ConfigureAwait(false);
+        if (!fileSize.Succeeded)
+        {
+            return OperationResult<ImageProbeResult>.Failure(fileSize.Error!);
+        }
+
+        var resources = ImageProcessor.Capabilities.Resources;
+        if (fileSize.Value > resources.MaxInputFileSizeBytes)
+        {
+            return OperationResult<ImageProbeResult>.Failure(ResourceLimitError(
+                AtomPixErrorCode.InputFileTooLarge,
+                "Input image file exceeds the image processor limit.",
+                "InputFileSizeBytes",
+                fileSize.Value,
+                resources.MaxInputFileSizeBytes));
+        }
+
         var probe = await ImageProcessor.ProbeAsync(new ImageProbeRequest(inputPath), cancellationToken).ConfigureAwait(false);
         if (!probe.Succeeded)
         {
             return OperationResult<ImageProbeResult>.Failure(probe.Error!);
         }
 
-        if (!ImageProcessor.Capabilities.SupportedInputFormats.Contains(probe.Value!.Format))
+        var pixelCount = checked((long)probe.Value!.Width * probe.Value.Height);
+        if (probe.Value.Width > resources.MaxInputWidth
+            || probe.Value.Height > resources.MaxInputHeight
+            || pixelCount > resources.MaxInputPixelCount)
+        {
+            return OperationResult<ImageProbeResult>.Failure(new AtomPixError(
+                AtomPixErrorCode.ImageDimensionsExceedLimit,
+                AtomPixErrorCategory.Validation,
+                "Input image dimensions exceed the image processor limit.",
+                new Dictionary<string, string>
+                {
+                    ["ResourceKind"] = "InputDimensions",
+                    ["ActualWidth"] = probe.Value.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["ActualHeight"] = probe.Value.Height.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["ActualPixelCount"] = pixelCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["MaximumWidth"] = resources.MaxInputWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["MaximumHeight"] = resources.MaxInputHeight.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["MaximumPixelCount"] = resources.MaxInputPixelCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                }));
+        }
+
+        if (!ImageProcessor.Capabilities.SupportedInputFormats.Contains(probe.Value.Format))
         {
             return OperationResult<ImageProbeResult>.Failure(new AtomPixError(AtomPixErrorCode.UnsupportedInputFormat, AtomPixErrorCategory.UnsupportedFormat, "Input image format is not supported."));
         }
@@ -342,11 +637,19 @@ public sealed class ImageWorkflowServices
             return OperationResult<ImageProbeResult>.Failure(new AtomPixError(AtomPixErrorCode.UnsupportedInputFormat, AtomPixErrorCategory.UnsupportedFormat, "Animated or multi-frame images are not supported by this workflow."));
         }
 
-        return probe;
+        return OperationResult<ImageProbeResult>.Success(new ImageProbeResult(
+            probe.Value.InputPath,
+            probe.Value.Format,
+            probe.Value.Width,
+            probe.Value.Height,
+            fileSize.Value,
+            probe.Value.HasAlphaChannel,
+            probe.Value.HasTransparency,
+            probe.Value.IsAnimated,
+            probe.Value.FrameCount,
+            probe.Value.HasMetadata,
+            probe.Value.HasColorProfile));
     }
-    public async Task<OperationResult<long>> GetInputSizeAsync(LocalPath inputPath, CancellationToken cancellationToken) =>
-        await _fileSystem.GetFileSizeAsync(inputPath, cancellationToken).ConfigureAwait(false);
-
     public async Task<OperationResult<ResolvedOutputPath>> ResolveOutputPathAsync(LocalPath inputPath, OutputPolicy policy, string extension, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(policy);
@@ -355,42 +658,52 @@ public sealed class ImageWorkflowServices
             return OperationResult<ResolvedOutputPath>.Failure(new AtomPixError(AtomPixErrorCode.UnsupportedOutputFormat, AtomPixErrorCategory.UnsupportedFormat, "Output extension cannot be empty."));
         }
 
-        var directory = ResolveOutputDirectory(inputPath, policy.LocationPolicy);
-        var create = await _fileSystem.CreateDirectoryAsync(directory, cancellationToken).ConfigureAwait(false);
-        if (!create.Succeeded) return OperationResult<ResolvedOutputPath>.Failure(create.Error!);
-
+        var directory = BatchOutputPlanner.ResolveOutputDirectory(inputPath, policy.LocationPolicy);
         var baseName = _fileSystem.GetFileNameWithoutExtension(inputPath);
         if (string.IsNullOrWhiteSpace(baseName))
         {
             return OperationResult<ResolvedOutputPath>.Failure(WorkflowHelpers.ValidationError("Input path must contain a file name."));
         }
 
-        if (policy.NamingPolicy.Mode == OutputNamingMode.AppendSuffix && !string.IsNullOrWhiteSpace(policy.NamingPolicy.Suffix))
+        var outputStem = BatchOutputPlanner.ExpandSingleStem(policy.NamingPolicy, baseName);
+        var desired = _fileSystem.Combine(directory, outputStem + NormalizeExtension(extension));
+        if (policy.OverwritePolicy == OverwritePolicy.Overwrite && _fileSystem.PathsEqual(inputPath, desired))
         {
-            baseName += policy.NamingPolicy.Suffix;
+            return OperationResult<ResolvedOutputPath>.Failure(new AtomPixError(
+                AtomPixErrorCode.OutputPathConflictsWithInput,
+                AtomPixErrorCategory.Validation,
+                "Output path cannot overwrite an input image.",
+                new Dictionary<string, string>
+                {
+                    ["InputPath"] = inputPath.Value,
+                    ["OutputPath"] = desired.Value
+                }));
         }
 
-        var desired = _fileSystem.Combine(directory, baseName + NormalizeExtension(extension));
-        if (!_fileSystem.FileExists(desired)) return OperationResult<ResolvedOutputPath>.Success(new ResolvedOutputPath(desired, false));
-
-        return policy.OverwritePolicy switch
+        ResolvedOutputPath resolved;
+        var desiredExistsOrIsInput = _fileSystem.FileExists(desired) || _fileSystem.PathsEqual(inputPath, desired);
+        if (!desiredExistsOrIsInput)
         {
-            OverwritePolicy.Skip => OperationResult<ResolvedOutputPath>.Success(new ResolvedOutputPath(desired, true)),
-            OverwritePolicy.Overwrite => OperationResult<ResolvedOutputPath>.Success(new ResolvedOutputPath(desired, false)),
-            OverwritePolicy.AutoRename => OperationResult<ResolvedOutputPath>.Success(new ResolvedOutputPath(FindAvailablePath(desired), false)),
-            _ => OperationResult<ResolvedOutputPath>.Failure(WorkflowHelpers.ValidationError("Unsupported overwrite policy."))
-        };
-    }
-
-    private static LocalPath ResolveOutputDirectory(LocalPath inputPath, OutputLocationPolicy policy)
-    {
-        return policy.Mode switch
+            resolved = new ResolvedOutputPath(desired, false);
+        }
+        else
         {
-            OutputLocationMode.SameAsInput => new LocalPath(Path.GetDirectoryName(inputPath.Value) ?? "."),
-            OutputLocationMode.Subfolder => new LocalPath(Path.Combine(Path.GetDirectoryName(inputPath.Value) ?? ".", policy.SubfolderName ?? "AtomPix_Output")),
-            OutputLocationMode.CustomDirectory when !string.IsNullOrWhiteSpace(policy.CustomDirectory) => new LocalPath(policy.CustomDirectory),
-            _ => new LocalPath(Path.GetDirectoryName(inputPath.Value) ?? ".")
-        };
+            resolved = policy.OverwritePolicy switch
+            {
+                OverwritePolicy.Skip => new ResolvedOutputPath(desired, true),
+                OverwritePolicy.Overwrite => new ResolvedOutputPath(desired, false),
+                OverwritePolicy.AutoRename => new ResolvedOutputPath(FindAvailablePath(desired), false),
+                _ => throw new InvalidOperationException("Unsupported overwrite policy passed Core validation.")
+            };
+        }
+
+        if (!resolved.Skipped)
+        {
+            var create = await _fileSystem.CreateDirectoryAsync(directory, cancellationToken).ConfigureAwait(false);
+            if (!create.Succeeded) return OperationResult<ResolvedOutputPath>.Failure(create.Error!);
+        }
+
+        return OperationResult<ResolvedOutputPath>.Success(resolved);
     }
 
     private LocalPath FindAvailablePath(LocalPath desired)
@@ -407,6 +720,23 @@ public sealed class ImageWorkflowServices
     }
 
     private static string NormalizeExtension(string extension) => extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;
+
+    private static AtomPixError ResourceLimitError(
+        AtomPixErrorCode code,
+        string message,
+        string resourceKind,
+        long actualValue,
+        long maximumValue) =>
+        new(
+            code,
+            AtomPixErrorCategory.Validation,
+            message,
+            new Dictionary<string, string>
+            {
+                ["ResourceKind"] = resourceKind,
+                ["ActualValue"] = actualValue.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["MaximumValue"] = maximumValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            });
 }
 
 public sealed record ResolvedOutputPath(LocalPath? Path, bool Skipped);
@@ -420,9 +750,7 @@ internal static class WorkflowHelpers
         if (results.All(r => r.Status == ImageJobStatus.Failed)) return BatchJobStatus.Failed;
         if (results.All(r => r.Status is ImageJobStatus.Succeeded or ImageJobStatus.Skipped))
         {
-            return results.All(r => r.Status == ImageJobStatus.Succeeded) || results.All(r => r.Status == ImageJobStatus.Skipped)
-                ? BatchJobStatus.Succeeded
-                : BatchJobStatus.PartiallySucceeded;
+            return BatchJobStatus.Succeeded;
         }
 
         return BatchJobStatus.PartiallySucceeded;
@@ -436,6 +764,31 @@ internal static class WorkflowHelpers
 
     public static bool IsCanceled(AtomPixError? error) =>
         error?.Code == AtomPixErrorCode.OperationCanceled || error?.Category == AtomPixErrorCategory.Cancellation;
+
+    public static AtomPixError OutputExistsError(LocalPath outputPath) =>
+        new(
+            AtomPixErrorCode.OutputFileAlreadyExists,
+            AtomPixErrorCategory.FileSystem,
+            "Output file already exists and the current policy is Skip.",
+            new Dictionary<string, string> { ["OutputPath"] = outputPath.Value });
+
+    public static AtomPixError ImageProcessingError(AtomPixErrorCode code, string message) =>
+        new(code, AtomPixErrorCategory.ImageProcessing, message);
+
+    public static ImageJobResult ToResult(
+        ImageJob job,
+        LocalPath? outputPath,
+        long? inputSizeBytes,
+        long? outputSizeBytes) =>
+        new(
+            job.Id,
+            job.Type,
+            job.InputPath,
+            outputPath,
+            job.Status,
+            inputSizeBytes,
+            outputSizeBytes,
+            job.Error);
 
     public static ImageJobResult CanceledJob(ImageJobType type, LocalPath inputPath) =>
         new(ImageJobId.New(), type, inputPath, null, ImageJobStatus.Canceled, null, null, CanceledError());

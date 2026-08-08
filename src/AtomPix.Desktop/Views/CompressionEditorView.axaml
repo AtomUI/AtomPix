@@ -1,0 +1,103 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
+             xmlns:antdicons="https://atomui.net/icons/antdesign"
+             xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             x:Class="AtomPix.Desktop.Views.CompressionEditorView"
+             x:DataType="vm:CompressionEditorViewModel">
+    <Grid Margin="34,28" RowDefinitions="Auto,*">
+        <StackPanel Spacing="6" Margin="0,0,0,20">
+            <TextBlock Text="压缩图片" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="减小文件体积，不改变图片分辨率；输出变大时仍会保留结果。" FontSize="14" Opacity="0.64" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18">
+                <atom:Empty PresetImage="Default" Description="先选择一张要压缩的图片" />
+                <atom:Button Content="选择图片" ButtonType="Primary" Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
+                             Command="{Binding SelectImageCommand}" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <Grid IsVisible="{Binding IsContentReady}" ColumnDefinitions="*,372" ColumnSpacing="20">
+                <Grid Grid.Column="0" RowDefinitions="*,Auto">
+                    <atom:Card Header="原图预览" SizeType="Middle">
+                        <controls:AtomPixImageViewport PreviewBytes="{Binding PreviewBytes}" Margin="14" />
+                    </atom:Card>
+                    <atom:Card Grid.Row="1" Margin="0,16,0,0" SizeType="Small">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="{Binding InputName}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding InputSummary}" Opacity="0.62" />
+                            </StackPanel>
+                            <atom:Button Grid.Column="1" Content="更换图片" Command="{Binding SelectImageCommand}" />
+                        </Grid>
+                    </atom:Card>
+                </Grid>
+
+                <atom:ScrollViewer Grid.Column="1">
+                    <StackPanel Spacing="14">
+                        <atom:Card Header="压缩模式" SizeType="Middle">
+                            <StackPanel Spacing="14">
+                                <atom:Segmented AutomationProperties.Name="压缩模式" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode, Mode=TwoWay}" IsExpanding="True" />
+                                <TextBlock Text="Smart 会自动选择候选质量；模式内部参数不可编辑。" Opacity="0.58" TextWrapping="Wrap" />
+                                <StackPanel IsVisible="{Binding ShowCustomQuality}" Spacing="8">
+                                    <Grid ColumnDefinitions="*,82" ColumnSpacing="10">
+                                        <atom:Slider AutomationProperties.Name="压缩质量" Minimum="1" Maximum="100" Value="{Binding CustomQualitySlider, Mode=TwoWay}" />
+                                        <atom:NumericUpDown AutomationProperties.Name="压缩质量数值" Grid.Column="1" Minimum="1" Maximum="100" FormatString="0"
+                                                            Value="{Binding CustomQuality, Mode=TwoWay}" />
+                                    </Grid>
+                                    <TextBlock Text="自定义质量对 JPEG/WebP 等有损格式生效。" Opacity="0.58" />
+                                </StackPanel>
+                                <atom:Alert Type="Info" IsShowIcon="True" Message="当前格式不使用质量参数"
+                                            IsVisible="{Binding ShowCustomQualityUnavailable}" />
+                            </StackPanel>
+                        </atom:Card>
+
+                        <atom:Card Header="拍摄信息" SizeType="Middle">
+                            <StackPanel Spacing="8">
+                                <atom:CheckBox Content="移除拍摄信息与位置数据" IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
+                                <TextBlock Text="ICC 色彩配置不受此开关控制；方向信息会在自动旋转后规范化。" Opacity="0.58" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </atom:Card>
+
+                        <atom:Card Header="输出设置" SizeType="Middle">
+                            <Border IsEnabled="{Binding !IsProcessing}">
+                                <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
+                            </Border>
+                        </atom:Card>
+
+                        <atom:Alert Type="Error" IsShowIcon="True" Message="参数无法提交" Description="{Binding DraftError}" IsVisible="{Binding HasDraftError}" />
+                        <atom:Alert Type="Error" IsShowIcon="True" Message="压缩未完成" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
+                        <atom:Alert Type="Warning" IsShowIcon="True" Message="输出文件已不存在" Description="请重新处理原图片后再打开或继续调整尺寸。" IsVisible="{Binding IsResultOutputMissing}" />
+
+                        <atom:Card IsVisible="{Binding HasResult}" SizeType="Small">
+                            <StackPanel Spacing="7">
+                                <TextBlock Text="{Binding ResultTitle}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ResultSizeChange}" />
+                                <TextBlock Text="{Binding AppliedQualityText}" IsVisible="{Binding HasAppliedQuality}" />
+                                <TextBlock Text="{Binding ResultOutputPath}" Opacity="0.58" TextTrimming="CharacterEllipsis"
+                                           atom:ToolTip.Tip="{Binding ResultOutputPath}" />
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding IsSuccess}">
+                                    <atom:Button Content="打开输出目录" Command="{Binding OpenOutputCommand}" />
+                                    <atom:Button Grid.Column="1" Content="继续调整尺寸" Command="{Binding ContinueResizeCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </atom:Card>
+
+                        <StackPanel IsVisible="{Binding HasDiagnosticId}" Spacing="6">
+                            <TextBlock Text="{Binding DiagnosticId}" FontFamily="Consolas" />
+                            <atom:Button Content="复制诊断编号" Command="{Binding CopyDiagnosticIdCommand}" HorizontalAlignment="Left" />
+                        </StackPanel>
+                        <atom:Button Content="开始压缩" ButtonType="Primary" Command="{Binding StartCommand}" IsVisible="{Binding !IsProcessing}" />
+                        <atom:Button Content="取消任务" IsDanger="True" Command="{Binding CancelCommand}" IsVisible="{Binding IsProcessing}" />
+                    </StackPanel>
+                </atom:ScrollViewer>
+            </Grid>
+
+            <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <atom:Alert Type="Error" IsShowIcon="True" Message="无法加载压缩页面" Description="{Binding ErrorMessage}"
+                        IsVisible="{Binding HasError}" VerticalAlignment="Top" />
+        </Grid>
+    </Grid>
+</UserControl>

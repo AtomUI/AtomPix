@@ -1,0 +1,184 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
+             xmlns:antdicons="https://atomui.net/icons/antdesign"
+             xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             x:Class="AtomPix.Desktop.Views.BatchTaskView"
+             x:DataType="vm:BatchTaskViewModel">
+    <Grid Margin="30,24" RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,18">
+            <StackPanel Spacing="5">
+                <TextBlock Text="批量任务" FontSize="26" FontWeight="SemiBold" />
+                <TextBlock Text="文件和文件夹可以多次、交替追加；批量任务仅包含压缩、转换和调整尺寸。" Opacity="0.64" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <atom:Button Content="添加文件" Icon="{antdicons:AntDesignIconProvider Kind=FileAddOutlined}" Command="{Binding AddFilesCommand}" />
+                <atom:Button Content="添加文件夹" Icon="{antdicons:AntDesignIconProvider Kind=FolderAddOutlined}" Command="{Binding AddFolderCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,382" ColumnSpacing="18">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <atom:Card SizeType="Small" Margin="0,0,0,10">
+                    <Grid ColumnDefinitions="2*,2*,120,100,80" Margin="8,0">
+                        <TextBlock Text="文件" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="1" Text="输出文件" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="2" Text="预计尺寸" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="3" Text="状态" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="4" Text="操作" FontWeight="SemiBold" />
+                    </Grid>
+                </atom:Card>
+
+                <Grid Grid.Row="1">
+                    <atom:ListView AutomationProperties.Name="批量任务图片列表" ItemsSource="{Binding Items}" SelectionMode="Single">
+                        <atom:ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BatchItemViewModel">
+                                <Grid ColumnDefinitions="2*,2*,120,100,210" Margin="8,6">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                   atom:ToolTip.Tip="{Binding FullPath}" />
+                                        <TextBlock Text="{Binding ProbeSummary}" Opacity="0.56" FontSize="12" />
+                                        <TextBlock Text="{Binding ErrorText}" IsVisible="{Binding HasError}" Foreground="#D4380D" FontSize="12" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding OutputPath}" TextTrimming="CharacterEllipsis"
+                                               atom:ToolTip.Tip="{Binding OutputPath}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding EstimatedSize}" VerticalAlignment="Center" />
+                                    <Grid Grid.Column="3" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding StatusText}" />
+                                        <atom:Spin IsVisible="{Binding IsRunning}" HorizontalAlignment="Right" />
+                                    </Grid>
+                                    <WrapPanel Grid.Column="4" VerticalAlignment="Center">
+                                        <atom:Button Content="详情" ButtonType="Text" Click="HandleViewDetails" CommandParameter="{Binding}" IsVisible="{Binding CanViewDetails}" />
+                                        <atom:Button Content="重新定位" ButtonType="Text" Click="HandleRelocateInput" CommandParameter="{Binding}" IsVisible="{Binding CanRelocate}" />
+                                        <atom:Button Content="复制诊断编号" ButtonType="Text" Click="HandleCopyItemDiagnostic" CommandParameter="{Binding}" IsVisible="{Binding HasDiagnosticId}" />
+                                        <atom:Button Content="移除" ButtonType="Text" Click="HandleRemoveInput" CommandParameter="{Binding}" IsVisible="{Binding CanRemove}" />
+                                    </WrapPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </atom:ListView.ItemTemplate>
+                    </atom:ListView>
+                    <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                        <atom:Empty PresetImage="Simple" Description="尚未添加图片" />
+                        <TextBlock Text="使用右上角按钮从不同位置追加图片。" Opacity="0.58" />
+                    </StackPanel>
+                    <atom:Spin IsVisible="{Binding IsAppending}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Grid>
+
+                <StackPanel Grid.Row="2" Spacing="8" Margin="0,10,0,0">
+                    <atom:ProgressBar AutomationProperties.Name="批量处理进度" Value="{Binding ProgressRatio}" Minimum="0" Maximum="1" IsVisible="{Binding IsProcessing}" />
+                    <TextBlock Text="{Binding ProgressSummary}" IsVisible="{Binding IsProcessing}" />
+                    <atom:Alert Type="Info" IsShowIcon="True" Message="输入追加结果" Description="{Binding NoticeMessage}" IsVisible="{Binding HasNotice}" />
+                    <atom:Alert Type="Error" IsShowIcon="True" Message="批量任务未完成" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
+                    <StackPanel IsVisible="{Binding HasDiagnosticId}" Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding DiagnosticId}" FontFamily="Consolas" VerticalAlignment="Center" />
+                        <atom:Button Content="复制诊断编号" Command="{Binding CopyDiagnosticIdCommand}" />
+                    </StackPanel>
+                    <atom:Alert Type="Warning" IsShowIcon="True" Message="部分输出文件已不存在"
+                                Description="相关打开操作已禁用；原任务结果仍保持只读。" IsVisible="{Binding HasMissingOutput}" />
+                    <atom:Card IsVisible="{Binding HasPreviousResult}" SizeType="Small">
+                        <TextBlock Text="{Binding PreviousResultSummary}" TextWrapping="Wrap" />
+                    </atom:Card>
+                    <atom:Card IsVisible="{Binding HasResult}" SizeType="Small">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{Binding ResultTitle}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding ResultSummary}" />
+                            <TextBlock Text="{Binding ResultSizeChange}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <atom:Button Content="重试失败项" Command="{Binding RetryFailedCommand}" IsVisible="{Binding HasFailedItems}" />
+                                <atom:Button Content="处理未完成项" Command="{Binding ProcessUnfinishedCommand}" IsVisible="{Binding HasUnfinishedItems}" />
+                                <atom:Button Content="自动重命名处理跳过项" Command="{Binding ProcessSkippedWithAutoRenameCommand}" IsVisible="{Binding HasSkippedItems}" />
+                                <atom:Button Content="打开输出目录" Command="{Binding OpenOutputCommand}" />
+                                <atom:Button Content="继续处理其他图片" Command="{Binding ContinueOtherCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </atom:Card>
+                </StackPanel>
+            </Grid>
+
+            <atom:ScrollViewer Grid.Column="1">
+                <StackPanel Spacing="13">
+                    <atom:Card Header="任务类型" SizeType="Middle">
+                        <atom:Segmented AutomationProperties.Name="批量任务类型" ItemsSource="{Binding TaskKinds}" SelectedItem="{Binding SelectedTask, Mode=TwoWay}" IsExpanding="True" IsEnabled="{Binding CanEditDraft}" />
+                    </atom:Card>
+
+                    <atom:Card Header="压缩设置" SizeType="Middle" IsVisible="{Binding IsCompressTask}" IsEnabled="{Binding CanEditDraft}">
+                        <StackPanel Spacing="12">
+                            <atom:Segmented AutomationProperties.Name="批量压缩模式" ItemsSource="{Binding CompressionModes}" SelectedItem="{Binding SelectedCompressionMode, Mode=TwoWay}" />
+                            <Grid ColumnDefinitions="*,82" ColumnSpacing="10" IsVisible="{Binding IsCustomCompression}">
+                                <atom:Slider AutomationProperties.Name="批量压缩质量" Minimum="1" Maximum="100" Value="{Binding CustomQualitySlider, Mode=TwoWay}" />
+                                <atom:NumericUpDown AutomationProperties.Name="批量压缩质量数值" Grid.Column="1" Minimum="1" Maximum="100" FormatString="0" Value="{Binding CustomQuality, Mode=TwoWay}" />
+                            </Grid>
+                            <TextBlock Text="Custom 对本批次所有有损项目共享同一个质量值。" Opacity="0.58" TextWrapping="Wrap" IsVisible="{Binding IsCustomCompression}" />
+                        </StackPanel>
+                    </atom:Card>
+
+                    <atom:Card Header="转换设置" SizeType="Middle" IsVisible="{Binding IsConvertTask}" IsEnabled="{Binding CanEditDraft}">
+                        <StackPanel Spacing="12">
+                            <atom:Segmented AutomationProperties.Name="批量转换格式" ItemsSource="{Binding ConversionFormats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}" IsExpanding="True" />
+                            <Grid ColumnDefinitions="*,82" ColumnSpacing="10" IsVisible="{Binding IsLossyConversion}">
+                                <atom:Slider AutomationProperties.Name="批量转换质量" Minimum="1" Maximum="100" Value="{Binding ConversionQualitySlider, Mode=TwoWay}" />
+                                <atom:NumericUpDown AutomationProperties.Name="批量转换质量数值" Grid.Column="1" Minimum="1" Maximum="100" FormatString="0" Value="{Binding ConversionQuality, Mode=TwoWay}" />
+                            </Grid>
+                            <StackPanel IsVisible="{Binding ShowBatchTransparency}" Spacing="8">
+                                <TextBlock Text="透明图片将使用一套共享背景色" />
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                    <controls:RgbColorPickerBridge Width="42" HexValue="{Binding BackgroundHex, Mode=TwoWay}" />
+                                    <atom:TextBox AutomationProperties.Name="批量透明区域背景色十六进制值" Grid.Column="1" Text="{Binding BackgroundHex, Mode=TwoWay}" PlaceholderText="#RRGGBB" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                    <atom:Button Content="白色" Command="{Binding UseWhiteCommand}" />
+                                    <atom:Button Grid.Column="1" Content="黑色" Command="{Binding UseBlackCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </atom:Card>
+
+                    <atom:Card Header="Resize 设置" SizeType="Middle" IsVisible="{Binding IsResizeTask}" IsEnabled="{Binding CanEditDraft}">
+                        <StackPanel Spacing="12">
+                            <atom:Segmented AutomationProperties.Name="批量调整尺寸方式" ItemsSource="{Binding ResizeModes}" SelectedItem="{Binding SelectedResizeMode, Mode=TwoWay}" IsExpanding="True" />
+                            <StackPanel IsVisible="{Binding IsPixelResize}" Spacing="10">
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                    <atom:NumericUpDown AutomationProperties.Name="批量目标宽度像素" Minimum="1" Maximum="100000" FormatString="0" Value="{Binding PixelWidth, Mode=TwoWay}" />
+                                    <atom:NumericUpDown AutomationProperties.Name="批量目标高度像素" Grid.Column="1" Minimum="1" Maximum="100000" FormatString="0" Value="{Binding PixelHeight, Mode=TwoWay}" />
+                                </Grid>
+                                <atom:CheckBox Content="保持原图比例" IsChecked="{Binding MaintainAspectRatio, Mode=TwoWay}" />
+                                <atom:Alert Type="Warning" IsShowIcon="True" Message="关闭保持比例后，所有图片会被强制为相同宽高并可能变形"
+                                            IsVisible="{Binding !MaintainAspectRatio}" />
+                            </StackPanel>
+                            <StackPanel IsVisible="{Binding IsPercentageResize}" Spacing="8">
+                                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
+                                    <atom:Button Content="25%" Command="{Binding Use25PercentCommand}" />
+                                    <atom:Button Grid.Column="1" Content="50%" Command="{Binding Use50PercentCommand}" />
+                                    <atom:Button Grid.Column="2" Content="75%" Command="{Binding Use75PercentCommand}" />
+                                </Grid>
+                                <atom:NumericUpDown AutomationProperties.Name="批量自定义缩放百分比" Minimum="1" Maximum="1000" FormatString="0.##" Value="{Binding Percentage, Mode=TwoWay}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </atom:Card>
+
+                    <atom:Card Header="公共输出设置" SizeType="Middle" IsEnabled="{Binding CanEditDraft}">
+                        <StackPanel Spacing="10">
+                            <atom:CheckBox Content="移除拍摄信息与位置数据" IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" IsVisible="{Binding !IsResizeTask}" />
+                            <Border IsEnabled="{Binding CanEditDraft}">
+                                <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
+                            </Border>
+                            <atom:Alert Type="Warning" IsShowIcon="True" Message="系统会在末尾追加序号占位符"
+                                        Description="多项输出必须有稳定序号；实际生效格式见下方。" IsVisible="{Binding PatternWillAppendIndex}" />
+                            <TextBlock Text="实际生效格式" Opacity="0.58" />
+                            <TextBlock Text="{Binding EffectivePattern}" FontFamily="Consolas" />
+                            <TextBlock Text="{Binding OutputExamples}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </atom:Card>
+
+                    <atom:Alert Type="Error" IsShowIcon="True" Message="任务草稿无效" Description="{Binding DraftError}" IsVisible="{Binding HasDraftError}" />
+                    <atom:Button Content="开始批量处理" ButtonType="Primary" Command="{Binding StartCommand}" IsVisible="{Binding !IsProcessing}" />
+                    <atom:Button Content="取消批量任务" IsDanger="True" Command="{Binding CancelCommand}" IsVisible="{Binding IsProcessing}" />
+                    <TextBlock Text="正在等待当前图片安全结束……" IsVisible="{Binding IsCanceling}" Opacity="0.62" />
+
+                    <atom:Button Content="打开输入目录" Command="{Binding OpenInputDirectoryCommand}" IsVisible="{Binding HasInputs}" />
+                </StackPanel>
+            </atom:ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

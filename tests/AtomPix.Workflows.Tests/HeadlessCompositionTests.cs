@@ -1,13 +1,14 @@
 namespace AtomPix.Workflows.Tests;
 
+using System.Text.Json;
 using ImageMagick;
 using Microsoft.Extensions.DependencyInjection;
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
 using AtomPix.Core.Errors;
 using AtomPix.Core.Jobs;
-using AtomPix.Core.Licensing;
 using AtomPix.Core.Ports;
+using AtomPix.Core.Resize;
 using AtomPix.Core.Settings;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Imaging.Magick.DependencyInjection;
@@ -43,9 +44,7 @@ public sealed class HeadlessCompositionTests : IDisposable
     {
         using var services = BuildProvider();
 
-        var subscriptionStore = services.GetRequiredService<ISubscriptionStore>();
         var settingsStore = services.GetRequiredService<IAppSettingsStore>();
-        await subscriptionStore.SaveAsync(new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddMonths(1)), CancellationToken.None);
         await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None);
 
         var convert = services.GetRequiredService<ConvertWithDefaultSettingsWorkflow>();
@@ -65,15 +64,78 @@ public sealed class HeadlessCompositionTests : IDisposable
     }
 
     [Fact]
+    public async Task Headless_workflow_creates_one_operation_scope_and_redacted_terminal_log()
+    {
+        using var services = BuildProvider();
+        var workflow = services.GetRequiredService<CompressImageWorkflow>();
+        var input = new LocalPath(Path.Combine(_root, "sample.jpg"));
+
+        var result = await workflow.ExecuteAsync(
+            new CompressImageRequest(input, CompressionProfile.BalancedDefault(), AtomPix.Core.Output.OutputPolicy.Default),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var logDirectory = Path.Combine(_root, "appdata", "logs");
+        var lines = Directory.GetFiles(logDirectory, "*.jsonl")
+            .SelectMany(File.ReadLines)
+            .Where(line => line.Contains("CompressImageWorkflow", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(2, lines.Length);
+        Assert.DoesNotContain(lines, line => line.Contains("sample.jpg", StringComparison.OrdinalIgnoreCase));
+        using var started = JsonDocument.Parse(lines[0]);
+        using var completed = JsonDocument.Parse(lines[1]);
+        Assert.Equal("WorkflowStarted", started.RootElement.GetProperty("EventName").GetString());
+        Assert.Equal("WorkflowCompleted", completed.RootElement.GetProperty("EventName").GetString());
+        Assert.Equal(
+            started.RootElement.GetProperty("OperationId").GetString(),
+            completed.RootElement.GetProperty("OperationId").GetString());
+        Assert.Equal(result.Value!.JobResult.JobId.Value, completed.RootElement.GetProperty("JobId").GetGuid());
+    }
+
+    [Fact]
+    public async Task Image_engine_failure_inherits_workflow_operation_scope_without_leaking_file_name()
+    {
+        var inputPath = Path.Combine(_root, "private-corrupt.jpg");
+        await File.WriteAllBytesAsync(inputPath, [0xFF, 0xD8, 0x00, 0x01]);
+        using var services = BuildProvider();
+        var workflow = services.GetRequiredService<CompressImageWorkflow>();
+
+        var result = await workflow.ExecuteAsync(
+            new CompressImageRequest(new LocalPath(inputPath), CompressionProfile.BalancedDefault(), AtomPix.Core.Output.OutputPolicy.Default),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(AtomPixErrorCode.InvalidImageFile, result.Error!.Code);
+        var lines = Directory.GetFiles(Path.Combine(_root, "appdata", "logs"), "*.jsonl")
+            .SelectMany(File.ReadLines)
+            .ToArray();
+        Assert.DoesNotContain(lines, line => line.Contains("private-corrupt.jpg", StringComparison.OrdinalIgnoreCase));
+        var events = lines.Select(line => JsonDocument.Parse(line)).ToArray();
+        try
+        {
+            Assert.Equal(3, events.Length);
+            Assert.Contains(events, item => item.RootElement.GetProperty("EventName").GetString() == "ImageEngineFailure");
+            var operationIds = events
+                .Select(item => item.RootElement.GetProperty("OperationId").GetString())
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            Assert.Single(operationIds);
+        }
+        finally
+        {
+            foreach (var item in events) item.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task Dependency_injection_composes_default_compress_and_batch_flows()
     {
         using var services = BuildProvider();
-        var subscriptionStore = services.GetRequiredService<ISubscriptionStore>();
         var settingsStore = services.GetRequiredService<IAppSettingsStore>();
-        await subscriptionStore.SaveAsync(new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddMonths(1)), CancellationToken.None);
         await settingsStore.SaveAsync(new AppSettings(
-            new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), AtomPix.Core.Compression.ResizePolicy.FitWithinBounds(80, 80), MetadataPolicy.Remove),
+            new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), MetadataPolicy.Remove),
             AppSettings.Default.DefaultConversionProfile,
+            AppSettings.Default.DefaultSameFormatEncodingPolicy,
             AppSettings.Default.DefaultOutputPolicy,
             AppSettings.Default.ThemeMode,
             AppSettings.Default.Language,
@@ -87,9 +149,19 @@ public sealed class HeadlessCompositionTests : IDisposable
         Assert.True(File.Exists(compressResult.Value.Result.JobResult.OutputPath!.Value.Value));
         using (var output = new MagickImage(compressResult.Value.Result.JobResult.OutputPath.Value.Value))
         {
-            Assert.Equal(80u, output.Width);
-            Assert.Equal(53u, output.Height);
+            Assert.Equal(120u, output.Width);
+            Assert.Equal(80u, output.Height);
         }
+
+        var resize = services.GetRequiredService<ResizeWithDefaultSettingsWorkflow>();
+        var resizeResult = await resize.ExecuteAsync(
+            new ResizeWithDefaultSettingsRequest(
+                new LocalPath(Path.Combine(_root, "sample.jpg")),
+                new PixelResizePolicy(80, 80, maintainAspectRatio: true)),
+            CancellationToken.None);
+
+        Assert.True(resizeResult.Succeeded);
+        Assert.Equal(new ImageSize(80, 53), resizeResult.Value!.Result.ActualOutputSize);
 
         var batchCompress = services.GetRequiredService<BatchCompressWithDefaultSettingsWorkflow>();
         var batchCompressResult = await batchCompress.ExecuteAsync(
@@ -117,26 +189,17 @@ public sealed class HeadlessCompositionTests : IDisposable
     }
 
     [Fact]
-    public async Task Dependency_injection_enforces_feature_access_for_batch_workflows()
+    public async Task Dependency_injection_exposes_batch_features_without_subscription_services()
     {
         using var services = BuildProvider();
         var batchConvert = services.GetRequiredService<BatchConvertWorkflow>();
 
-        var freeResult = await batchConvert.ExecuteAsync(
+        var result = await batchConvert.ExecuteAsync(
             new BatchConvertRequest([new LocalPath(Path.Combine(_root, "sample.png"))], ConversionProfile.WebPDefault(), AtomPix.Core.Output.OutputPolicy.Default),
             CancellationToken.None);
 
-        Assert.False(freeResult.Succeeded);
-        Assert.Equal(AtomPixErrorCode.FeatureNotAvailable, freeResult.Error!.Code);
-
-        var subscriptionStore = services.GetRequiredService<ISubscriptionStore>();
-        await subscriptionStore.SaveAsync(new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddMonths(1)), CancellationToken.None);
-        var activeResult = await batchConvert.ExecuteAsync(
-            new BatchConvertRequest([new LocalPath(Path.Combine(_root, "sample.png"))], ConversionProfile.WebPDefault(), AtomPix.Core.Output.OutputPolicy.Default),
-            CancellationToken.None);
-
-        Assert.True(activeResult.Succeeded);
-        Assert.Equal(BatchJobStatus.Succeeded, activeResult.Value!.BatchResult.Status);
+        Assert.True(result.Succeeded);
+        Assert.Equal(BatchJobStatus.Succeeded, result.Value!.BatchResult.Status);
     }
 
     private ServiceProvider BuildProvider() => new ServiceCollection()

@@ -3,7 +3,9 @@ namespace AtomPix.Imaging.Magick.Tests;
 using ImageMagick;
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
+using AtomPix.Core.Crop;
 using AtomPix.Core.Errors;
+using AtomPix.Core.Resize;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
@@ -38,6 +40,31 @@ public sealed class MagickImageProcessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Probe_rejects_file_size_limit_before_image_header_read()
+    {
+        var processor = CreateLimitedProcessor(new ImageResourceCapabilities(1, 1000, 1000, 1_000_000, 1000, 1000, 1_000_000));
+
+        var result = await processor.ProbeAsync(new ImageProbeRequest(PathOf("jpeg-basic.jpg")), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(AtomPixErrorCode.InputFileTooLarge, result.Error!.Code);
+        Assert.Equal("InputFileSizeBytes", result.Error.Details!["ResourceKind"]);
+    }
+
+    [Fact]
+    public async Task Probe_rejects_dimension_limit_from_lightweight_header()
+    {
+        var processor = CreateLimitedProcessor(new ImageResourceCapabilities(1024 * 1024, 100, 100, 10_000, 100, 100, 10_000));
+
+        var result = await processor.ProbeAsync(new ImageProbeRequest(PathOf("jpeg-basic.jpg")), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(AtomPixErrorCode.ImageDimensionsExceedLimit, result.Error!.Code);
+        Assert.Equal("120", result.Error.Details!["ActualWidth"]);
+        Assert.Equal("100", result.Error.Details["MaximumWidth"]);
+    }
+
+    [Fact]
     public async Task Capabilities_match_probe_and_convert_behavior()
     {
         var samples = new Dictionary<ImageFormatKind, string>
@@ -68,7 +95,7 @@ public sealed class MagickImageProcessorTests : IDisposable
                 _ => throw new InvalidOperationException($"Unexpected output format {outputFormat}.")
             };
             var output = PathOf($"capability-convert.{extension}");
-            var profile = new ConversionProfile(outputFormat, new ImageQuality(80), ResizePolicy.None, MetadataPolicy.Remove);
+            var profile = new ConversionProfile(outputFormat, new ImageQuality(80), MetadataPolicy.Remove, TransparencyPolicy.Default);
 
             var convert = await _processor.ConvertAsync(new ImageConvertRequest(PathOf("jpeg-basic.jpg"), output, profile), CancellationToken.None);
 
@@ -84,7 +111,8 @@ public sealed class MagickImageProcessorTests : IDisposable
         var result = await _processor.ProbeAsync(new ImageProbeRequest(PathOf("png-alpha.png")), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.True(result.Value!.HasAlpha);
+        Assert.True(result.Value!.HasAlphaChannel);
+        Assert.True(result.Value.HasTransparency);
     }
 
     [Fact]
@@ -149,7 +177,7 @@ public sealed class MagickImageProcessorTests : IDisposable
     public async Task Convert_webp_to_jpeg_writes_output()
     {
         var output = PathOf("converted.jpg");
-        var profile = new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(80), ResizePolicy.None, MetadataPolicy.Remove);
+        var profile = new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(80), MetadataPolicy.Remove, TransparencyPolicy.Default);
 
         var result = await _processor.ConvertAsync(new ImageConvertRequest(PathOf("webp-basic.webp"), output, profile), CancellationToken.None);
 
@@ -308,7 +336,7 @@ public sealed class MagickImageProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task Convert_creates_missing_output_directory()
+    public async Task Convert_rejects_missing_output_directory_without_creating_it()
     {
         var output = new LocalPath(Path.Combine(_root, "nested", "directory", "converted.webp"));
 
@@ -316,8 +344,9 @@ public sealed class MagickImageProcessorTests : IDisposable
             new ImageConvertRequest(PathOf("png-alpha.png"), output, ConversionProfile.WebPDefault()),
             CancellationToken.None);
 
-        Assert.True(result.Succeeded);
-        Assert.True(File.Exists(output.Value));
+        Assert.False(result.Succeeded);
+        Assert.Equal(AtomPixErrorCode.OutputDirectoryNotFound, result.Error!.Code);
+        Assert.False(Directory.Exists(Path.Combine(_root, "nested")));
     }
     [Fact]
     public async Task Compress_success_does_not_leave_temporary_output_files()
@@ -356,14 +385,87 @@ public sealed class MagickImageProcessorTests : IDisposable
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal(AtomPixErrorCode.ImageCompressFailed, result.Error!.Code);
+        Assert.Equal(AtomPixErrorCode.ImageWriteFailed, result.Error!.Code);
         Assert.Empty(TemporaryFilesIn(_root));
+    }
+
+    [Fact]
+    public void Atomic_output_commit_preserves_existing_file_and_cleans_temporary_file_when_encoding_fails()
+    {
+        var output = Path.Combine(_root, "existing-output.jpg");
+        File.WriteAllText(output, "original");
+        var committer = new AtomicImageFileCommitter();
+
+        var exception = Assert.Throws<ImageOutputCommitException>(() =>
+            committer.Commit(
+                new LocalPath(output),
+                temporaryPath =>
+                {
+                    File.WriteAllText(temporaryPath, "partial");
+                    throw new IOException("Synthetic encoder failure.");
+                }));
+
+        Assert.Equal(ImageOutputFailureKind.WriteFailed, exception.Kind);
+        Assert.Equal("original", File.ReadAllText(output));
+        Assert.Empty(TemporaryFilesIn(_root));
+    }
+
+    [Fact]
+    public void Atomic_output_commit_classifies_native_disk_full_error()
+    {
+        var committer = new AtomicImageFileCommitter();
+
+        var exception = Assert.Throws<ImageOutputCommitException>(() =>
+            committer.Commit(
+                PathOf("disk-full.jpg"),
+                _ => throw new IOException("Synthetic disk full.", 112)));
+
+        Assert.Equal(ImageOutputFailureKind.InsufficientDiskSpace, exception.Kind);
+        Assert.Empty(TemporaryFilesIn(_root));
+    }
+
+    [Fact]
+    public void Atomic_output_commit_classifies_permission_denied_error()
+    {
+        var committer = new AtomicImageFileCommitter();
+
+        var exception = Assert.Throws<ImageOutputCommitException>(() =>
+            committer.Commit(
+                PathOf("permission-denied.jpg"),
+                _ => throw new UnauthorizedAccessException("Synthetic permission denial.")));
+
+        Assert.Equal(ImageOutputFailureKind.PermissionDenied, exception.Kind);
+        Assert.Empty(TemporaryFilesIn(_root));
+    }
+
+    [Theory]
+    [InlineData(ImageOutputFailureKind.InsufficientDiskSpace, AtomPixErrorCode.InsufficientDiskSpace, AtomPixErrorCategory.FileSystem)]
+    [InlineData(ImageOutputFailureKind.PermissionDenied, AtomPixErrorCode.ImageWriteFailed, AtomPixErrorCategory.Permission)]
+    [InlineData(ImageOutputFailureKind.WriteFailed, AtomPixErrorCode.ImageWriteFailed, AtomPixErrorCategory.FileSystem)]
+    public async Task Convert_maps_output_commit_failures_to_stable_public_errors(
+        ImageOutputFailureKind failureKind,
+        AtomPixErrorCode expectedCode,
+        AtomPixErrorCategory expectedCategory)
+    {
+        var output = PathOf($"failed-{failureKind}.webp");
+        var processor = new MagickImageProcessor(
+            MagickImageProcessorOptions.CreateDefault(Path.Combine(_root, "fault-cache")),
+            fileCommitter: new ThrowingImageFileCommitter(failureKind));
+
+        var result = await processor.ConvertAsync(
+            new ImageConvertRequest(PathOf("png-alpha.png"), output, ConversionProfile.WebPDefault()),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedCode, result.Error!.Code);
+        Assert.Equal(expectedCategory, result.Error.Category);
+        Assert.False(File.Exists(output.Value));
     }
     [Fact]
     public void Convert_profile_rejects_invalid_output_format_enum_before_processor_call()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new ConversionProfile((OutputImageFormat)999, null, ResizePolicy.None, MetadataPolicy.Remove));
+            new ConversionProfile((OutputImageFormat)999, null, MetadataPolicy.Remove, TransparencyPolicy.Default));
     }
 
     [Fact]
@@ -380,6 +482,12 @@ public sealed class MagickImageProcessorTests : IDisposable
         var convert = await _processor.ConvertAsync(
             new ImageConvertRequest(PathOf("png-alpha.png"), PathOf("canceled-output.webp"), ConversionProfile.WebPDefault()),
             cts.Token);
+        var resize = await _processor.ResizeAsync(
+            new ImageResizeRequest(PathOf("jpeg-basic.jpg"), PathOf("canceled-resize.jpg"), new ResolvedResizeSize(60, 40), SameFormatEncodingPolicy.Default),
+            cts.Token);
+        var crop = await _processor.CropAsync(
+            new ImageCropRequest(PathOf("jpeg-basic.jpg"), PathOf("canceled-crop.jpg"), new CropRectangle(0, 0, 60, 40), SameFormatEncodingPolicy.Default),
+            cts.Token);
 
         Assert.False(probe.Succeeded);
         Assert.Equal(AtomPixErrorCode.OperationCanceled, probe.Error!.Code);
@@ -389,6 +497,10 @@ public sealed class MagickImageProcessorTests : IDisposable
         Assert.Equal(AtomPixErrorCode.OperationCanceled, compress.Error!.Code);
         Assert.False(convert.Succeeded);
         Assert.Equal(AtomPixErrorCode.OperationCanceled, convert.Error!.Code);
+        Assert.False(resize.Succeeded);
+        Assert.Equal(AtomPixErrorCode.OperationCanceled, resize.Error!.Code);
+        Assert.False(crop.Succeeded);
+        Assert.Equal(AtomPixErrorCode.OperationCanceled, crop.Error!.Code);
     }
 
     [Fact]
@@ -398,6 +510,8 @@ public sealed class MagickImageProcessorTests : IDisposable
         await Assert.ThrowsAsync<ArgumentNullException>(() => _processor.CreatePreviewAsync(null!, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentNullException>(() => _processor.CompressAsync(null!, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentNullException>(() => _processor.ConvertAsync(null!, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _processor.ResizeAsync(null!, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _processor.CropAsync(null!, CancellationToken.None));
     }
 
     [Fact]
@@ -423,8 +537,8 @@ public sealed class MagickImageProcessorTests : IDisposable
     {
         var removeOutput = PathOf("metadata-removed.jpg");
         var preserveOutput = PathOf("metadata-preserved.jpg");
-        var removeProfile = new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), ResizePolicy.None, MetadataPolicy.Remove);
-        var preserveProfile = new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), ResizePolicy.None, MetadataPolicy.Preserve);
+        var removeProfile = new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), MetadataPolicy.Remove);
+        var preserveProfile = new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), MetadataPolicy.Preserve);
 
         var removed = await _processor.CompressAsync(new ImageCompressRequest(PathOf("jpeg-metadata.jpg"), removeOutput, removeProfile), CancellationToken.None);
         var preserved = await _processor.CompressAsync(new ImageCompressRequest(PathOf("jpeg-metadata.jpg"), preserveOutput, preserveProfile), CancellationToken.None);
@@ -473,13 +587,14 @@ public sealed class MagickImageProcessorTests : IDisposable
         Assert.Equal(120u, converted.Width);
         Assert.Equal(80u, converted.Height);
         Assert.True(converted.HasAlpha);
+        Assert.Equal(TransparencyOutcome.Preserved, result.Value.Transparency.Outcome);
     }
 
     [Fact]
     public async Task Convert_png_alpha_to_jpeg_removes_alpha()
     {
         var output = PathOf("alpha-converted.jpg");
-        var profile = new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(80), ResizePolicy.None, MetadataPolicy.Remove);
+        var profile = new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(80), MetadataPolicy.Remove, TransparencyPolicy.Default);
 
         var result = await _processor.ConvertAsync(new ImageConvertRequest(PathOf("png-alpha.png"), output, profile), CancellationToken.None);
 
@@ -488,13 +603,15 @@ public sealed class MagickImageProcessorTests : IDisposable
         using var converted = new MagickImage(output.Value);
         Assert.Equal(MagickFormat.Jpeg, converted.Format);
         Assert.False(converted.HasAlpha);
+        Assert.Equal(TransparencyOutcome.Flattened, result.Value.Transparency.Outcome);
+        Assert.Equal(RgbColor.White, result.Value.Transparency.BackgroundColor);
     }
 
     [Fact]
     public async Task Convert_webp_to_jpeg_outputs_jpeg_without_alpha()
     {
         var output = PathOf("webp-to-jpeg.jpg");
-        var profile = new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(80), ResizePolicy.None, MetadataPolicy.Remove);
+        var profile = new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(80), MetadataPolicy.Remove, TransparencyPolicy.Default);
 
         var result = await _processor.ConvertAsync(new ImageConvertRequest(PathOf("webp-basic.webp"), output, profile), CancellationToken.None);
 
@@ -506,25 +623,20 @@ public sealed class MagickImageProcessorTests : IDisposable
     }
 
     [Fact]
-    public async Task Compress_applies_fit_within_bounds_resize()
+    public async Task Resize_executes_resolved_dimensions_without_reinterpreting_aspect_ratio()
     {
-        var output = PathOf("compressed-resized.jpg");
-        var profile = new CompressionProfile(
-            CompressionMode.Balanced,
-            new ImageQuality(80),
-            ResizePolicy.FitWithinBounds(60, 60),
-            MetadataPolicy.Remove);
+        var output = PathOf("resized.jpg");
 
-        var result = await _processor.CompressAsync(
-            new ImageCompressRequest(PathOf("jpeg-basic.jpg"), output, profile),
+        var result = await _processor.ResizeAsync(
+            new ImageResizeRequest(PathOf("jpeg-basic.jpg"), output, new ResolvedResizeSize(60, 30), SameFormatEncodingPolicy.Default),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
+        Assert.Equal(new ImageSize(120, 80), result.Value!.InputSize);
+        Assert.Equal(new ImageSize(60, 30), result.Value.OutputSize);
         using var image = new MagickImage(output.Value);
-        Assert.True(image.Width <= 60);
-        Assert.True(image.Height <= 60);
         Assert.Equal(60u, image.Width);
-        Assert.Equal(40u, image.Height);
+        Assert.Equal(30u, image.Height);
     }
 
     [Fact]
@@ -568,29 +680,54 @@ public sealed class MagickImageProcessorTests : IDisposable
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal(AtomPixErrorCode.ImageConvertFailed, result.Error!.Code);
+        Assert.Equal(AtomPixErrorCode.ImageWriteFailed, result.Error!.Code);
         Assert.Empty(TemporaryFilesIn(_root));
     }
 
     [Fact]
-    public async Task Convert_applies_percentage_resize()
+    public async Task Crop_executes_the_resolved_logical_rectangle()
     {
-        var output = PathOf("converted-half.webp");
-        var profile = new ConversionProfile(
-            OutputImageFormat.WebP,
-            new ImageQuality(80),
-            ResizePolicy.ScaleByPercentage(50),
-            MetadataPolicy.Remove);
+        var output = PathOf("cropped.png");
 
-        var result = await _processor.ConvertAsync(
-            new ImageConvertRequest(PathOf("png-alpha.png"), output, profile),
+        var result = await _processor.CropAsync(
+            new ImageCropRequest(PathOf("png-alpha.png"), output, new CropRectangle(10, 15, 60, 30), SameFormatEncodingPolicy.Default),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
+        Assert.Equal(new ImageSize(120, 80), result.Value!.InputSize);
+        Assert.Equal(new ImageSize(60, 30), result.Value.OutputSize);
         using var image = new MagickImage(output.Value);
         Assert.Equal(60u, image.Width);
-        Assert.Equal(40u, image.Height);
+        Assert.Equal(30u, image.Height);
     }
+
+    [Fact]
+    public async Task Processing_operations_defensively_reject_input_output_path_conflicts()
+    {
+        var input = PathOf("jpeg-basic.jpg");
+        var compress = await _processor.CompressAsync(
+            new ImageCompressRequest(input, input, CompressionProfile.BalancedDefault()),
+            CancellationToken.None);
+        var convert = await _processor.ConvertAsync(
+            new ImageConvertRequest(input, input, new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(80), MetadataPolicy.Remove, TransparencyPolicy.Default)),
+            CancellationToken.None);
+        var resize = await _processor.ResizeAsync(
+            new ImageResizeRequest(input, input, new ResolvedResizeSize(60, 40), SameFormatEncodingPolicy.Default),
+            CancellationToken.None);
+        var crop = await _processor.CropAsync(
+            new ImageCropRequest(input, input, new CropRectangle(0, 0, 60, 40), SameFormatEncodingPolicy.Default),
+            CancellationToken.None);
+
+        Assert.False(compress.Succeeded);
+        Assert.False(convert.Succeeded);
+        Assert.False(resize.Succeeded);
+        Assert.False(crop.Succeeded);
+        Assert.All(
+            new[] { compress.Error, convert.Error, resize.Error, crop.Error },
+            error => Assert.Equal(AtomPixErrorCode.OutputPathConflictsWithInput, error!.Code));
+        Assert.True(File.Exists(input.Value));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
@@ -601,6 +738,15 @@ public sealed class MagickImageProcessorTests : IDisposable
 
     private LocalPath PathOf(string fileName) => new(Path.Combine(_root, fileName));
 
+    private MagickImageProcessor CreateLimitedProcessor(ImageResourceCapabilities resources) =>
+        new(new MagickImageProcessorOptions(
+            resources,
+            16UL * 1024 * 1024,
+            32UL * 1024 * 1024,
+            64UL * 1024 * 1024,
+            1,
+            Path.Combine(_root, "limited-cache")));
+
     private static ImageFormatKind ToImageFormatKind(OutputImageFormat format) => format switch
     {
         OutputImageFormat.Jpeg => ImageFormatKind.Jpeg,
@@ -610,6 +756,12 @@ public sealed class MagickImageProcessorTests : IDisposable
     };
     private static IReadOnlyList<string> TemporaryFilesIn(string directory) =>
         Directory.EnumerateFiles(directory, ".*.tmp*", SearchOption.AllDirectories).ToArray();
+
+    private sealed class ThrowingImageFileCommitter(ImageOutputFailureKind failureKind) : IImageFileCommitter
+    {
+        public void Commit(LocalPath outputPath, Action<string> writeTemporaryFile) =>
+            throw new ImageOutputCommitException(failureKind, new IOException("Synthetic output commit failure."));
+    }
 
     private void CreateSampleImages()
     {

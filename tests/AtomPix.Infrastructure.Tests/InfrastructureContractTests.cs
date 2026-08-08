@@ -1,17 +1,17 @@
 namespace AtomPix.Infrastructure.Tests;
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using AtomPix.Core.Errors;
-using AtomPix.Core.Licensing;
 using AtomPix.Core.Ports;
+using AtomPix.Core.Resize;
 using AtomPix.Core.Settings;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Infrastructure.Configuration;
 using AtomPix.Infrastructure.FileSystem;
 using AtomPix.Infrastructure.Paths;
 using AtomPix.Infrastructure.RecentItems;
-using AtomPix.Infrastructure.Subscriptions;
 
 public sealed class InfrastructureContractTests : IDisposable
 {
@@ -66,6 +66,24 @@ public sealed class InfrastructureContractTests : IDisposable
     }
 
     [Fact]
+    public async Task Settings_v1_missing_new_same_format_policy_uses_compatible_default()
+    {
+        var store = new JsonAppSettingsStore(_paths);
+        Assert.True((await store.SaveAsync(AppSettings.Default, CancellationToken.None)).Succeeded);
+        var settingsPath = SettingsPath();
+        var json = JsonNode.Parse(await File.ReadAllTextAsync(settingsPath))!.AsObject();
+        Assert.True(json.Remove("defaultSameFormatEncodingPolicy"));
+        json.Remove("schemaVersion");
+        await File.WriteAllTextAsync(settingsPath, json.ToJsonString());
+
+        var result = await store.LoadAsync(CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(AppSettings.CurrentSchemaVersion, result.Value!.SchemaVersion);
+        Assert.Equal(SameFormatEncodingPolicy.Default, result.Value.DefaultSameFormatEncodingPolicy);
+    }
+
+    [Fact]
     public async Task Settings_corrupt_file_is_not_overwritten_by_load_failure()
     {
         Directory.CreateDirectory(_paths.AppDataDirectory.Value);
@@ -90,19 +108,6 @@ public sealed class InfrastructureContractTests : IDisposable
         Assert.False(result.Succeeded);
         Assert.Equal(AtomPixErrorCode.SettingsSaveFailed, result.Error!.Code);
         Assert.Empty(Directory.EnumerateFiles(_paths.AppDataDirectory.Value, ".*.tmp"));
-    }
-
-    [Fact]
-    public async Task Subscription_invalid_content_returns_failure_instead_of_free()
-    {
-        Directory.CreateDirectory(_paths.AppDataDirectory.Value);
-        await File.WriteAllTextAsync(Path.Combine(_paths.AppDataDirectory.Value, "subscription.json"), "{\"Status\":\"Active\",\"BillingCycle\":null,\"ExpiresAt\":null}");
-        var store = new LocalSubscriptionStore(_paths);
-
-        var result = await store.LoadAsync(CancellationToken.None);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal(AtomPixErrorCode.SubscriptionLoadFailed, result.Error!.Code);
     }
 
     [Fact]
@@ -136,30 +141,6 @@ public sealed class InfrastructureContractTests : IDisposable
         Assert.True(load.Succeeded);
         Assert.Equal(AppSettings.Default.ThemeMode, load.Value!.ThemeMode);
         Assert.Equal(AppSettings.CurrentSchemaVersion, load.Value.SchemaVersion);
-    }
-
-    [Fact]
-    public async Task Subscription_missing_file_returns_free()
-    {
-        var store = new LocalSubscriptionStore(_paths);
-
-        var result = await store.LoadAsync(CancellationToken.None);
-
-        Assert.True(result.Succeeded);
-        Assert.Equal(SubscriptionStatus.Free, result.Value!.Status);
-    }
-
-    [Fact]
-    public async Task Subscription_corrupt_file_returns_failure()
-    {
-        Directory.CreateDirectory(_paths.AppDataDirectory.Value);
-        await File.WriteAllTextAsync(Path.Combine(_paths.AppDataDirectory.Value, "subscription.json"), "{bad json");
-        var store = new LocalSubscriptionStore(_paths);
-
-        var result = await store.LoadAsync(CancellationToken.None);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal(AtomPixErrorCode.SubscriptionLoadFailed, result.Error!.Code);
     }
 
     [Fact]
@@ -257,45 +238,24 @@ public sealed class InfrastructureContractTests : IDisposable
     }
 
     [Fact]
-    public async Task Subscription_save_then_load_roundtrips()
-    {
-        var store = new LocalSubscriptionStore(_paths);
-        var subscription = new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddMonths(1));
-
-        var save = await store.SaveAsync(subscription, CancellationToken.None);
-        var load = await store.LoadAsync(CancellationToken.None);
-
-        Assert.True(save.Succeeded);
-        Assert.True(load.Succeeded);
-        Assert.Equal(SubscriptionStatus.Active, load.Value!.Status);
-        Assert.Equal(BillingCycle.Monthly, load.Value.BillingCycle);
-    }
-
-    [Fact]
     public async Task Stores_write_readable_json_with_stable_top_level_schema()
     {
         var settingsStore = new JsonAppSettingsStore(_paths);
-        var subscriptionStore = new LocalSubscriptionStore(_paths);
         var recentStore = new JsonRecentItemsStore(_paths);
-        var subscription = new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Quarterly, DateTimeOffset.UtcNow.AddMonths(3));
         var recentItem = new RecentItem(new LocalPath("C:\\tmp\\stable.jpg"), RecentItemKind.File, DateTimeOffset.Parse("2026-06-26T10:00:00+08:00"));
 
         var settingsSave = await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None);
-        var subscriptionSave = await subscriptionStore.SaveAsync(subscription, CancellationToken.None);
         var recentSave = await recentStore.SaveAsync([recentItem], CancellationToken.None);
 
         Assert.True(settingsSave.Succeeded);
-        Assert.True(subscriptionSave.Succeeded);
         Assert.True(recentSave.Succeeded);
         using var settingsJson = JsonDocument.Parse(await File.ReadAllTextAsync(SettingsPath()));
-        using var subscriptionJson = JsonDocument.Parse(await File.ReadAllTextAsync(SubscriptionPath()));
         using var recentJson = JsonDocument.Parse(await File.ReadAllTextAsync(RecentItemsPath()));
         Assert.Equal(AppSettings.CurrentSchemaVersion, settingsJson.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.True(settingsJson.RootElement.TryGetProperty("defaultCompressionProfile", out _));
         Assert.True(settingsJson.RootElement.TryGetProperty("defaultConversionProfile", out _));
+        Assert.True(settingsJson.RootElement.TryGetProperty("defaultSameFormatEncodingPolicy", out _));
         Assert.True(settingsJson.RootElement.TryGetProperty("defaultOutputPolicy", out _));
-        Assert.Equal((int)SubscriptionStatus.Active, subscriptionJson.RootElement.GetProperty("status").GetInt32());
-        Assert.Equal((int)BillingCycle.Quarterly, subscriptionJson.RootElement.GetProperty("billingCycle").GetInt32());
         Assert.Equal(JsonValueKind.Array, recentJson.RootElement.ValueKind);
         Assert.Equal("C:\\tmp\\stable.jpg", recentJson.RootElement[0].GetProperty("path").GetString());
         Assert.Equal((int)RecentItemKind.File, recentJson.RootElement[0].GetProperty("kind").GetInt32());
@@ -305,35 +265,32 @@ public sealed class InfrastructureContractTests : IDisposable
     public async Task Store_save_failure_preserves_existing_files_and_cleans_temporary_files()
     {
         var settingsStore = new JsonAppSettingsStore(_paths);
-        var subscriptionStore = new LocalSubscriptionStore(_paths);
         var recentStore = new JsonRecentItemsStore(_paths);
-        var active = new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddMonths(1));
         var recent = new RecentItem(new LocalPath("C:\\tmp\\old.jpg"), RecentItemKind.File, DateTimeOffset.UtcNow);
         Assert.True((await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None)).Succeeded);
-        Assert.True((await subscriptionStore.SaveAsync(active, CancellationToken.None)).Succeeded);
         Assert.True((await recentStore.SaveAsync([recent], CancellationToken.None)).Succeeded);
         var originalSettings = await File.ReadAllTextAsync(SettingsPath());
-        var originalSubscription = await File.ReadAllTextAsync(SubscriptionPath());
         var originalRecent = await File.ReadAllTextAsync(RecentItemsPath());
 
         var settingsLock = new FileStream(SettingsPath(), FileMode.Open, FileAccess.Read, FileShare.None);
-        var subscriptionLock = new FileStream(SubscriptionPath(), FileMode.Open, FileAccess.Read, FileShare.None);
         var recentLock = new FileStream(RecentItemsPath(), FileMode.Open, FileAccess.Read, FileShare.None);
-        var settingsSave = await settingsStore.SaveAsync(new AppSettings(AppSettings.Default.DefaultCompressionProfile, AppSettings.Default.DefaultConversionProfile, AppSettings.Default.DefaultOutputPolicy, ThemeMode.Dark, AppSettings.Default.Language, AppSettings.Default.RecentItems), CancellationToken.None);
-        var subscriptionSave = await subscriptionStore.SaveAsync(SubscriptionState.Free, CancellationToken.None);
+        var settingsSave = await settingsStore.SaveAsync(new AppSettings(
+            AppSettings.Default.DefaultCompressionProfile,
+            AppSettings.Default.DefaultConversionProfile,
+            AppSettings.Default.DefaultSameFormatEncodingPolicy,
+            AppSettings.Default.DefaultOutputPolicy,
+            ThemeMode.Dark,
+            AppSettings.Default.Language,
+            AppSettings.Default.RecentItems), CancellationToken.None);
         var recentSave = await recentStore.SaveAsync([new RecentItem(new LocalPath("C:\\tmp\\new.jpg"), RecentItemKind.File, DateTimeOffset.UtcNow)], CancellationToken.None);
 
         Assert.False(settingsSave.Succeeded);
         Assert.Equal(AtomPixErrorCode.SettingsSaveFailed, settingsSave.Error!.Code);
-        Assert.False(subscriptionSave.Succeeded);
-        Assert.Equal(AtomPixErrorCode.SubscriptionSaveFailed, subscriptionSave.Error!.Code);
         Assert.False(recentSave.Succeeded);
         Assert.Equal(AtomPixErrorCode.RecentItemsSaveFailed, recentSave.Error!.Code);
         settingsLock.Dispose();
-        subscriptionLock.Dispose();
         recentLock.Dispose();
         Assert.Equal(originalSettings, await File.ReadAllTextAsync(SettingsPath()));
-        Assert.Equal(originalSubscription, await File.ReadAllTextAsync(SubscriptionPath()));
         Assert.Equal(originalRecent, await File.ReadAllTextAsync(RecentItemsPath()));
         Assert.Empty(Directory.EnumerateFiles(_paths.AppDataDirectory.Value, ".*.tmp"));
     }
@@ -342,7 +299,6 @@ public sealed class InfrastructureContractTests : IDisposable
     public void Stores_reject_null_path_provider()
     {
         Assert.Throws<ArgumentNullException>(() => new JsonAppSettingsStore(null!));
-        Assert.Throws<ArgumentNullException>(() => new LocalSubscriptionStore(null!));
         Assert.Throws<ArgumentNullException>(() => new JsonRecentItemsStore(null!));
     }
 
@@ -350,7 +306,6 @@ public sealed class InfrastructureContractTests : IDisposable
     public async Task Stores_reject_null_save_payloads()
     {
         await Assert.ThrowsAsync<ArgumentNullException>(() => new JsonAppSettingsStore(_paths).SaveAsync(null!, CancellationToken.None));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => new LocalSubscriptionStore(_paths).SaveAsync(null!, CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentNullException>(() => new JsonRecentItemsStore(_paths).SaveAsync(null!, CancellationToken.None));
     }
 
@@ -473,11 +428,52 @@ public sealed class InfrastructureContractTests : IDisposable
 
         var create = await fs.CreateDirectoryAsync(new LocalPath(Path.Combine(_root, "output")), cts.Token);
         var size = await fs.GetFileSizeAsync(new LocalPath(Path.Combine(_root, "photo.jpg")), cts.Token);
+        var enumerate = await fs.EnumerateFilesAsync(new LocalPath(Path.Combine(_root, "input")), cts.Token);
 
         Assert.False(create.Succeeded);
         Assert.Equal(AtomPixErrorCode.OperationCanceled, create.Error!.Code);
         Assert.False(size.Succeeded);
         Assert.Equal(AtomPixErrorCode.OperationCanceled, size.Error!.Code);
+        Assert.False(enumerate.Succeeded);
+        Assert.Equal(AtomPixErrorCode.OperationCanceled, enumerate.Error!.Code);
+    }
+
+    [Fact]
+    public async Task File_system_enumerates_only_current_directory_as_normalized_snapshot()
+    {
+        var fs = new LocalFileSystemService();
+        var directoryPath = Path.Combine(_root, "input");
+        var nestedPath = Path.Combine(directoryPath, "nested");
+        Directory.CreateDirectory(nestedPath);
+        await File.WriteAllTextAsync(Path.Combine(directoryPath, "a.jpg"), "a");
+        await File.WriteAllTextAsync(Path.Combine(directoryPath, "b.txt"), "b");
+        await File.WriteAllTextAsync(Path.Combine(nestedPath, "c.png"), "c");
+
+        var result = await fs.EnumerateFilesAsync(new LocalPath(directoryPath), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.Count);
+        Assert.All(result.Value, path => Assert.True(Path.IsPathFullyQualified(path.Value)));
+        Assert.DoesNotContain(result.Value, path => path.Value.EndsWith("c.png", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void File_system_normalizes_and_compares_paths_with_platform_semantics()
+    {
+        var fs = new LocalFileSystemService();
+        var relative = new LocalPath(Path.Combine(".", "folder", "..", "photo.jpg"));
+        var absolute = new LocalPath(Path.GetFullPath("photo.jpg"));
+
+        var normalized = fs.NormalizePath(relative);
+
+        Assert.True(normalized.Succeeded);
+        Assert.Equal(absolute, normalized.Value);
+        Assert.True(fs.PathsEqual(relative, absolute));
+        Assert.Equal(0, fs.ComparePaths(relative, absolute));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(fs.PathsEqual(absolute, new LocalPath(absolute.Value.ToUpperInvariant())));
+        }
     }
 
     [Fact]
@@ -496,8 +492,6 @@ public sealed class InfrastructureContractTests : IDisposable
     }
 
     private string SettingsPath() => Path.Combine(_paths.AppDataDirectory.Value, "settings.json");
-
-    private string SubscriptionPath() => Path.Combine(_paths.AppDataDirectory.Value, "subscription.json");
 
     private string RecentItemsPath() => Path.Combine(_paths.AppDataDirectory.Value, "recent-items.json");
     public void Dispose()

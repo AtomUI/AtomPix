@@ -1,12 +1,13 @@
 namespace AtomPix.Infrastructure.DependencyInjection;
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using AtomPix.Core.Ports;
 using AtomPix.Infrastructure.Configuration;
 using AtomPix.Infrastructure.FileSystem;
+using AtomPix.Infrastructure.Diagnostics;
 using AtomPix.Infrastructure.Paths;
 using AtomPix.Infrastructure.RecentItems;
-using AtomPix.Infrastructure.Subscriptions;
 
 public static class InfrastructureServiceCollectionExtensions
 {
@@ -16,9 +17,9 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IAppPathProvider, AppPathProvider>();
         services.AddSingleton<IAppSettingsStore, JsonAppSettingsStore>();
-        services.AddSingleton<ISubscriptionStore, LocalSubscriptionStore>();
         services.AddSingleton<IRecentItemsStore, JsonRecentItemsStore>();
         services.AddSingleton<IFileSystemService, LocalFileSystemService>();
+        AddDiagnostics(services);
         return services;
     }
 
@@ -28,9 +29,19 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddSingleton<IAppPathProvider>(new AppPathProvider(appDataDirectory, tempDirectory));
         services.AddSingleton<IAppSettingsStore, JsonAppSettingsStore>();
-        services.AddSingleton<ISubscriptionStore, LocalSubscriptionStore>();
         services.AddSingleton<IRecentItemsStore, JsonRecentItemsStore>();
         services.AddSingleton<IFileSystemService, LocalFileSystemService>();
+        AddDiagnostics(services);
         return services;
+    }
+
+    private static void AddDiagnostics(IServiceCollection services)
+    {
+        services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information));
+        services.AddSingleton<ILoggerProvider>(provider =>
+        {
+            var paths = provider.GetRequiredService<IAppPathProvider>();
+            return new LocalJsonLoggerProvider(new LocalJsonLoggerOptions(Path.Combine(paths.AppDataDirectory.Value, "logs")));
+        });
     }
 }

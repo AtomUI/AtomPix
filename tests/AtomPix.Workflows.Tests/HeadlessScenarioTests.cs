@@ -5,8 +5,8 @@ using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
 using AtomPix.Core.Errors;
 using AtomPix.Core.Jobs;
-using AtomPix.Core.Licensing;
 using AtomPix.Core.Output;
+using AtomPix.Core.Resize;
 using AtomPix.Core.Settings;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Imaging.Magick.Processing;
@@ -14,7 +14,6 @@ using AtomPix.Infrastructure.Configuration;
 using AtomPix.Infrastructure.FileSystem;
 using AtomPix.Infrastructure.Paths;
 using AtomPix.Infrastructure.RecentItems;
-using AtomPix.Infrastructure.Subscriptions;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.RecentItems;
 
@@ -22,7 +21,6 @@ public sealed class HeadlessScenarioTests : IDisposable
 {
     private readonly string _root;
     private readonly AppPathProvider _paths;
-    private readonly LocalSubscriptionStore _subscriptionStore;
     private readonly LocalFileSystemService _fileSystem = new();
     private readonly MagickImageProcessor _imageProcessor = new();
 
@@ -31,14 +29,12 @@ public sealed class HeadlessScenarioTests : IDisposable
         _root = Path.Combine(Path.GetTempPath(), "AtomPixHeadlessTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
         _paths = new AppPathProvider(Path.Combine(_root, "appdata"), Path.Combine(_root, "temp"));
-        _subscriptionStore = new LocalSubscriptionStore(_paths);
         CreateSampleImages();
     }
 
     [Fact]
     public async Task User_converts_png_to_webp_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var workflow = new ConvertImageWorkflow(CreateServices());
 
         var result = await workflow.ExecuteAsync(
@@ -54,7 +50,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task User_compresses_jpeg_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var workflow = new CompressImageWorkflow(CreateServices());
 
         var result = await workflow.ExecuteAsync(
@@ -67,7 +62,7 @@ public sealed class HeadlessScenarioTests : IDisposable
     }
 
     [Fact]
-    public async Task Free_user_cannot_batch_compress_without_ui()
+    public async Task User_can_batch_compress_without_subscription_without_ui()
     {
         var workflow = new BatchCompressWorkflow(CreateServices());
 
@@ -75,11 +70,13 @@ public sealed class HeadlessScenarioTests : IDisposable
             new BatchCompressRequest([PathOf("sample.jpg"), PathOf("sample.png")], CompressionProfile.BalancedDefault(), OutputPolicy.Default),
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
+        Assert.True(result.Succeeded);
+        Assert.Equal(BatchJobStatus.Succeeded, result.Value!.BatchResult.Status);
+        Assert.Equal(2, result.Value.BatchResult.SucceededCount);
     }
 
     [Fact]
-    public async Task Free_user_can_single_compress_and_convert_without_ui()
+    public async Task User_can_single_compress_and_convert_without_subscription_without_ui()
     {
         var compress = new CompressImageWorkflow(CreateServices());
         var convert = new ConvertImageWorkflow(CreateServices());
@@ -100,23 +97,21 @@ public sealed class HeadlessScenarioTests : IDisposable
     }
 
     [Fact]
-    public async Task Expired_user_cannot_batch_convert_without_ui()
+    public async Task Batch_convert_has_no_subscription_prerequisite()
     {
-        await ExpireSubscriptionAsync();
         var workflow = new BatchConvertWorkflow(CreateServices());
 
         var result = await workflow.ExecuteAsync(
             new BatchConvertRequest([PathOf("sample.png")], ConversionProfile.WebPDefault(), OutputPolicy.Default),
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal(AtomPixErrorCode.SubscriptionExpired, result.Error!.Code);
+        Assert.True(result.Succeeded);
+        Assert.Equal(BatchJobStatus.Succeeded, result.Value!.BatchResult.Status);
     }
 
     [Fact]
-    public async Task Active_user_batch_compresses_without_ui()
+    public async Task User_batch_compresses_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var workflow = new BatchCompressWorkflow(CreateServices());
 
         var result = await workflow.ExecuteAsync(
@@ -132,7 +127,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Active_user_batch_converts_without_ui_and_writes_real_outputs()
     {
-        await ActivateSubscriptionAsync();
         var workflow = new BatchConvertWorkflow(CreateServices());
 
         var result = await workflow.ExecuteAsync(
@@ -154,7 +148,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task AutoRename_scenario_uses_indexed_output_path_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var existingDirectory = Path.Combine(_root, "AtomPix_Output");
         Directory.CreateDirectory(existingDirectory);
         File.WriteAllText(Path.Combine(existingDirectory, "sample_atompix.webp"), "existing");
@@ -188,7 +181,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Skip_policy_returns_skipped_result_without_overwriting_existing_file()
     {
-        await ActivateSubscriptionAsync();
         var existingDirectory = Path.Combine(_root, "AtomPix_Output");
         Directory.CreateDirectory(existingDirectory);
         var existingPath = Path.Combine(existingDirectory, "sample_atompix.webp");
@@ -208,7 +200,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task SameAsInput_policy_writes_next_to_input_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var workflow = new ConvertImageWorkflow(CreateServices());
         var policy = new OutputPolicy(
             new OutputLocationPolicy(OutputLocationMode.SameAsInput, null, null),
@@ -227,7 +218,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task CustomDirectory_policy_creates_directory_and_writes_output_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var outputDirectory = Path.Combine(_root, "custom", "exports");
         var workflow = new ConvertImageWorkflow(CreateServices());
         var policy = new OutputPolicy(
@@ -246,7 +236,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Overwrite_policy_reuses_existing_output_path_without_auto_rename()
     {
-        await ActivateSubscriptionAsync();
         var existingDirectory = Path.Combine(_root, "AtomPix_Output");
         Directory.CreateDirectory(existingDirectory);
         var existingPath = Path.Combine(existingDirectory, "sample_atompix.webp");
@@ -267,7 +256,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Active_user_batch_convert_allows_partial_failure_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var workflow = new BatchConvertWorkflow(CreateServices());
 
         var result = await workflow.ExecuteAsync(
@@ -303,7 +291,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Batch_result_can_be_projected_to_progress_snapshot_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var workflow = new BatchConvertWorkflow(CreateServices());
 
         var result = await workflow.ExecuteAsync(
@@ -327,7 +314,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Default_settings_convert_workflow_uses_saved_settings_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var settingsStore = new JsonAppSettingsStore(_paths);
         var save = await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None);
         var workflow = new ConvertWithDefaultSettingsWorkflow(settingsStore, new ConvertImageWorkflow(CreateServices()));
@@ -340,21 +326,23 @@ public sealed class HeadlessScenarioTests : IDisposable
     }
 
     [Fact]
-    public async Task Default_settings_compress_workflow_applies_saved_resize_profile_without_ui()
+    public async Task Default_settings_resize_workflow_applies_explicit_resize_policy_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var settingsStore = new JsonAppSettingsStore(_paths);
         var settings = new AppSettings(
-            new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), ResizePolicy.FitWithinBounds(80, 80), MetadataPolicy.Remove),
+            new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), MetadataPolicy.Remove),
             AppSettings.Default.DefaultConversionProfile,
+            AppSettings.Default.DefaultSameFormatEncodingPolicy,
             AppSettings.Default.DefaultOutputPolicy,
             AppSettings.Default.ThemeMode,
             AppSettings.Default.Language,
             AppSettings.Default.RecentItems);
         var save = await settingsStore.SaveAsync(settings, CancellationToken.None);
-        var workflow = new CompressWithDefaultSettingsWorkflow(settingsStore, new CompressImageWorkflow(CreateServices()));
+        var workflow = new ResizeWithDefaultSettingsWorkflow(settingsStore, new ResizeImageWorkflow(CreateServices()));
 
-        var result = await workflow.ExecuteAsync(new CompressWithDefaultSettingsRequest(PathOf("sample.jpg")), CancellationToken.None);
+        var result = await workflow.ExecuteAsync(
+            new ResizeWithDefaultSettingsRequest(PathOf("sample.jpg"), new PixelResizePolicy(80, 80, maintainAspectRatio: true)),
+            CancellationToken.None);
 
         Assert.True(save.Succeeded);
         Assert.True(result.Succeeded);
@@ -366,7 +354,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Default_settings_batch_convert_handles_mixed_inputs_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var settingsStore = new JsonAppSettingsStore(_paths);
         var save = await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None);
         var workflow = new BatchConvertWithDefaultSettingsWorkflow(settingsStore, new BatchConvertWorkflow(CreateServices()));
@@ -389,7 +376,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Default_settings_batch_convert_marks_invalid_image_file_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var settingsStore = new JsonAppSettingsStore(_paths);
         var save = await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None);
         var workflow = new BatchConvertWithDefaultSettingsWorkflow(settingsStore, new BatchConvertWorkflow(CreateServices()));
@@ -408,7 +394,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Default_settings_batch_compress_handles_mixed_inputs_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var settingsStore = new JsonAppSettingsStore(_paths);
         var save = await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None);
         var workflow = new BatchCompressWithDefaultSettingsWorkflow(settingsStore, new BatchCompressWorkflow(CreateServices()));
@@ -428,7 +413,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Corrupt_settings_blocks_default_workflow_without_overwriting_and_recovers_after_save_without_ui()
     {
-        await ActivateSubscriptionAsync();
         Directory.CreateDirectory(_paths.AppDataDirectory.Value);
         var settingsPath = Path.Combine(_paths.AppDataDirectory.Value, "settings.json");
         await File.WriteAllTextAsync(settingsPath, "{bad json");
@@ -450,28 +434,20 @@ public sealed class HeadlessScenarioTests : IDisposable
     }
 
     [Fact]
-    public async Task Corrupt_subscription_blocks_batch_without_silent_free_downgrade_and_recovers_after_save_without_ui()
+    public async Task Legacy_corrupt_subscription_file_does_not_restrict_batch_processing()
     {
         Directory.CreateDirectory(_paths.AppDataDirectory.Value);
         var subscriptionPath = Path.Combine(_paths.AppDataDirectory.Value, "subscription.json");
         await File.WriteAllTextAsync(subscriptionPath, "{bad json");
         var workflow = new BatchConvertWorkflow(CreateServices());
 
-        var failed = await workflow.ExecuteAsync(
+        var result = await workflow.ExecuteAsync(
             new BatchConvertRequest([PathOf("sample.png")], ConversionProfile.WebPDefault(), OutputPolicy.Default),
             CancellationToken.None);
 
-        Assert.False(failed.Succeeded);
-        Assert.Equal(AtomPixErrorCode.SubscriptionLoadFailed, failed.Error!.Code);
+        Assert.True(result.Succeeded);
+        Assert.Equal(BatchJobStatus.Succeeded, result.Value!.BatchResult.Status);
         Assert.Equal("{bad json", await File.ReadAllTextAsync(subscriptionPath));
-
-        await ActivateSubscriptionAsync();
-        var recovered = await workflow.ExecuteAsync(
-            new BatchConvertRequest([PathOf("sample.png")], ConversionProfile.WebPDefault(), OutputPolicy.Default),
-            CancellationToken.None);
-
-        Assert.True(recovered.Succeeded);
-        Assert.Equal(BatchJobStatus.Succeeded, recovered.Value!.BatchResult.Status);
     }
 
     [Fact]
@@ -520,7 +496,6 @@ public sealed class HeadlessScenarioTests : IDisposable
     [Fact]
     public async Task Convert_output_target_directory_fails_without_temporary_files_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var input = PathOf("directory-as-output.png");
         File.Copy(PathOf("sample.png").Value, input.Value);
         var outputDirectory = Path.Combine(_root, "directory-as-output.webp");
@@ -535,14 +510,13 @@ public sealed class HeadlessScenarioTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.Equal(ImageJobStatus.Failed, result.Value!.JobResult.Status);
-        Assert.Equal(AtomPixErrorCode.ImageConvertFailed, result.Value.JobResult.Error!.Code);
+        Assert.Equal(AtomPixErrorCode.ImageWriteFailed, result.Value.JobResult.Error!.Code);
         Assert.Empty(TemporaryFilesIn(_root));
     }
 
     [Fact]
     public async Task AutoRename_handles_multiple_real_conflicts_without_ui()
     {
-        await ActivateSubscriptionAsync();
         var existingDirectory = Path.Combine(_root, "AtomPix_Output");
         Directory.CreateDirectory(existingDirectory);
         await File.WriteAllTextAsync(Path.Combine(existingDirectory, "sample_atompix.webp"), "existing");
@@ -566,23 +540,7 @@ public sealed class HeadlessScenarioTests : IDisposable
 
     private ImageWorkflowServices CreateServices() => new(
         _imageProcessor,
-        _subscriptionStore,
-        new DefaultFeatureAccessPolicy(),
         _fileSystem);
-
-    private async Task ActivateSubscriptionAsync()
-    {
-        await _subscriptionStore.SaveAsync(
-            new SubscriptionState(SubscriptionStatus.Active, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddMonths(1)),
-            CancellationToken.None);
-    }
-
-    private async Task ExpireSubscriptionAsync()
-    {
-        await _subscriptionStore.SaveAsync(
-            new SubscriptionState(SubscriptionStatus.Expired, BillingCycle.Monthly, DateTimeOffset.UtcNow.AddDays(-1)),
-            CancellationToken.None);
-    }
 
     private LocalPath PathOf(string fileName) => new(Path.Combine(_root, fileName));
 

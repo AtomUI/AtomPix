@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="AtomUI.Desktop.Controls" />
+    <PackageReference Include="AtomUI.Desktop.Controls.ColorPicker" />
+    <PackageReference Include="AtomUI.Fonts.AlibabaSans" />
+    <PackageReference Include="AtomUI.Icons.AntDesign" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AtomPix.Imaging.Magick\AtomPix.Imaging.Magick.csproj" />
+    <ProjectReference Include="..\AtomPix.Infrastructure\AtomPix.Infrastructure.csproj" />
+    <ProjectReference Include="..\AtomPix.Workflows\AtomPix.Workflows.csproj" />
+  </ItemGroup>
+
+  <Target Name="RejectForbiddenAtomUIDataGridPackage" BeforeTargets="PrepareForBuild">
+    <ItemGroup>
+      <_ForbiddenAtomUIDataGridPackage Include="@(PackageReference)"
+                                       Condition="'%(Identity)' == 'AtomUI.Desktop.Controls.DataGrid'" />
+    </ItemGroup>
+    <Error Condition="'@(_ForbiddenAtomUIDataGridPackage)' != ''"
+           Text="AtomPix Desktop forbids AtomUI.Desktop.Controls.DataGrid. Use AtomUI ListView composition instead." />
+  </Target>
+
+</Project>

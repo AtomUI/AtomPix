@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             x:Class="AtomPix.Desktop.Controls.OutputPolicyEditorView"
+             x:DataType="vm:OutputPolicyEditorViewModel">
+    <StackPanel Spacing="10">
+        <TextBlock Text="输出位置" FontWeight="SemiBold" />
+        <atom:Segmented AutomationProperties.Name="输出位置" ItemsSource="{Binding Locations}"
+                        SelectedItem="{Binding SelectedLocation, Mode=TwoWay}"
+                        IsExpanding="True" />
+        <StackPanel Spacing="5" IsVisible="{Binding IsSubfolder}">
+            <TextBlock Text="子目录名称" Opacity="0.58" />
+            <atom:TextBox AutomationProperties.Name="输出子目录名称" Text="{Binding SubfolderName, Mode=TwoWay}" PlaceholderText="AtomPix_Output" />
+        </StackPanel>
+        <StackPanel Spacing="5" IsVisible="{Binding IsCustomDirectory}">
+            <TextBlock Text="自定义目录" Opacity="0.58" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <atom:TextBox AutomationProperties.Name="自定义输出目录" Text="{Binding CustomDirectory, Mode=TwoWay}" PlaceholderText="选择输出目录" />
+                <atom:Button Grid.Column="1" Content="选择" Command="{Binding ChooseDirectoryCommand}" />
+            </Grid>
+        </StackPanel>
+
+        <TextBlock Text="文件名格式（不含扩展名）" FontWeight="SemiBold" Margin="0,4,0,0" />
+        <atom:TextBox x:Name="FileNamePatternTextBox" AutomationProperties.Name="文件名格式" Text="{Binding FileNamePattern, Mode=TwoWay}" PlaceholderText="示例：原文件名_atompix" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <atom:Button Content="插入原文件名" SizeType="Small" Click="InsertNameTokenClick" />
+            <atom:Button Content="插入序号" SizeType="Small" Click="InsertIndexTokenClick" IsEnabled="{Binding CanInsertIndexToken}" />
+        </StackPanel>
+
+        <TextBlock Text="已有文件处理" FontWeight="SemiBold" Margin="0,4,0,0" />
+        <atom:Segmented AutomationProperties.Name="已有文件处理方式" ItemsSource="{Binding OverwritePolicies}"
+                        SelectedItem="{Binding SelectedOverwrite, Mode=TwoWay}"
+                        IsExpanding="True" />
+        <atom:Alert Type="Warning"
+                    IsShowIcon="True"
+                    Message="覆盖策略永远不能覆盖源图片"
+                    Description="若输出路径与任一输入图片相同，任务会被禁止并要求修改。" />
+        <atom:Alert Type="Error" IsShowIcon="True" Message="输出设置无效"
+                    Description="{Binding ValidationError}" IsVisible="{Binding HasValidationError}" />
+        <atom:Alert Type="Error" IsShowIcon="True" Message="无法选择输出目录"
+                    Description="{Binding PickerError}" IsVisible="{Binding HasPickerError}" />
+    </StackPanel>
+</UserControl>

@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
+             xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             x:Class="AtomPix.Desktop.Controls.BrowserThumbnailView"
+             x:DataType="vm:BrowserItemViewModel">
+    <Grid Width="58" Height="44">
+        <Border CornerRadius="4" Background="#10000000">
+            <controls:AtomPixImageViewport PreviewBytes="{Binding ThumbnailBytes}" />
+        </Border>
+        <atom:Spin IsVisible="{Binding IsThumbnailLoading}"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+        <TextBlock Text="!"
+                   IsVisible="{Binding IsUnavailable}"
+                   Foreground="#D4380D"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

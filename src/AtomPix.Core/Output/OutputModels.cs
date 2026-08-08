@@ -83,14 +83,14 @@ public enum OutputLocationMode
 
 public sealed record OutputNamingPolicy
 {
-    public OutputNamingPolicy(OutputNamingMode mode, string? suffix)
+    public OutputNamingPolicy(OutputNamingMode mode, string? suffix, string? pattern = null)
     {
         switch (mode)
         {
             case OutputNamingMode.KeepOriginalName:
-                if (suffix is not null)
+                if (suffix is not null || pattern is not null)
                 {
-                    throw new ArgumentException("KeepOriginalName cannot carry a suffix.", nameof(suffix));
+                    throw new ArgumentException("KeepOriginalName cannot carry a suffix or pattern.");
                 }
                 break;
             case OutputNamingMode.AppendSuffix:
@@ -98,6 +98,22 @@ public sealed record OutputNamingPolicy
                 {
                     throw new ArgumentException("AppendSuffix requires a suffix.", nameof(suffix));
                 }
+                if (pattern is not null)
+                {
+                    throw new ArgumentException("AppendSuffix cannot carry a pattern.", nameof(pattern));
+                }
+                ValidateFileNameText(suffix, nameof(suffix), allowPlaceholders: false);
+                break;
+            case OutputNamingMode.CustomPattern:
+                if (suffix is not null)
+                {
+                    throw new ArgumentException("CustomPattern cannot carry a suffix.", nameof(suffix));
+                }
+                if (string.IsNullOrWhiteSpace(pattern))
+                {
+                    throw new ArgumentException("CustomPattern requires a pattern.", nameof(pattern));
+                }
+                ValidatePattern(pattern);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported output naming mode.");
@@ -105,17 +121,77 @@ public sealed record OutputNamingPolicy
 
         Mode = mode;
         Suffix = suffix;
+        Pattern = pattern;
     }
 
     public OutputNamingMode Mode { get; }
 
     public string? Suffix { get; }
+
+    public string? Pattern { get; }
+
+    public string GetBasePattern() => Mode switch
+    {
+        OutputNamingMode.KeepOriginalName => "{name}",
+        OutputNamingMode.AppendSuffix => "{name}" + Suffix,
+        OutputNamingMode.CustomPattern => Pattern!,
+        _ => throw new InvalidOperationException("Unsupported output naming mode.")
+    };
+
+    private static void ValidatePattern(string pattern)
+    {
+        ValidateFileNameText(pattern, nameof(pattern), allowPlaceholders: true);
+
+        var indexCount = 0;
+        for (var index = 0; index < pattern.Length;)
+        {
+            var opening = pattern.IndexOf('{', index);
+            var closingWithoutOpening = pattern.IndexOf('}', index);
+            if (closingWithoutOpening >= 0 && (opening < 0 || closingWithoutOpening < opening))
+            {
+                throw new ArgumentException("Output naming pattern contains an unmatched closing brace.", nameof(pattern));
+            }
+            if (opening < 0) break;
+
+            var closing = pattern.IndexOf('}', opening + 1);
+            if (closing < 0)
+            {
+                throw new ArgumentException("Output naming pattern contains an unclosed placeholder.", nameof(pattern));
+            }
+
+            var placeholder = pattern[(opening + 1)..closing];
+            if (placeholder is not ("name" or "index"))
+            {
+                throw new ArgumentException("Output naming pattern contains an unsupported placeholder.", nameof(pattern));
+            }
+            if (placeholder == "index" && ++indexCount > 1)
+            {
+                throw new ArgumentException("Output naming pattern can contain {index} at most once.", nameof(pattern));
+            }
+
+            index = closing + 1;
+        }
+    }
+
+    private static void ValidateFileNameText(string value, string parameterName, bool allowPlaceholders)
+    {
+        if (value.Contains('/') || value.Contains('\\') || value.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException("Output naming text cannot contain directory separators or invalid file name characters.", parameterName);
+        }
+
+        if (!allowPlaceholders && (value.Contains('{') || value.Contains('}')))
+        {
+            throw new ArgumentException("Output suffix cannot contain placeholders.", parameterName);
+        }
+    }
 }
 
 public enum OutputNamingMode
 {
     KeepOriginalName,
-    AppendSuffix
+    AppendSuffix,
+    CustomPattern
 }
 
 public enum OverwritePolicy

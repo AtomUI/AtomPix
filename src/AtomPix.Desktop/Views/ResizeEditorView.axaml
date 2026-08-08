@@ -1,0 +1,181 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
+             xmlns:antdicons="https://atomui.net/icons/antdesign"
+             xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             x:Class="AtomPix.Desktop.Views.ResizeEditorView"
+             x:DataType="vm:ResizeEditorViewModel">
+    <Grid Margin="34,28" RowDefinitions="Auto,*">
+        <StackPanel Spacing="6" Margin="0,0,0,20">
+            <TextBlock Text="调整尺寸" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="按像素或百分比调整图片宽高；整个过程不会裁剪图片。"
+                       FontSize="14" Opacity="0.64" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <StackPanel IsVisible="{Binding IsEmpty}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="18">
+                <atom:Empty PresetImage="Default" Description="先选择一张要调整尺寸的图片" />
+                <atom:Button Content="选择图片"
+                             ButtonType="Primary"
+                             Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
+                             Command="{Binding SelectImageCommand}"
+                             HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <Grid IsVisible="{Binding IsContentReady}" ColumnDefinitions="*,356" ColumnSpacing="20">
+                <Grid Grid.Column="0" RowDefinitions="*,Auto">
+                    <atom:Card Header="原图预览" SizeType="Middle">
+                        <Grid>
+                            <controls:AtomPixImageViewport PreviewBytes="{Binding PreviewBytes}" Margin="14" />
+                            <atom:Spin IsVisible="{Binding IsContentLoading}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </atom:Card>
+                    <atom:Card Grid.Row="1" Margin="0,16,0,0" SizeType="Small">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="{Binding InputName}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding InputSummary}" Opacity="0.62" />
+                            </StackPanel>
+                            <atom:Button Grid.Column="1" Content="更换图片" Command="{Binding SelectImageCommand}" />
+                        </Grid>
+                    </atom:Card>
+                </Grid>
+
+                <atom:ScrollViewer Grid.Column="1">
+                    <StackPanel Spacing="14">
+                        <atom:Card Header="调整方式" SizeType="Middle">
+                            <StackPanel Spacing="16">
+                                <atom:Segmented AutomationProperties.Name="调整尺寸方式" ItemsSource="{Binding ResizeModes}"
+                                                SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
+                                                IsExpanding="True" />
+
+                                <StackPanel IsVisible="{Binding IsPixelMode}" Spacing="12">
+                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                        <StackPanel Spacing="5">
+                                            <TextBlock Text="宽度（px）" />
+                                            <atom:NumericUpDown AutomationProperties.Name="目标宽度像素" Value="{Binding PixelWidth, Mode=TwoWay}"
+                                                                Minimum="1"
+                                                                Maximum="100000"
+                                                                FormatString="0"
+                                                                HorizontalAlignment="Stretch" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Spacing="5">
+                                            <TextBlock Text="高度（px）" />
+                                            <atom:NumericUpDown AutomationProperties.Name="目标高度像素" Value="{Binding PixelHeight, Mode=TwoWay}"
+                                                                Minimum="1"
+                                                                Maximum="100000"
+                                                                FormatString="0"
+                                                                HorizontalAlignment="Stretch" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <atom:CheckBox Content="保持原图比例"
+                                                   IsChecked="{Binding MaintainAspectRatio, Mode=TwoWay}" />
+                                    <TextBlock Text="同时填写宽度和高度时，将按二者中较小的约束缩放。"
+                                               Opacity="0.58" TextWrapping="Wrap" />
+                                    <atom:Alert Type="Warning"
+                                                IsShowIcon="True"
+                                                Message="关闭保持比例后，图片可能发生变形"
+                                                IsVisible="{Binding !MaintainAspectRatio}" />
+                                </StackPanel>
+
+                                <StackPanel IsVisible="{Binding IsPercentageMode}" Spacing="12">
+                                    <TextBlock Text="快捷百分比" />
+                                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                        <atom:Button Content="25%" Command="{Binding Use25PercentCommand}" />
+                                        <atom:Button Grid.Column="1" Content="50%" Command="{Binding Use50PercentCommand}" />
+                                        <atom:Button Grid.Column="2" Content="75%" Command="{Binding Use75PercentCommand}" />
+                                    </Grid>
+                                    <StackPanel Spacing="5">
+                                        <TextBlock Text="自定义百分比" />
+                                        <atom:NumericUpDown AutomationProperties.Name="自定义缩放百分比" Value="{Binding Percentage, Mode=TwoWay}"
+                                                            Minimum="1"
+                                                            Maximum="1000"
+                                                            FormatString="0.##"
+                                                            HorizontalAlignment="Stretch" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </atom:Card>
+
+                        <atom:Card Header="输出摘要" SizeType="Middle">
+                            <StackPanel Spacing="9">
+                                <Grid ColumnDefinitions="110,*">
+                                    <TextBlock Text="预计尺寸" Opacity="0.58" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EstimatedSize}" FontWeight="SemiBold" />
+                                </Grid>
+                                <Grid ColumnDefinitions="110,*">
+                                    <TextBlock Text="输出格式" Opacity="0.58" />
+                                    <TextBlock Grid.Column="1" Text="保持原格式" />
+                                </Grid>
+                                <TextBlock Text="{Binding EncodingSummary}" Opacity="0.58" TextWrapping="Wrap" />
+                                <TextBlock Text="以下输出设置会在提交时冻结为任务快照。"
+                                           Opacity="0.58" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </atom:Card>
+
+                        <atom:Card Header="输出设置" SizeType="Middle">
+                            <Border IsEnabled="{Binding !IsProcessing}">
+                                <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
+                            </Border>
+                        </atom:Card>
+
+                        <atom:Alert Type="Error"
+                                    IsShowIcon="True"
+                                    Message="参数无法提交"
+                                    Description="{Binding DraftError}"
+                                    IsVisible="{Binding HasDraftError}" />
+                        <atom:Alert Type="Error"
+                                    IsShowIcon="True"
+                                    Message="调整尺寸失败"
+                                    Description="{Binding ErrorMessage}"
+                                    IsVisible="{Binding HasError}" />
+                        <atom:Alert Type="Warning" IsShowIcon="True" Message="输出文件已不存在" Description="请重新处理原图片后再打开输出目录。" IsVisible="{Binding IsResultOutputMissing}" />
+
+                        <atom:Card IsVisible="{Binding HasResult}" SizeType="Small">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{Binding ResultTitle}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ResultDetails}" />
+                                <TextBlock Text="{Binding ResultSizeChange}" />
+                                <TextBlock Text="{Binding ResultOutputPath}"
+                                           Opacity="0.58"
+                                           TextTrimming="CharacterEllipsis"
+                                           atom:ToolTip.Tip="{Binding ResultOutputPath}" />
+                                <atom:Button Content="打开输出目录" Command="{Binding OpenOutputCommand}" IsVisible="{Binding IsSuccess}" />
+                            </StackPanel>
+                        </atom:Card>
+
+                        <StackPanel IsVisible="{Binding HasDiagnosticId}" Spacing="6">
+                            <TextBlock Text="{Binding DiagnosticId}" FontFamily="Consolas" />
+                            <atom:Button Content="复制诊断编号" Command="{Binding CopyDiagnosticIdCommand}" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <atom:Button Content="开始调整"
+                                     ButtonType="Primary"
+                                     Command="{Binding StartCommand}"
+                                     IsVisible="{Binding !IsProcessing}" />
+                        <atom:Button Content="取消任务"
+                                     IsDanger="True"
+                                     Command="{Binding CancelCommand}"
+                                     IsVisible="{Binding IsProcessing}" />
+                    </StackPanel>
+                </atom:ScrollViewer>
+            </Grid>
+
+            <atom:Spin IsVisible="{Binding IsContentLoading}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+            <atom:Alert Type="Error"
+                        IsShowIcon="True"
+                        Message="无法加载图片"
+                        Description="{Binding ErrorMessage}"
+                        IsVisible="{Binding HasError}"
+                        VerticalAlignment="Top" />
+        </Grid>
+    </Grid>
+</UserControl>

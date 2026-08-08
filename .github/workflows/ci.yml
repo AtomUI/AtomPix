@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore AtomPix.slnx
+      - name: Build, functional tests, UI automation, audit
+        shell: pwsh
+        run: ./eng/verify.ps1 -NoRestore -SkipStress
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: .artifacts/test-results
+          if-no-files-found: ignore
+
+  stress:
+    name: Stress and virtualization
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore and build
+        shell: pwsh
+        run: |
+          dotnet restore AtomPix.slnx
+          dotnet build AtomPix.slnx -c Release --no-restore
+      - name: Stress tests
+        shell: pwsh
+        run: |
+          dotnet test tests/AtomPix.StressTests/AtomPix.StressTests.csproj -c Release --no-build --no-restore --filter "Category=Stress" --logger "trx;LogFilePrefix=stress-" --results-directory .artifacts/test-results
+          dotnet test tests/AtomPix.Desktop.UiTests/AtomPix.Desktop.UiTests.csproj -c Release --no-build --no-restore --filter "Category=Stress" --logger "trx;LogFilePrefix=ui-stress-" --results-directory .artifacts/test-results
+      - name: Upload stress results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-results
+          path: .artifacts/test-results
+          if-no-files-found: ignore
+
+  package:
+    name: Package (${{ matrix.rid }})
+    needs: [quality, stress]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Create self-contained package
+        shell: pwsh
+        run: ./eng/publish.ps1 -RuntimeIdentifier ${{ matrix.rid }} -Version 0.1.0-ci.${{ github.run_number }}
+      - name: Windows startup smoke test
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: ./eng/smoke-test.ps1 -RuntimeIdentifier win-x64 -Seconds 5
+      - name: Windows real-process UI automation
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: ./eng/windows-ui-automation.ps1
+      - name: Linux startup smoke test under Xvfb
+        if: matrix.rid == 'linux-x64'
+        shell: bash
+        run: xvfb-run -a pwsh -File ./eng/smoke-test.ps1 -RuntimeIdentifier linux-x64 -Seconds 5
+      - name: macOS startup smoke test
+        if: matrix.rid == 'osx-arm64'
+        shell: pwsh
+        run: ./eng/smoke-test.ps1 -RuntimeIdentifier osx-arm64 -Seconds 5
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AtomPix-${{ matrix.rid }}
+          path: |
+            .artifacts/packages/*
+          if-no-files-found: error

@@ -3,6 +3,7 @@ namespace AtomPix.Workflows.Tests;
 using ImageMagick;
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
+using AtomPix.Core.Resize;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
@@ -43,11 +44,12 @@ public sealed class VisualOutputArtifactTests
         var maximumResult = await _processor.CompressAsync(
             new ImageCompressRequest(AssetPath("jpeg-detailed.jpg"), maximum, CompressionProfile.MaximumDefault()),
             CancellationToken.None);
-        var resizedResult = await _processor.CompressAsync(
-            new ImageCompressRequest(
+        var resizedResult = await _processor.ResizeAsync(
+            new ImageResizeRequest(
                 AssetPath("jpeg-detailed.jpg"),
                 resized,
-                new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), ResizePolicy.FitWithinBounds(120, 80), MetadataPolicy.Remove)),
+                new ResolvedResizeSize(120, 80),
+                SameFormatEncodingPolicy.Default),
             CancellationToken.None);
         var alphaWebpResult = await _processor.ConvertAsync(
             new ImageConvertRequest(AssetPath("png-alpha.png"), alphaWebp, ConversionProfile.WebPDefault()),
@@ -56,19 +58,19 @@ public sealed class VisualOutputArtifactTests
             new ImageConvertRequest(
                 AssetPath("png-alpha.png"),
                 alphaJpeg,
-                new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(82), ResizePolicy.None, MetadataPolicy.Remove)),
+                new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(82), MetadataPolicy.Remove, TransparencyPolicy.Default)),
             CancellationToken.None);
         var webpJpegResult = await _processor.ConvertAsync(
             new ImageConvertRequest(
                 AssetPath("webp-basic.webp"),
                 webpJpeg,
-                new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(82), ResizePolicy.None, MetadataPolicy.Remove)),
+                new ConversionProfile(OutputImageFormat.Jpeg, new ImageQuality(82), MetadataPolicy.Remove, TransparencyPolicy.Default)),
             CancellationToken.None);
         var jpegPngResult = await _processor.ConvertAsync(
             new ImageConvertRequest(
                 AssetPath("jpeg-basic.jpg"),
                 jpegPng,
-                new ConversionProfile(OutputImageFormat.Png, null, ResizePolicy.None, MetadataPolicy.Remove)),
+                new ConversionProfile(OutputImageFormat.Png, null, MetadataPolicy.Remove, TransparencyPolicy.Default)),
             CancellationToken.None);
 
         Assert.True(balancedResult.Succeeded, balancedResult.Error?.Message);

@@ -40,7 +40,9 @@ public readonly record struct BatchJobId
 public enum ImageJobType
 {
     Compress,
-    Convert
+    Convert,
+    Resize,
+    Crop
 }
 
 public enum ImageJobStatus
@@ -125,10 +127,17 @@ public sealed class ImageJob
         CompletedAt = completedAt;
     }
 
-    public void MarkSkipped(AtomPixError? error, DateTimeOffset completedAt)
+    public void MarkSkipped(LocalPath outputPath, AtomPixError error, DateTimeOffset completedAt)
     {
+        ArgumentNullException.ThrowIfNull(error);
+        if (error.Code != AtomPixErrorCode.OutputFileAlreadyExists)
+        {
+            throw new ArgumentException("Skipped jobs require an OutputFileAlreadyExists error.", nameof(error));
+        }
+
         EnsureCanComplete(nameof(MarkSkipped));
         EnsureCompletionTime(completedAt);
+        OutputPath = outputPath;
         Error = error;
         Status = ImageJobStatus.Skipped;
         CompletedAt = completedAt;
@@ -164,14 +173,24 @@ public sealed class BatchJob
 {
     public BatchJob(BatchJobId id, ImageJobType type, IReadOnlyList<ImageJob> items, DateTimeOffset createdAt)
     {
+        ArgumentNullException.ThrowIfNull(items);
         if (items.Count == 0)
         {
             throw new ArgumentException("Batch job must contain at least one item.", nameof(items));
         }
 
+        if (items.Any(item => item.Type != type))
+        {
+            throw new ArgumentException("All image jobs must have the same type as the batch job.", nameof(items));
+        }
+        if (items.Select(item => item.Id).Distinct().Count() != items.Count)
+        {
+            throw new ArgumentException("Batch image job ids must be unique.", nameof(items));
+        }
+
         Id = id;
         Type = type;
-        Items = items;
+        Items = items.ToArray();
         CreatedAt = createdAt;
         Status = BatchJobStatus.Pending;
     }
@@ -183,6 +202,7 @@ public sealed class BatchJob
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset? StartedAt { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
+    public AtomPixError? Error { get; private set; }
 
     public void MarkRunning(DateTimeOffset startedAt)
     {
@@ -200,26 +220,83 @@ public sealed class BatchJob
         StartedAt = startedAt;
     }
 
-    public void Complete(BatchJobStatus status, DateTimeOffset completedAt)
+    public void CompleteNaturally(DateTimeOffset completedAt)
     {
-        if (status is BatchJobStatus.Pending or BatchJobStatus.Running)
+        EnsureCanComplete();
+        if (Items.Any(item => item.Status is ImageJobStatus.Pending or ImageJobStatus.Running))
         {
-            throw new ArgumentException("Batch completion status must be terminal.", nameof(status));
+            throw new InvalidOperationException("Natural completion requires every image job to be terminal.");
+        }
+        if (Items.Any(item => item.Status == ImageJobStatus.Canceled))
+        {
+            throw new InvalidOperationException("Canceled image jobs require the batch cancellation transition.");
         }
 
+        EnsureCompletionTime(completedAt);
+        var completedSuccessfully = Items.Count(item => item.Status is ImageJobStatus.Succeeded or ImageJobStatus.Skipped);
+        var failed = Items.Count(item => item.Status == ImageJobStatus.Failed);
+        Status = completedSuccessfully switch
+        {
+            > 0 when failed > 0 => BatchJobStatus.PartiallySucceeded,
+            > 0 => BatchJobStatus.Succeeded,
+            _ => BatchJobStatus.Failed
+        };
+        CompletedAt = completedAt;
+    }
+
+    public void Cancel(AtomPixError error, DateTimeOffset completedAt)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        if (error.Code != AtomPixErrorCode.OperationCanceled || error.Category != AtomPixErrorCategory.Cancellation)
+        {
+            throw new ArgumentException("Batch cancellation requires OperationCanceled / Cancellation.", nameof(error));
+        }
+
+        EnsureCanComplete();
+        EnsureNoRunningItems();
+        EnsureCompletionTime(completedAt);
+        Error = error;
+        Status = BatchJobStatus.Canceled;
+        CompletedAt = completedAt;
+    }
+
+    public void Abort(AtomPixError error, DateTimeOffset completedAt)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        EnsureCanComplete();
+        EnsureNoRunningItems();
+        EnsureCompletionTime(completedAt);
+        Error = error;
+        Status = Items.Any(item => item.Status is ImageJobStatus.Succeeded or ImageJobStatus.Skipped)
+            ? BatchJobStatus.PartiallySucceeded
+            : BatchJobStatus.Failed;
+        CompletedAt = completedAt;
+    }
+
+    private void EnsureCanComplete()
+    {
         if (Status is not (BatchJobStatus.Pending or BatchJobStatus.Running))
         {
             throw new InvalidOperationException($"Cannot complete batch job when status is {Status}.");
         }
+    }
 
+    private void EnsureNoRunningItems()
+    {
+        if (Items.Any(item => item.Status == ImageJobStatus.Running))
+        {
+            throw new InvalidOperationException("Batch terminal transitions cannot leave a running image job.");
+        }
+    }
+
+    private void EnsureCompletionTime(DateTimeOffset completedAt)
+    {
         var lowerBound = StartedAt ?? CreatedAt;
         if (completedAt < lowerBound)
         {
             throw new ArgumentOutOfRangeException(nameof(completedAt), "Completion time cannot be earlier than start or creation time.");
         }
 
-        Status = status;
-        CompletedAt = completedAt;
     }
 }
 
@@ -265,6 +342,19 @@ public sealed record ImageJobResult
             throw new ArgumentNullException(nameof(error), "Canceled job results require an error.");
         }
 
+        if (status == ImageJobStatus.Skipped)
+        {
+            if (outputPath is null)
+            {
+                throw new ArgumentNullException(nameof(outputPath), "Skipped job results require the planned output path.");
+            }
+
+            if (error?.Code != AtomPixErrorCode.OutputFileAlreadyExists)
+            {
+                throw new ArgumentException("Skipped job results require an OutputFileAlreadyExists error.", nameof(error));
+            }
+        }
+
         JobId = jobId;
         Type = type;
         InputPath = inputPath;
@@ -284,57 +374,101 @@ public sealed record ImageJobResult
     public long? OutputSizeBytes { get; }
     public AtomPixError? Error { get; }
 
-    public long? SavedBytes => InputSizeBytes is { } input && OutputSizeBytes is { } output ? input - output : null;
+    public long? SizeDeltaBytes => InputSizeBytes is { } input && OutputSizeBytes is { } output ? output - input : null;
 
-    public double? SavedRatio => InputSizeBytes is > 0 && SavedBytes is { } saved ? saved / (double)InputSizeBytes.Value : null;
+    public double? SizeDeltaRatio => InputSizeBytes is > 0 && SizeDeltaBytes is { } delta ? delta / (double)InputSizeBytes.Value : null;
+
+    public FileSizeChangeKind? SizeChangeKind => SizeDeltaBytes switch
+    {
+        < 0 => FileSizeChangeKind.Reduced,
+        0 => FileSizeChangeKind.Unchanged,
+        > 0 => FileSizeChangeKind.Increased,
+        _ => null
+    };
+}
+
+public enum FileSizeChangeKind
+{
+    Reduced,
+    Unchanged,
+    Increased
 }
 
 public sealed record BatchResult
 {
-    public BatchResult(BatchJobId batchId, ImageJobType type, BatchJobStatus status, IReadOnlyList<ImageJobResult> items, int? totalCount = null)
+    public BatchResult(
+        BatchJobId batchId,
+        ImageJobType type,
+        BatchJobStatus status,
+        int totalCount,
+        IReadOnlyList<ImageJobResult> items,
+        AtomPixError? error)
     {
         if (status is BatchJobStatus.Pending or BatchJobStatus.Running)
         {
             throw new ArgumentException("Batch result status must be terminal.", nameof(status));
         }
 
-        if (items.Count == 0)
-        {
-            throw new ArgumentException("Batch result must contain at least one item.", nameof(items));
-        }
+        ArgumentNullException.ThrowIfNull(items);
 
-        if (totalCount is <= 0)
+        if (totalCount <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(totalCount), totalCount, "Total count must be greater than zero.");
         }
 
-        if (totalCount is { } planned && planned < items.Count)
+        if (totalCount < items.Count)
         {
             throw new ArgumentOutOfRangeException(nameof(totalCount), totalCount, "Total count cannot be smaller than completed item count.");
+        }
+
+        if (status == BatchJobStatus.Canceled && error is null)
+        {
+            throw new ArgumentNullException(nameof(error), "Canceled batch results require a batch-level error.");
         }
 
         BatchId = batchId;
         Type = type;
         Status = status;
-        Items = items;
-        TotalCount = totalCount ?? items.Count;
+        TotalCount = totalCount;
+        Items = items.ToArray();
+        Error = error;
     }
 
     public BatchJobId BatchId { get; }
     public ImageJobType Type { get; }
     public BatchJobStatus Status { get; }
-    public IReadOnlyList<ImageJobResult> Items { get; }
-
     public int TotalCount { get; }
+    public IReadOnlyList<ImageJobResult> Items { get; }
+    public AtomPixError? Error { get; }
+
     public int CompletedCount => Items.Count;
     public int SucceededCount => Items.Count(item => item.Status == ImageJobStatus.Succeeded);
     public int FailedCount => Items.Count(item => item.Status == ImageJobStatus.Failed);
     public int SkippedCount => Items.Count(item => item.Status == ImageJobStatus.Skipped);
     public int CanceledCount => Items.Count(item => item.Status == ImageJobStatus.Canceled);
-    public long TotalInputSizeBytes => Items.Sum(item => item.InputSizeBytes ?? 0);
-    public long TotalOutputSizeBytes => Items.Sum(item => item.OutputSizeBytes ?? 0);
-    public long TotalSavedBytes => TotalInputSizeBytes - TotalOutputSizeBytes;
-    public double? TotalSavedRatio => TotalInputSizeBytes > 0 ? TotalSavedBytes / (double)TotalInputSizeBytes : null;
+    public int SizeComparedItemCount => ComparableItems.Count;
+    public long ProcessedInputSizeBytes => ComparableItems.Sum(item => item.InputSizeBytes!.Value);
+    public long ProcessedOutputSizeBytes => ComparableItems.Sum(item => item.OutputSizeBytes!.Value);
+    public long? TotalSizeDeltaBytes => SizeComparedItemCount == 0 ? null : ProcessedOutputSizeBytes - ProcessedInputSizeBytes;
+    public double? TotalSizeDeltaRatio => SizeComparedItemCount > 0 && ProcessedInputSizeBytes > 0
+        ? TotalSizeDeltaBytes / (double)ProcessedInputSizeBytes
+        : null;
+    public FileSizeChangeKind? TotalSizeChangeKind => TotalSizeDeltaBytes switch
+    {
+        < 0 => FileSizeChangeKind.Reduced,
+        0 => FileSizeChangeKind.Unchanged,
+        > 0 => FileSizeChangeKind.Increased,
+        _ => null
+    };
+    public int ReducedItemCount => ComparableItems.Count(item => item.SizeChangeKind == FileSizeChangeKind.Reduced);
+    public int UnchangedItemCount => ComparableItems.Count(item => item.SizeChangeKind == FileSizeChangeKind.Unchanged);
+    public int IncreasedItemCount => ComparableItems.Count(item => item.SizeChangeKind == FileSizeChangeKind.Increased);
+
+    private IReadOnlyList<ImageJobResult> ComparableItems => Items
+        .Where(item => item.Status == ImageJobStatus.Succeeded
+            && item.InputSizeBytes is not null
+            && item.OutputSizeBytes is not null)
+        .ToArray();
 }
 public sealed record BatchProgressSnapshot
 {

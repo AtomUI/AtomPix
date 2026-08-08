@@ -3,6 +3,7 @@ namespace AtomPix.Core.Settings;
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
 using AtomPix.Core.Output;
+using AtomPix.Core.Resize;
 
 public sealed record AppSettings
 {
@@ -11,6 +12,7 @@ public sealed record AppSettings
     public AppSettings(
         CompressionProfile defaultCompressionProfile,
         ConversionProfile defaultConversionProfile,
+        SameFormatEncodingPolicy defaultSameFormatEncodingPolicy,
         OutputPolicy defaultOutputPolicy,
         ThemeMode themeMode,
         string? language,
@@ -25,7 +27,20 @@ public sealed record AppSettings
         SchemaVersion = schemaVersion;
         DefaultCompressionProfile = defaultCompressionProfile ?? throw new ArgumentNullException(nameof(defaultCompressionProfile));
         DefaultConversionProfile = defaultConversionProfile ?? throw new ArgumentNullException(nameof(defaultConversionProfile));
+        DefaultSameFormatEncodingPolicy = defaultSameFormatEncodingPolicy ?? throw new ArgumentNullException(nameof(defaultSameFormatEncodingPolicy));
         DefaultOutputPolicy = defaultOutputPolicy ?? throw new ArgumentNullException(nameof(defaultOutputPolicy));
+
+        if (DefaultCompressionProfile.MetadataPolicy != DefaultConversionProfile.MetadataPolicy
+            || DefaultCompressionProfile.MetadataPolicy != DefaultSameFormatEncodingPolicy.MetadataPolicy)
+        {
+            throw new ArgumentException("Default compression, conversion, and same-format encoding metadata policies must be identical.");
+        }
+
+        if (!Enum.IsDefined(themeMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(themeMode), themeMode, "Unsupported theme mode.");
+        }
+
         ThemeMode = themeMode;
         Language = string.IsNullOrWhiteSpace(language) ? null : language;
         RecentItems = recentItems ?? throw new ArgumentNullException(nameof(recentItems));
@@ -36,6 +51,8 @@ public sealed record AppSettings
     public CompressionProfile DefaultCompressionProfile { get; }
 
     public ConversionProfile DefaultConversionProfile { get; }
+
+    public SameFormatEncodingPolicy DefaultSameFormatEncodingPolicy { get; }
 
     public OutputPolicy DefaultOutputPolicy { get; }
 
@@ -48,6 +65,7 @@ public sealed record AppSettings
     public static AppSettings Default { get; } = new(
         CompressionProfile.SmartDefault(),
         ConversionProfile.WebPDefault(),
+        SameFormatEncodingPolicy.Default,
         OutputPolicy.Default,
         ThemeMode.System,
         null,

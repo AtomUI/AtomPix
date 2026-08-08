@@ -1,6 +1,5 @@
 namespace AtomPix.Core.Ports;
 
-using AtomPix.Core.Licensing;
 using AtomPix.Core.Output;
 using AtomPix.Core.Results;
 using AtomPix.Core.Settings;
@@ -11,13 +10,6 @@ public interface IAppSettingsStore
     Task<OperationResult<AppSettings>> LoadAsync(CancellationToken cancellationToken);
 
     Task<OperationResult> SaveAsync(AppSettings settings, CancellationToken cancellationToken);
-}
-
-public interface ISubscriptionStore
-{
-    Task<OperationResult<SubscriptionState>> LoadAsync(CancellationToken cancellationToken);
-
-    Task<OperationResult> SaveAsync(SubscriptionState subscription, CancellationToken cancellationToken);
 }
 
 public interface IRecentItemsStore
@@ -37,7 +29,19 @@ public interface IFileSystemService
 
     Task<OperationResult<long>> GetFileSizeAsync(LocalPath path, CancellationToken cancellationToken);
 
+    Task<OperationResult<IReadOnlyList<LocalPath>>> EnumerateFilesAsync(
+        LocalPath directory,
+        CancellationToken cancellationToken);
+
+    OperationResult<LocalPath> NormalizePath(LocalPath path);
+
+    bool PathsEqual(LocalPath left, LocalPath right);
+
+    int ComparePaths(LocalPath left, LocalPath right);
+
     LocalPath Combine(LocalPath directory, string fileName);
+
+    string GetFileName(LocalPath path);
 
     string GetFileNameWithoutExtension(LocalPath path);
 

@@ -3,7 +3,11 @@ namespace AtomPix.Infrastructure.Configuration;
 using System.Text.Json;
 using AtomPix.Infrastructure.Storage;
 using AtomPix.Core.Errors;
+using AtomPix.Core.Compression;
+using AtomPix.Core.Conversion;
+using AtomPix.Core.Output;
 using AtomPix.Core.Ports;
+using AtomPix.Core.Resize;
 using AtomPix.Core.Results;
 using AtomPix.Core.Settings;
 
@@ -30,10 +34,25 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
             }
 
             await using var stream = File.OpenRead(SettingsPath);
-            var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
-            return settings is null
-                ? InfrastructureErrors.Failure<AppSettings>(AtomPixErrorCode.SettingsLoadFailed, AtomPixErrorCategory.Configuration, "Settings file is empty or invalid.")
-                : OperationResult<AppSettings>.Success(settings);
+            var persisted = await JsonSerializer.DeserializeAsync<PersistedAppSettings>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
+            if (persisted is null)
+            {
+                return InfrastructureErrors.Failure<AppSettings>(AtomPixErrorCode.SettingsLoadFailed, AtomPixErrorCategory.Configuration, "Settings file is empty or invalid.");
+            }
+
+            var metadataPolicy = persisted.DefaultCompressionProfile?.MetadataPolicy ?? MetadataPolicy.Remove;
+            var sameFormatPolicy = persisted.DefaultSameFormatEncodingPolicy
+                ?? new SameFormatEncodingPolicy(SameFormatEncodingPolicy.Default.LossyQuality, metadataPolicy);
+            var settings = new AppSettings(
+                persisted.DefaultCompressionProfile!,
+                persisted.DefaultConversionProfile!,
+                sameFormatPolicy,
+                persisted.DefaultOutputPolicy!,
+                persisted.ThemeMode ?? ThemeMode.System,
+                persisted.Language,
+                persisted.RecentItems!,
+                persisted.SchemaVersion ?? AppSettings.CurrentSchemaVersion);
+            return OperationResult<AppSettings>.Success(settings);
         }
         catch (OperationCanceledException)
         {
@@ -64,6 +83,25 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
         {
             return InfrastructureErrors.Failure(AtomPixErrorCode.SettingsSaveFailed, AtomPixErrorCategory.Configuration, "Failed to save settings.", ex);
         }
+    }
+
+    private sealed class PersistedAppSettings
+    {
+        public int? SchemaVersion { get; init; }
+
+        public CompressionProfile? DefaultCompressionProfile { get; init; }
+
+        public ConversionProfile? DefaultConversionProfile { get; init; }
+
+        public SameFormatEncodingPolicy? DefaultSameFormatEncodingPolicy { get; init; }
+
+        public OutputPolicy? DefaultOutputPolicy { get; init; }
+
+        public ThemeMode? ThemeMode { get; init; }
+
+        public string? Language { get; init; }
+
+        public RecentItemsSettings? RecentItems { get; init; }
     }
 }
 

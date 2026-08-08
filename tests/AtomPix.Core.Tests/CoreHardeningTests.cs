@@ -2,11 +2,12 @@ namespace AtomPix.Core.Tests;
 
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
+using AtomPix.Core.Crop;
 using AtomPix.Core.Errors;
 using AtomPix.Core.Jobs;
-using AtomPix.Core.Licensing;
 using AtomPix.Core.Output;
 using AtomPix.Core.Results;
+using AtomPix.Core.Resize;
 using AtomPix.Core.Settings;
 using AtomPix.Core.ValueObjects;
 
@@ -34,16 +35,19 @@ public sealed class CoreHardeningTests
     [Fact]
     public void Custom_compression_requires_quality()
     {
-        Assert.Throws<ArgumentException>(() => new CompressionProfile(CompressionMode.Custom, null, ResizePolicy.None, MetadataPolicy.Remove));
+        Assert.Throws<ArgumentException>(() => new CompressionProfile(CompressionMode.Custom, null, MetadataPolicy.Remove));
+        Assert.Throws<ArgumentException>(() => new CompressionProfile(CompressionMode.Smart, new ImageQuality(80), MetadataPolicy.Remove));
     }
 
     [Fact]
     public void ResizePolicy_rejects_inconsistent_shapes()
     {
-        Assert.Throws<ArgumentException>(() => new ResizePolicy(ResizeMode.None, 100, null, null));
-        Assert.Throws<ArgumentException>(() => new ResizePolicy(ResizeMode.FitWithinBounds, null, null, null));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new ResizePolicy(ResizeMode.Percentage, null, null, 0));
-        Assert.Throws<ArgumentException>(() => new ResizePolicy(ResizeMode.Percentage, 100, null, 50));
+        Assert.Throws<ArgumentException>(() => new PixelResizePolicy(null, null, true));
+        Assert.Throws<ArgumentException>(() => new PixelResizePolicy(100, null, false));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PixelResizePolicy(0, 100, false));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PercentageResizePolicy(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ImageSize(0, 100));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ResolvedResizeSize(100, 0));
     }
 
     [Fact]
@@ -59,26 +63,13 @@ public sealed class CoreHardeningTests
     {
         Assert.Throws<ArgumentException>(() => new OutputNamingPolicy(OutputNamingMode.KeepOriginalName, "_x"));
         Assert.Throws<ArgumentException>(() => new OutputNamingPolicy(OutputNamingMode.AppendSuffix, null));
-    }
+        Assert.Throws<ArgumentException>(() => new OutputNamingPolicy(OutputNamingMode.CustomPattern, "_x", "{name}"));
+        Assert.Throws<ArgumentException>(() => new OutputNamingPolicy(OutputNamingMode.CustomPattern, null, "{Name}"));
+        Assert.Throws<ArgumentException>(() => new OutputNamingPolicy(OutputNamingMode.CustomPattern, null, "{index}_{index}"));
+        Assert.Throws<ArgumentException>(() => new OutputNamingPolicy(OutputNamingMode.AppendSuffix, "{index}"));
 
-    [Fact]
-    public void SubscriptionState_enforces_status_shape()
-    {
-        Assert.Throws<ArgumentException>(() => new SubscriptionState(SubscriptionStatus.Free, BillingCycle.Monthly, null));
-        Assert.Throws<ArgumentException>(() => new SubscriptionState(SubscriptionStatus.Active, null, DateTimeOffset.UtcNow.AddDays(1)));
-        Assert.Throws<ArgumentException>(() => new SubscriptionState(SubscriptionStatus.Expired, null, null));
-    }
-
-    [Fact]
-    public void FeatureAccessDecision_factories_enforce_invariants()
-    {
-        var allowed = FeatureAccessDecision.Allow();
-        var denied = FeatureAccessDecision.Deny(FeatureAccessBlockReason.SubscriptionRequired);
-
-        Assert.True(allowed.Allowed);
-        Assert.Null(allowed.BlockReason);
-        Assert.False(denied.Allowed);
-        Assert.Equal(FeatureAccessBlockReason.SubscriptionRequired, denied.BlockReason);
+        var custom = new OutputNamingPolicy(OutputNamingMode.CustomPattern, null, "holiday_{index}_{name}");
+        Assert.Equal("holiday_{index}_{name}", custom.GetBasePattern());
     }
 
     [Fact]
@@ -117,14 +108,30 @@ public sealed class CoreHardeningTests
     }
 
     [Fact]
-    public void BatchJob_requires_items_and_terminal_completion_status()
+    public void BatchJob_derives_terminal_status_from_child_jobs_and_transition_intent()
     {
-        Assert.Throws<ArgumentException>(() => new BatchJob(BatchJobId.New(), ImageJobType.Compress, Array.Empty<ImageJob>(), DateTimeOffset.UtcNow));
+        var now = DateTimeOffset.UtcNow;
+        Assert.Throws<ArgumentException>(() => new BatchJob(BatchJobId.New(), ImageJobType.Compress, Array.Empty<ImageJob>(), now));
 
-        var job = new ImageJob(ImageJobId.New(), ImageJobType.Compress, new LocalPath("a.jpg"), DateTimeOffset.UtcNow);
-        var batch = new BatchJob(BatchJobId.New(), ImageJobType.Compress, [job], DateTimeOffset.UtcNow);
+        var success = new ImageJob(ImageJobId.New(), ImageJobType.Compress, new LocalPath("a.jpg"), now);
+        var failure = new ImageJob(ImageJobId.New(), ImageJobType.Compress, new LocalPath("b.jpg"), now);
+        var batch = new BatchJob(BatchJobId.New(), ImageJobType.Compress, [success, failure], now);
+        batch.MarkRunning(now);
+        success.MarkRunning(now);
+        success.MarkSucceeded(new LocalPath("a-out.jpg"), now);
+        failure.MarkFailed(TestError(), now);
+        batch.CompleteNaturally(now);
 
-        Assert.Throws<ArgumentException>(() => batch.Complete(BatchJobStatus.Running, DateTimeOffset.UtcNow.AddSeconds(1)));
+        Assert.Equal(BatchJobStatus.PartiallySucceeded, batch.Status);
+        Assert.Null(batch.Error);
+
+        var pending = new ImageJob(ImageJobId.New(), ImageJobType.Resize, new LocalPath("c.jpg"), now);
+        var canceledBatch = new BatchJob(BatchJobId.New(), ImageJobType.Resize, [pending], now);
+        var canceled = new AtomPixError(AtomPixErrorCode.OperationCanceled, AtomPixErrorCategory.Cancellation, "canceled");
+        canceledBatch.MarkRunning(now);
+        canceledBatch.Cancel(canceled, now);
+        Assert.Equal(BatchJobStatus.Canceled, canceledBatch.Status);
+        Assert.Equal(canceled, canceledBatch.Error);
     }
 
     [Fact]
@@ -141,20 +148,32 @@ public sealed class CoreHardeningTests
     }
 
     [Fact]
-    public void BatchResult_requires_terminal_status_and_items()
+    public void BatchResult_requires_terminal_status_but_allows_no_completed_items_for_an_accepted_batch()
     {
-        Assert.Throws<ArgumentException>(() => new BatchResult(BatchJobId.New(), ImageJobType.Compress, BatchJobStatus.Running, Array.Empty<ImageJobResult>()));
-        Assert.Throws<ArgumentException>(() => new BatchResult(BatchJobId.New(), ImageJobType.Compress, BatchJobStatus.Succeeded, Array.Empty<ImageJobResult>()));
+        Assert.Throws<ArgumentException>(() => new BatchResult(BatchJobId.New(), ImageJobType.Compress, BatchJobStatus.Running, 1, Array.Empty<ImageJobResult>(), null));
+
+        var result = new BatchResult(
+            BatchJobId.New(),
+            ImageJobType.Compress,
+            BatchJobStatus.Failed,
+            1,
+            Array.Empty<ImageJobResult>(),
+            new AtomPixError(AtomPixErrorCode.Unknown, AtomPixErrorCategory.Unexpected, "aborted"));
+
+        Assert.Empty(result.Items);
+        Assert.Null(result.TotalSizeDeltaBytes);
+        Assert.Null(result.TotalSizeChangeKind);
     }
 
 
     [Fact]
     public void Strategy_models_reject_unknown_enum_values()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new CompressionProfile((CompressionMode)999, null, ResizePolicy.None, MetadataPolicy.Remove));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), ResizePolicy.None, (MetadataPolicy)999));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new ConversionProfile((OutputImageFormat)999, new ImageQuality(80), ResizePolicy.None, MetadataPolicy.Remove));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new ConversionProfile(OutputImageFormat.WebP, new ImageQuality(80), ResizePolicy.None, (MetadataPolicy)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CompressionProfile((CompressionMode)999, null, MetadataPolicy.Remove));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), (MetadataPolicy)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ConversionProfile((OutputImageFormat)999, new ImageQuality(80), MetadataPolicy.Remove, TransparencyPolicy.Default));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ConversionProfile(OutputImageFormat.WebP, new ImageQuality(80), (MetadataPolicy)999, TransparencyPolicy.Default));
+        Assert.Throws<ArgumentNullException>(() => new ConversionProfile(OutputImageFormat.WebP, new ImageQuality(80), MetadataPolicy.Remove, null!));
         Assert.Throws<ArgumentOutOfRangeException>(() => new OutputPolicy(OutputPolicy.Default.LocationPolicy, OutputPolicy.Default.NamingPolicy, (OverwritePolicy)999));
     }
 
@@ -177,6 +196,7 @@ public sealed class CoreHardeningTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new AppSettings(
             CompressionProfile.SmartDefault(),
             ConversionProfile.WebPDefault(),
+            SameFormatEncodingPolicy.Default,
             OutputPolicy.Default,
             ThemeMode.System,
             null,
@@ -185,10 +205,37 @@ public sealed class CoreHardeningTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new AppSettings(
             CompressionProfile.SmartDefault(),
             ConversionProfile.WebPDefault(),
+            SameFormatEncodingPolicy.Default,
             OutputPolicy.Default,
             ThemeMode.System,
             null,
             new RecentItemsSettings(true, 20),
             schemaVersion: AppSettings.CurrentSchemaVersion + 1));
+    }
+
+    [Fact]
+    public void AppSettings_rejects_inconsistent_shared_metadata_defaults()
+    {
+        Assert.Throws<ArgumentException>(() => new AppSettings(
+            CompressionProfile.SmartDefault(),
+            new ConversionProfile(OutputImageFormat.WebP, new ImageQuality(80), MetadataPolicy.Preserve, TransparencyPolicy.Default),
+            SameFormatEncodingPolicy.Default,
+            OutputPolicy.Default,
+            ThemeMode.System,
+            null,
+            new RecentItemsSettings(true, 20)));
+    }
+
+    [Fact]
+    public void Crop_and_color_value_objects_reject_invalid_shapes()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CropRectangle(-1, 0, 1, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CropRectangle(0, 0, 0, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CropAspectRatio(0, 1));
+
+        Assert.Equal(new CropAspectRatio(3, 2), new CropAspectRatio(6, 4));
+        Assert.Equal("#0A80FF", new RgbColor(10, 128, 255).ToHexString());
+        Assert.Equal(new RgbColor(10, 128, 255), RgbColor.Parse("#0a80ff"));
+        Assert.False(RgbColor.TryParse("#FF000080", out _));
     }
 }

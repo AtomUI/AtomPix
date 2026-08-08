@@ -23,30 +23,41 @@ public sealed class ImagingAbstractionsPublicApiContractTests
             "AtomPix.Imaging.Abstractions.Processing.ImageCompressResult",
             "AtomPix.Imaging.Abstractions.Processing.ImageConvertRequest",
             "AtomPix.Imaging.Abstractions.Processing.ImageConvertResult",
+            "AtomPix.Imaging.Abstractions.Processing.ImageCropCapabilities",
+            "AtomPix.Imaging.Abstractions.Processing.ImageCropRequest",
+            "AtomPix.Imaging.Abstractions.Processing.ImageCropResult",
             "AtomPix.Imaging.Abstractions.Processing.ImagePreviewRequest",
             "AtomPix.Imaging.Abstractions.Processing.ImagePreviewResult",
             "AtomPix.Imaging.Abstractions.Processing.ImageProbeRequest",
             "AtomPix.Imaging.Abstractions.Processing.ImageProbeResult",
             "AtomPix.Imaging.Abstractions.Processing.ImageProcessingDetails",
-            "AtomPix.Imaging.Abstractions.Processing.ImageProcessorCapabilities"
+            "AtomPix.Imaging.Abstractions.Processing.ImageProcessorCapabilities",
+            "AtomPix.Imaging.Abstractions.Processing.ImageResizeCapabilities",
+            "AtomPix.Imaging.Abstractions.Processing.ImageResizeRequest",
+            "AtomPix.Imaging.Abstractions.Processing.ImageResizeResult",
+            "AtomPix.Imaging.Abstractions.Processing.ImageResourceCapabilities",
+            "AtomPix.Imaging.Abstractions.Processing.TransparencyOutcome",
+            "AtomPix.Imaging.Abstractions.Processing.TransparencyProcessingResult"
         }.Order(StringComparer.Ordinal).ToArray();
 
         Assert.Equal(expected, publicTypes);
     }
 
     [Fact]
-    public void Image_processor_contract_keeps_four_async_operations()
+    public void Image_processor_contract_exposes_six_atomic_async_operations()
     {
         var methods = typeof(IImageProcessor).GetMethods()
             .Where(method => method.Name != "get_Capabilities")
             .OrderBy(method => method.Name, StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(["CompressAsync", "ConvertAsync", "CreatePreviewAsync", "ProbeAsync"], methods.Select(method => method.Name).ToArray());
+        Assert.Equal(["CompressAsync", "ConvertAsync", "CreatePreviewAsync", "CropAsync", "ProbeAsync", "ResizeAsync"], methods.Select(method => method.Name).ToArray());
         AssertMethod<ImageCompressRequest, ImageCompressResult>(methods.Single(method => method.Name == "CompressAsync"));
         AssertMethod<ImageConvertRequest, ImageConvertResult>(methods.Single(method => method.Name == "ConvertAsync"));
         AssertMethod<ImagePreviewRequest, ImagePreviewResult>(methods.Single(method => method.Name == "CreatePreviewAsync"));
+        AssertMethod<ImageCropRequest, ImageCropResult>(methods.Single(method => method.Name == "CropAsync"));
         AssertMethod<ImageProbeRequest, ImageProbeResult>(methods.Single(method => method.Name == "ProbeAsync"));
+        AssertMethod<ImageResizeRequest, ImageResizeResult>(methods.Single(method => method.Name == "ResizeAsync"));
     }
 
     [Fact]

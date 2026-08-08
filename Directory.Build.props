@@ -4,5 +4,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Product>AtomPix</Product>
+    <Company>AtomPix</Company>
+    <Authors>AtomPix Contributors</Authors>
+    <Copyright>Copyright © AtomPix Contributors</Copyright>
+    <RepositoryUrl>https://github.com/atompix/atompix</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 </Project>

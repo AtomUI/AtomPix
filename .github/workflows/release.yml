@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Full release gate
+        shell: pwsh
+        run: ./eng/verify.ps1
+
+  package:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Resolve version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $version = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:REQUESTED_VERSION } else { $env:REF_NAME.TrimStart('v') }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Create release package and SHA-256
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        shell: pwsh
+        run: ./eng/publish.ps1 -RuntimeIdentifier ${{ matrix.rid }} -Version $env:RELEASE_VERSION
+      - name: Windows startup smoke test
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: ./eng/smoke-test.ps1 -RuntimeIdentifier win-x64 -Seconds 5
+      - name: Windows real-process UI automation
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: ./eng/windows-ui-automation.ps1
+      - name: Linux startup smoke test under Xvfb
+        if: matrix.rid == 'linux-x64'
+        shell: bash
+        run: xvfb-run -a pwsh -File ./eng/smoke-test.ps1 -RuntimeIdentifier linux-x64 -Seconds 5
+      - name: macOS startup smoke test
+        if: matrix.rid == 'osx-arm64'
+        shell: pwsh
+        run: ./eng/smoke-test.ps1 -RuntimeIdentifier osx-arm64 -Seconds 5
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.rid }}
+          path: .artifacts/packages/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push'
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem release-assets -File | ForEach-Object FullName
+          if ($assets.Count -lt 6) { throw 'Expected three archives and three checksum files.' }
+          gh release create $env:RELEASE_TAG $assets --verify-tag --generate-notes
