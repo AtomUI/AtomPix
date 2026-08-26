@@ -13,5 +13,6 @@
     <RepositoryType>git</RepositoryType>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)eng\nuget-cache</RestorePackagesPath>
   </PropertyGroup>
 </Project>

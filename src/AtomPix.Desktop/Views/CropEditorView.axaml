@@ -1,125 +1,79 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:atom="https://atomui.net"
-             xmlns:antdicons="https://atomui.net/icons/antdesign"
-             xmlns:controls="using:AtomPix.Desktop.Controls"
-             xmlns:vm="using:AtomPix.Desktop.ViewModels"
-             x:Class="AtomPix.Desktop.Views.CropEditorView"
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net" xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels" x:Class="AtomPix.Desktop.Views.CropEditorView"
              x:DataType="vm:CropEditorViewModel">
-    <Grid Margin="34,28" RowDefinitions="Auto,*">
-        <StackPanel Spacing="6" Margin="0,0,0,20">
-            <TextBlock Text="裁剪图片" FontSize="26" FontWeight="SemiBold" />
-            <TextBlock Text="拖动或缩放选框，也可以输入精确像素尺寸与位置。" FontSize="14" Opacity="0.64" />
-        </StackPanel>
-
-        <Grid Grid.Row="1">
-            <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18">
-                <atom:Empty PresetImage="Default" Description="先选择一张要裁剪的图片" />
-                <atom:Button Content="选择图片" ButtonType="Primary" Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
-                             Command="{Binding SelectImageCommand}" HorizontalAlignment="Center" />
-            </StackPanel>
-
-            <Grid IsVisible="{Binding IsContentReady}" ColumnDefinitions="*,360" ColumnSpacing="20">
-                <Grid Grid.Column="0" RowDefinitions="*,Auto">
-                    <Border CornerRadius="12" ClipToBounds="True">
-                        <controls:CropCanvas x:Name="CropCanvas"
-                                             MinHeight="440"
-                                             PreviewBytes="{Binding PreviewBytes}"
-                                             ImagePixelWidth="{Binding ImagePixelWidth}"
-                                             ImagePixelHeight="{Binding ImagePixelHeight}"
-                                             CropX="{Binding CanvasX}"
-                                             CropY="{Binding CanvasY}"
-                                             CropWidth="{Binding CanvasWidth}"
-                                             CropHeight="{Binding CanvasHeight}"
-                                             LockedAspectRatio="{Binding LockedAspectRatio}"
-                                             IsInteractionEnabled="{Binding !IsProcessing}" />
-                    </Border>
-                    <atom:Card Grid.Row="1" Margin="0,14,0,0" SizeType="Small">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                            <StackPanel Spacing="3">
-                                <TextBlock Text="{Binding InputName}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding InputSummary}" Opacity="0.62" />
-                                <TextBlock Text="选框、八个控制点与右侧像素输入保持同步。" Opacity="0.58" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Spacing="8">
-                                <atom:Button Content="重置为整张图片" Command="{Binding ResetSelectionCommand}" />
-                                <atom:Button Content="更换图片" Command="{Binding SelectImageCommand}" />
-                            </StackPanel>
+    <Grid RowDefinitions="*,Auto" Background="{DynamicResource AtomPixInspectorSurfaceBrush}">
+        <atom:ScrollViewer Padding="20,16,20,18" VerticalScrollBarVisibility="Auto"
+                           IsEnabled="{Binding !IsProcessing}">
+            <StackPanel Spacing="18">
+                <StackPanel Spacing="3">
+                    <TextBlock Classes="AtomPixInspectorContextName" Text="{Binding InputName}" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{Binding InputSummary}" />
+                </StackPanel>
+                <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" />
+                <StackPanel Spacing="11">
+                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="剪裁比例" />
+                    <atom:Segmented AutomationProperties.Name="裁剪比例"
+                                    ItemsSource="{Binding Ratios}"
+                                    SelectedItem="{Binding SelectedRatio, Mode=TwoWay}"
+                                    IsExpanding="True" />
+                </StackPanel>
+                <StackPanel x:Name="CustomCropOptions" IsVisible="{Binding IsCustomRatio}" Spacing="0">
+                    <Border Padding="0,10" BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}" BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="宽度（px）" />
+                            <atom:NumericUpDown x:Name="CropWidthInput" Grid.Column="1" Width="112"
+                                                AutomationProperties.Name="裁剪宽度" Minimum="1" FormatString="0"
+                                                Value="{Binding CropWidth, Mode=TwoWay}" />
                         </Grid>
-                    </atom:Card>
-                </Grid>
-
-                <atom:ScrollViewer Grid.Column="1">
-                    <StackPanel Spacing="14">
-                        <atom:Card Header="裁剪比例" SizeType="Middle">
-                            <StackPanel Spacing="10">
-                                <atom:Segmented AutomationProperties.Name="裁剪比例" ItemsSource="{Binding Ratios}" SelectedItem="{Binding SelectedRatio, Mode=TwoWay}" />
-                                <TextBlock Text="比例只约束界面选框；最终提交的是确定的像素矩形。" Opacity="0.58" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </atom:Card>
-
-                        <atom:Card Header="选区尺寸与位置" SizeType="Middle">
-                            <StackPanel Spacing="12">
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                                    <StackPanel Spacing="5">
-                                        <TextBlock Text="Width" />
-                                        <atom:NumericUpDown AutomationProperties.Name="裁剪宽度" Minimum="1" Maximum="100000" FormatString="0" Value="{Binding CropWidth, Mode=TwoWay}" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Spacing="5">
-                                        <TextBlock Text="Height" />
-                                        <atom:NumericUpDown AutomationProperties.Name="裁剪高度" Minimum="1" Maximum="100000" FormatString="0" Value="{Binding CropHeight, Mode=TwoWay}" />
-                                    </StackPanel>
-                                </Grid>
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                                    <StackPanel Spacing="5">
-                                        <TextBlock Text="Position X" />
-                                        <atom:NumericUpDown AutomationProperties.Name="裁剪横坐标" Minimum="0" Maximum="100000" FormatString="0" Value="{Binding CropX, Mode=TwoWay}" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1" Spacing="5">
-                                        <TextBlock Text="Position Y" />
-                                        <atom:NumericUpDown AutomationProperties.Name="裁剪纵坐标" Minimum="0" Maximum="100000" FormatString="0" Value="{Binding CropY, Mode=TwoWay}" />
-                                    </StackPanel>
-                                </Grid>
-                            </StackPanel>
-                        </atom:Card>
-
-                        <atom:Card Header="输出摘要" SizeType="Middle">
-                            <StackPanel Spacing="8">
-                                <TextBlock Text="{Binding EstimatedOutput}" FontSize="18" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding EncodingSummary}" Opacity="0.58" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </atom:Card>
-                        <atom:Card Header="输出设置" SizeType="Middle">
-                            <Border IsEnabled="{Binding !IsProcessing}">
-                                <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
-                            </Border>
-                        </atom:Card>
-                        <atom:Alert Type="Error" IsShowIcon="True" Message="选区无法提交" Description="{Binding DraftError}" IsVisible="{Binding HasDraftError}" />
-                        <atom:Alert Type="Error" IsShowIcon="True" Message="裁剪未完成" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
-                        <atom:Alert Type="Warning" IsShowIcon="True" Message="输出文件已不存在" Description="请重新处理原图片后再打开或继续调整尺寸。" IsVisible="{Binding IsResultOutputMissing}" />
-                        <atom:Card IsVisible="{Binding HasResult}" SizeType="Small">
-                            <StackPanel Spacing="7">
-                                <TextBlock Text="{Binding ResultTitle}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding ResultDetails}" />
-                                <TextBlock Text="{Binding ResultSizeChange}" />
-                                <TextBlock Text="{Binding ResultOutputPath}" Opacity="0.58" TextTrimming="CharacterEllipsis"
-                                           atom:ToolTip.Tip="{Binding ResultOutputPath}" />
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding IsSuccess}">
-                                    <atom:Button Content="打开输出目录" Command="{Binding OpenOutputCommand}" />
-                                    <atom:Button Grid.Column="1" Content="继续调整尺寸" Command="{Binding ContinueResizeCommand}" />
-                                </Grid>
-                            </StackPanel>
-                        </atom:Card>
-                        <StackPanel IsVisible="{Binding HasDiagnosticId}" Spacing="6">
-                            <TextBlock Text="{Binding DiagnosticId}" FontFamily="Consolas" />
-                            <atom:Button Content="复制诊断编号" Command="{Binding CopyDiagnosticIdCommand}" HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <atom:Button Content="开始裁剪" ButtonType="Primary" Command="{Binding StartCommand}" IsVisible="{Binding !IsProcessing}" />
-                        <atom:Button Content="取消任务" IsDanger="True" Command="{Binding CancelCommand}" IsVisible="{Binding IsProcessing}" />
-                    </StackPanel>
-                </atom:ScrollViewer>
+                    </Border>
+                    <Border Padding="0,10" BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}" BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="高度（px）" />
+                            <atom:NumericUpDown x:Name="CropHeightInput" Grid.Column="1" Width="112"
+                                                AutomationProperties.Name="裁剪高度" Minimum="1" FormatString="0"
+                                                Value="{Binding CropHeight, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <Border Padding="0,10" BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}" BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="位置 X（px）" />
+                            <atom:NumericUpDown x:Name="CropXInput" Grid.Column="1" Width="112"
+                                                AutomationProperties.Name="裁剪起点X" Minimum="0" FormatString="0"
+                                                Value="{Binding CropX, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <Border Padding="0,10">
+                        <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="位置 Y（px）" />
+                            <atom:NumericUpDown x:Name="CropYInput" Grid.Column="1" Width="112"
+                                                AutomationProperties.Name="裁剪起点Y" Minimum="0" FormatString="0"
+                                                Value="{Binding CropY, Mode=TwoWay}" />
+                        </Grid>
+                    </Border>
+                    <Border Padding="14,11" Background="{DynamicResource AtomPixInspectorInfoSurfaceBrush}" CornerRadius="8">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <TextBlock Classes="AtomPixInspectorCaption" Text="剪裁输出" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding EstimatedOutput}"
+                                       Foreground="{atom:SharedTokenResource ColorPrimary}"
+                                       FontSize="15" FontWeight="SemiBold" TextAlignment="Right" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+                <Border Classes="AtomPixInspectorDivider" />
+                <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
+                <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}"
+                           Foreground="{atom:SharedTokenResource ColorError}" TextWrapping="Wrap" />
+            </StackPanel>
+        </atom:ScrollViewer>
+        <Border Grid.Row="1" Padding="20,12" Background="{DynamicResource AtomPixInspectorSurfaceBrush}"
+                BorderBrush="{DynamicResource AtomPixInspectorDividerBrush}" BorderThickness="0,1,0,0">
+            <Grid>
+                <atom:Button Classes="AtomPixInspectorPrimaryAction" Content="开始剪裁" ButtonType="Primary"
+                             Command="{Binding StartCommand}" IsVisible="{Binding !IsProcessing}" />
+                <atom:Button Classes="AtomPixInspectorPrimaryAction" Content="取消任务" IsDanger="True"
+                             Command="{Binding CancelCommand}" IsVisible="{Binding IsProcessing}" />
             </Grid>
-            <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-        </Grid>
+        </Border>
     </Grid>
 </UserControl>

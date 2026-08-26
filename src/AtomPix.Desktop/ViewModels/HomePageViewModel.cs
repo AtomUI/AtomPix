@@ -225,17 +225,15 @@ public sealed class HomePageViewModel : ObservableObject
 
     private async Task OpenImageAsync(CancellationToken cancellationToken)
     {
-        var opened = await PickAndProbeImageAsync(cancellationToken);
-        if (opened is null)
+        var context = await PickImageCollectionAsync(cancellationToken);
+        if (context is null)
         {
             return;
         }
 
-        var item = new BrowserImageCandidate(opened.Value.Path, Path.GetFileName(opened.Value.Path.Value));
-        await RecordRecentAsync(opened.Value.Path, RecentItemKind.File, cancellationToken);
         _navigator.Navigate(new DesktopNavigationRequest(
             DesktopRoute.Browse,
-            new BrowserNavigationContext(null, [item], opened.Value.Path, opened.Value.Probe)));
+            context));
     }
 
     public void SetDragOver(bool value)
@@ -287,56 +285,60 @@ public sealed class HomePageViewModel : ObservableObject
 
     private async Task OpenForFeatureAsync(DesktopRoute route, CancellationToken cancellationToken)
     {
-        var opened = await PickAndProbeImageAsync(cancellationToken);
-        if (opened is null)
+        var context = await PickImageCollectionAsync(cancellationToken);
+        if (context is null)
         {
             return;
         }
 
-        await RecordRecentAsync(opened.Value.Path, RecentItemKind.File, cancellationToken);
-
         _navigator.Navigate(new DesktopNavigationRequest(
             route,
-            new SingleImageNavigationContext(opened.Value.Path, opened.Value.Probe)));
+            new BrowserToolNavigationContext(context)));
     }
 
-    private async Task<(LocalPath Path, AtomPix.Imaging.Abstractions.Processing.ImageProbeResult Probe)?> PickAndProbeImageAsync(
+    private async Task<BrowserNavigationContext?> PickImageCollectionAsync(
         CancellationToken cancellationToken)
     {
         BeginLoading();
-        var selection = await _picker.PickSingleImageAsync(cancellationToken);
+        var selection = await _picker.PickImagesAsync(cancellationToken);
         if (selection.Status == DesktopSelectionStatus.Canceled)
         {
             State = DesktopContentState.Ready;
             return null;
         }
 
-        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1)
+        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count == 0)
         {
             Fail(DesktopErrorText.FromPicker(selection.ErrorMessage));
             return null;
         }
 
-        var path = new LocalPath(selection.Paths[0]);
-        var result = await _openImage.ExecuteAsync(new OpenImageRequest(path), cancellationToken);
-        if (!result.Succeeded)
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var known = new HashSet<string>(comparer);
+        var candidates = new List<BrowserImageCandidate>(selection.Paths.Count);
+        foreach (var selectedPath in selection.Paths)
         {
-            var error = DesktopErrorText.FromWorkflow(result.Error);
-            if (string.IsNullOrEmpty(error))
+            try
             {
-                State = DesktopContentState.Ready;
+                var path = new LocalPath(selectedPath);
+                var normalized = Path.GetFullPath(path.Value);
+                if (known.Add(normalized))
+                {
+                    candidates.Add(new BrowserImageCandidate(path, Path.GetFileName(path.Value)));
+                }
             }
-            else
+            catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
             {
-                Fail(error);
-                Diagnostic.Set(result.Error);
             }
-
-            return null;
         }
 
+        if (candidates.Count == 0)
+        {
+            Fail("没有可打开的图片路径，请重新选择。");
+            return null;
+        }
         State = DesktopContentState.Ready;
-        return (path, result.Value!.ProbeResult);
+        return new BrowserNavigationContext(null, candidates);
     }
 
     private async Task OpenFolderAsync(CancellationToken cancellationToken)
@@ -378,7 +380,6 @@ public sealed class HomePageViewModel : ObservableObject
         }
 
         State = DesktopContentState.Ready;
-        await RecordRecentAsync(path, RecentItemKind.File, cancellationToken);
         _navigator.Navigate(new DesktopNavigationRequest(
             DesktopRoute.Browse,
             new BrowserNavigationContext(
@@ -400,10 +401,10 @@ public sealed class HomePageViewModel : ObservableObject
         }
 
         State = DesktopContentState.Ready;
-        await RecordRecentAsync(result.Value!.DirectoryPath, RecentItemKind.Directory, cancellationToken);
+        var openedFolder = result.Value!;
         _navigator.Navigate(new DesktopNavigationRequest(
             DesktopRoute.Browse,
-            new BrowserNavigationContext(result.Value.DirectoryPath, result.Value.Items)));
+            new BrowserNavigationContext(openedFolder.DirectoryPath, openedFolder.Items)));
     }
 
     private async Task OpenRecentAsync(RecentItemViewModel item, CancellationToken cancellationToken)

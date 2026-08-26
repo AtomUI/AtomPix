@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             x:Class="AtomPix.Desktop.Views.BatchResultDialogView"
+             x:DataType="vm:BatchTaskViewModel">
+    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16">
+        <StackPanel Spacing="6">
+            <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding ResultTitle}" />
+            <TextBlock Text="{Binding ResultSummary}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding ResultSizeChange}" Opacity="0.68" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border Grid.Row="1" BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
+                BorderThickness="1" CornerRadius="8">
+            <ScrollViewer MaxHeight="410" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BatchItemViewModel">
+                            <Border Padding="12,10"
+                                    BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
+                                    BorderThickness="0,0,0,1">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="3">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="1" Text="{Binding StatusText}" />
+                                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding ErrorText}"
+                                               IsVisible="{Binding HasError}"
+                                               Foreground="{atom:SharedTokenResource ColorError}"
+                                               TextWrapping="Wrap" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <atom:Button Content="重试失败项" Command="{Binding RetryFailedCommand}"
+                         IsVisible="{Binding HasFailedItems}" />
+            <atom:Button Content="处理未完成项" Command="{Binding ProcessUnfinishedCommand}"
+                         IsVisible="{Binding HasUnfinishedItems}" />
+            <atom:Button Content="自动重命名处理跳过项" Command="{Binding ProcessSkippedWithAutoRenameCommand}"
+                         IsVisible="{Binding HasSkippedItems}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

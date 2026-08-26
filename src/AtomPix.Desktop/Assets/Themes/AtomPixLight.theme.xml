@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Theme xmlns="https://atomui.net/schemas/theme/v1"
+       Id="AtomPixLight"
+       Name="AtomPix Light"
+       Appearance="Light">
+  <Algorithms>
+    <Algorithm Id="Default" />
+  </Algorithms>
+  <Tokens>
+    <Token Name="ColorBgLayout" Value="#FBFCFE" />
+    <Token Name="ColorBgContainer" Value="#FFFFFF" />
+    <Token Name="ColorFillAlter" Value="#F8FAFC" />
+    <Token Name="ColorBorderSecondary" Value="#DCE3EB" />
+    <Token Name="BorderRadiusLG" Value="10" />
+  </Tokens>
+  <Controls>
+    <Control Catalog="AtomUI" Id="Window">
+      <Tokens>
+        <Token Name="DefaultBackground" Value="#00FFFFFF" />
+      </Tokens>
+    </Control>
+  </Controls>
+</Theme>

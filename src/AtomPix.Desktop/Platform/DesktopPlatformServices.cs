@@ -52,15 +52,6 @@ public interface IDesktopDialogService
     Task ShowErrorAsync(string title, string message, CancellationToken cancellationToken);
 
     Task ShowInformationAsync(string title, string message, CancellationToken cancellationToken);
-
-    Task<UnsavedChangesChoice> ChooseUnsavedChangesAsync(CancellationToken cancellationToken);
-}
-
-public enum UnsavedChangesChoice
-{
-    Save,
-    Discard,
-    Stay
 }
 
 public interface IDesktopClipboardService
@@ -68,12 +59,36 @@ public interface IDesktopClipboardService
     Task<bool> SetTextAsync(string text, CancellationToken cancellationToken);
 }
 
-public interface IDesktopAppearanceService
-{
-    void Apply(AtomPix.Core.Settings.ThemeMode themeMode);
-}
-
 public interface IDesktopDispatcher
 {
     void Post(Action action);
+}
+
+public enum DesktopFeedbackSeverity
+{
+    Information,
+    Success,
+    Warning,
+    Error
+}
+
+public sealed record DesktopNotificationRequest(
+    string Title,
+    string Content,
+    DesktopFeedbackSeverity Severity,
+    TimeSpan Expiration,
+    Action? OnClick = null);
+
+/// <summary>
+/// Window-level feedback boundary. View models publish semantic feedback without
+/// owning AtomUI controls or depending on a particular overlay host.
+/// </summary>
+public interface IDesktopFeedbackService
+{
+    void ShowMessage(
+        string message,
+        DesktopFeedbackSeverity severity = DesktopFeedbackSeverity.Information,
+        TimeSpan? expiration = null);
+
+    void ShowNotification(DesktopNotificationRequest request);
 }

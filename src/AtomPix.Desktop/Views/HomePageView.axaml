@@ -7,149 +7,77 @@
              x:Class="AtomPix.Desktop.Views.HomePageView"
              x:DataType="vm:HomePageViewModel"
              DragDrop.AllowDrop="True">
-  <Grid>
-    <atom:ScrollViewer>
-        <StackPanel Margin="48,38" Spacing="28" MaxWidth="1040" HorizontalAlignment="Stretch">
-            <StackPanel Spacing="8">
-                <TextBlock Text="图片处理，从这里开始" FontSize="30" FontWeight="SemiBold" />
-                <TextBlock Text="所有处理都在本地完成。打开一张图片浏览，或打开一个文件夹查看其中的图片。"
-                           FontSize="15" Opacity="0.68" TextWrapping="Wrap" />
-            </StackPanel>
+    <Grid Background="{DynamicResource AtomPixWorkspaceSurfaceBrush}" ClipToBounds="True">
+        <Ellipse Width="520" Height="520"
+                 HorizontalAlignment="Right" VerticalAlignment="Top"
+                 Margin="0,-245,-190,0" Fill="#14FF4D4F" IsHitTestVisible="False" />
+        <Ellipse Width="560" Height="560"
+                 HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                 Margin="-240,0,0,-310" Fill="#101677FF" IsHitTestVisible="False" />
 
-            <atom:Alert Type="Error"
-                        IsShowIcon="True"
-                        Message="无法打开图片来源"
-                        Description="{Binding ErrorMessage}"
-                        IsVisible="{Binding HasError}" />
-            <controls:DiagnosticIdView DataContext="{Binding Diagnostic}" />
-
-            <atom:Card SizeType="Middle" HorizontalAlignment="Stretch">
-                <Grid ColumnDefinitions="*,Auto" Margin="12">
-                    <StackPanel Spacing="6" VerticalAlignment="Center">
-                        <TextBlock Text="浏览图片" FontSize="20" FontWeight="SemiBold" />
-                        <TextBlock Text="打开单张图片，或浏览文件夹中的当前层级图片。"
-                                   Opacity="0.64" />
-                        <TextBlock Text="也可以将一张图片或一个文件夹拖到此页"
-                                   FontSize="12" Opacity="0.52" />
+        <Grid x:Name="HomeContentLayout" Margin="88,28,40,28">
+            <Grid x:Name="HomeStage"
+                  Height="520"
+                  MaxWidth="920"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Center">
+                <Grid Margin="54,30,54,38" RowDefinitions="Auto,*">
+                    <StackPanel x:Name="HomeHeader" HorizontalAlignment="Center" Spacing="6">
+                        <TextBlock Text="开始使用 AtomPix" FontSize="28" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="打开图片或文件夹，开始本地图片处理" FontSize="14" Opacity="0.62"
+                                   HorizontalAlignment="Center" />
                     </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <atom:Button Content="打开图片"
-                                     ButtonType="Primary"
-                                     Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
-                                     Command="{Binding OpenImageCommand}" />
-                        <atom:Button Content="打开文件夹"
-                                     Icon="{antdicons:AntDesignIconProvider Kind=FolderOpenOutlined}"
-                                     Command="{Binding OpenFolderCommand}" />
-                    </StackPanel>
-                </Grid>
-            </atom:Card>
 
-            <StackPanel Spacing="14">
-                <TextBlock Text="快捷处理" FontSize="18" FontWeight="SemiBold" />
-                <UniformGrid Columns="4" Rows="1">
-                    <atom:Card Header="压缩" Margin="0,0,9,0" SizeType="Middle">
-                        <StackPanel Spacing="16">
-                            <TextBlock Text="减小图片体积，不改变分辨率。" TextWrapping="Wrap" Opacity="0.64" />
-                            <atom:Button Content="选择图片" Command="{Binding OpenForCompressCommand}" />
-                        </StackPanel>
-                    </atom:Card>
-                    <atom:Card Header="转换" Margin="3,0,6,0" SizeType="Middle">
-                        <StackPanel Spacing="16">
-                            <TextBlock Text="转换 JPEG、PNG 与 WebP。" TextWrapping="Wrap" Opacity="0.64" />
-                            <atom:Button Content="选择图片" Command="{Binding OpenForConvertCommand}" />
-                        </StackPanel>
-                    </atom:Card>
-                    <atom:Card Header="调整尺寸" Margin="6,0,3,0" SizeType="Middle">
-                        <StackPanel Spacing="16">
-                            <TextBlock Text="按像素或百分比调整宽高。" TextWrapping="Wrap" Opacity="0.64" />
-                            <atom:Button Content="选择图片" Command="{Binding OpenForResizeCommand}" />
-                        </StackPanel>
-                    </atom:Card>
-                    <atom:Card Header="裁剪" Margin="9,0,0,0" SizeType="Middle">
-                        <StackPanel Spacing="16">
-                            <TextBlock Text="选取并保留图片中的区域。" TextWrapping="Wrap" Opacity="0.64" />
-                            <atom:Button Content="选择图片" Command="{Binding OpenForCropCommand}" />
-                        </StackPanel>
-                    </atom:Card>
-                </UniformGrid>
-            </StackPanel>
-
-            <atom:Card Header="最近记录" SizeType="Middle" HorizontalAlignment="Stretch">
-                <Grid>
-                    <atom:Spin IsVisible="{Binding IsRecentLoading}" HorizontalAlignment="Center" Margin="0,20" />
-                    <atom:Empty PresetImage="Simple" Description="还没有打开记录" IsVisible="{Binding IsRecentEmpty}" />
-                    <atom:Alert Type="Error" IsShowIcon="True" Message="最近记录读取失败" Description="{Binding RecentErrorMessage}"
-                                IsVisible="{Binding HasRecentError}" />
-                    <Grid IsVisible="{Binding HasRecentItems}" RowDefinitions="Auto,Auto">
-                        <ItemsControl ItemsSource="{Binding RecentItems}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:RecentItemViewModel">
-                                    <atom:Button Margin="0,0,8,8" Padding="12,8" Click="OpenRecentClick"
-                                                 atom:ToolTip.Tip="{Binding PathText}">
-                                        <StackPanel Spacing="2" MinWidth="150" MaxWidth="220">
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding KindText}" FontSize="11" Opacity="0.58" />
-                                            <TextBlock Text="路径失效，可重新定位" FontSize="11" Foreground="#D4380D"
-                                                       IsVisible="{Binding IsUnavailable}" />
-                                        </StackPanel>
-                                    </atom:Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <atom:Button Grid.Row="1" Content="查看全部" Command="{Binding ShowAllRecentCommand}" HorizontalAlignment="Right" />
-                    </Grid>
-                </Grid>
-            </atom:Card>
-        </StackPanel>
-    </atom:ScrollViewer>
-
-    <Border Margin="20"
-            CornerRadius="10"
-            BorderThickness="2"
-            BorderBrush="#1677FF"
-            Background="#181677FF"
-            IsHitTestVisible="False"
-            IsVisible="{Binding IsDragOver}"
-            ZIndex="20">
-        <TextBlock Text="松开以打开图片来源"
-                   FontSize="22"
-                   FontWeight="SemiBold"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center" />
-    </Border>
-
-    <atom:Drawer Title="最近记录" IsOpen="{Binding IsRecentDrawerOpen, Mode=TwoWay}" Placement="Right" DialogSize="440">
-        <atom:Drawer.Footer>
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="移除记录不会删除磁盘文件" Opacity="0.58" VerticalAlignment="Center" />
-                <atom:Button Grid.Column="1" Content="清空记录" IsDanger="True" Command="{Binding ClearRecentCommand}" />
-            </Grid>
-        </atom:Drawer.Footer>
-        <Grid>
-            <atom:Alert Type="Error" IsShowIcon="True" Message="最近记录操作失败" Description="{Binding RecentErrorMessage}"
-                        IsVisible="{Binding HasRecentError}" VerticalAlignment="Top" />
-            <atom:ListView AutomationProperties.Name="最近记录列表" ItemsSource="{Binding RecentItems}" Margin="0,12,0,0">
-                <atom:ListView.ItemTemplate>
-                    <DataTemplate x:DataType="vm:RecentItemViewModel">
-                        <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8" Margin="4,6">
-                            <StackPanel Spacing="3">
-                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding PathText}" Opacity="0.58" FontSize="11" TextTrimming="CharacterEllipsis"
-                                           atom:ToolTip.Tip="{Binding PathText}" />
-                                <TextBlock Text="{Binding OpenedText}" Opacity="0.48" FontSize="11" />
+                    <atom:DashedBorder x:Name="HomeDropArea"
+                                       Grid.Row="1"
+                                       AutomationProperties.Name="拖入图片或文件夹"
+                                       Margin="0,28,0,0"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       Background="{DynamicResource AtomPixHomeDropSurfaceBrush}"
+                                       BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
+                                       BorderThickness="1"
+                                       CornerRadius="18"
+                                       StrokeDashArray="6,5">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="15">
+                            <Border Width="104" Height="104" CornerRadius="52"
+                                    Background="{DynamicResource AtomPixHomeBrandDiscBrush}">
+                                <Image Width="64" Height="64"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Source="/Assets/Branding/AtomPix-128.png" />
+                            </Border>
+                            <TextBlock Text="拖入图片或文件夹" FontSize="21" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" Spacing="12"
+                                        HorizontalAlignment="Center" Margin="0,4,0,0">
+                                <atom:Button Content="打开图片" Width="166" Height="44" ButtonType="Primary"
+                                             Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
+                                             Command="{Binding OpenImageCommand}" />
+                                <atom:Button Content="打开文件夹" Width="166" Height="44"
+                                             Icon="{antdicons:AntDesignIconProvider Kind=FolderOpenOutlined}"
+                                             Command="{Binding OpenFolderCommand}" />
                             </StackPanel>
-                            <atom:Button Grid.Column="1" Content="打开" Click="OpenRecentClick" VerticalAlignment="Center" />
-                            <atom:Button Grid.Column="2" Content="重新定位" Click="RelocateRecentClick"
-                                         IsVisible="{Binding IsUnavailable}" VerticalAlignment="Center" />
-                            <atom:Button Grid.Column="3" Content="移除" Click="RemoveRecentClick" VerticalAlignment="Center" />
-                        </Grid>
-                    </DataTemplate>
-                </atom:ListView.ItemTemplate>
-            </atom:ListView>
+                        </StackPanel>
+                    </atom:DashedBorder>
+                </Grid>
+            </Grid>
+
+            <StackPanel MaxWidth="760" Margin="0,18,0,0"
+                        HorizontalAlignment="Center" VerticalAlignment="Top" ZIndex="10">
+                <atom:Alert Type="Error" IsShowIcon="True"
+                            Message="无法打开图片来源" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
+                <controls:DiagnosticIdView DataContext="{Binding Diagnostic}" />
+            </StackPanel>
         </Grid>
-    </atom:Drawer>
-  </Grid>
+
+        <Border Width="940" Height="540"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                CornerRadius="26" BorderThickness="2"
+                BorderBrush="#1677FF" Background="#181677FF"
+                IsHitTestVisible="False" IsVisible="{Binding IsDragOver}" ZIndex="20">
+            <TextBlock Text="松开以打开图片来源" FontSize="22" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+    </Grid>
 </UserControl>

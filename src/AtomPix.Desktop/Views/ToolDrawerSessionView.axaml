@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net" xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             x:Class="AtomPix.Desktop.Views.ToolDrawerSessionView" x:DataType="vm:ToolDrawerSessionViewModel">
+    <Grid RowDefinitions="*,Auto" Background="{DynamicResource AtomPixInspectorSurfaceBrush}">
+        <ContentControl Content="{Binding SingleContent}" IsEnabled="{Binding CanEditContent}" />
+
+        <Border Grid.Row="1" Padding="20,12"
+                Background="{DynamicResource AtomPixInspectorSurfaceBrush}"
+                BorderBrush="{DynamicResource AtomPixInspectorDividerBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10" IsVisible="{Binding IsIdle}">
+                    <atom:Button Classes="AtomPixInspectorPrimaryAction"
+                                 Grid.ColumnSpan="{Binding SingleActionColumnSpan}"
+                                 Content="{Binding SingleActionLabel}" ButtonType="Primary"
+                                 Command="{Binding SingleStartCommand}" />
+                    <atom:Button Grid.Column="1" Classes="AtomPixInspectorPrimaryAction"
+                                 Content="{Binding BatchActionLabel}" ButtonType="Primary"
+                                 Command="{Binding StartBatchCommand}"
+                                 IsVisible="{Binding HasBatchOption}" />
+                </Grid>
+
+                <atom:Button Classes="AtomPixInspectorPrimaryAction"
+                             Content="取消任务" IsDanger="True"
+                             Command="{Binding SingleCancelCommand}"
+                             IsVisible="{Binding IsSingleProcessing}" />
+
+                <StackPanel Spacing="8" IsVisible="{Binding IsBatchExecuting}">
+                    <atom:ProgressBar x:Name="BatchProgressBar"
+                                      AutomationProperties.Name="批量处理进度"
+                                      Minimum="0" Maximum="1"
+                                      IsProgressInfoVisible="False"
+                                      Value="{Binding BatchProgressRatio}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                        <TextBlock VerticalAlignment="Center"
+                                   Text="{Binding BatchProgressSummary}"
+                                   TextWrapping="Wrap" Opacity="0.7" />
+                        <atom:Button Grid.Column="1" Content="取消任务" IsDanger="True"
+                                     Command="{Binding BatchCancelCommand}"
+                                     IsEnabled="{Binding IsBatchProcessing}" />
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

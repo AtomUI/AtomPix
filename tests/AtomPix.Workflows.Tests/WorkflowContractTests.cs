@@ -173,6 +173,7 @@ public sealed class WorkflowContractTests
         Assert.True(result.Succeeded);
         Assert.Equal(ImageJobStatus.Succeeded, result.Value!.JobResult.Status);
         Assert.EndsWith("a_atompix_1.jpg", result.Value.JobResult.OutputPath!.Value.Value);
+        Assert.Equal(OutputWriteDisposition.AutoRenamed, result.Value.OutputDisposition);
     }
 
     [Fact]
@@ -188,7 +189,27 @@ public sealed class WorkflowContractTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(ImageJobStatus.Skipped, result.Value!.JobResult.Status);
+        Assert.Equal(OutputWriteDisposition.SkippedExisting, result.Value.OutputDisposition);
         Assert.False(((FakeImageProcessor)services.ImageProcessor).CompressCalled);
+    }
+
+    [Fact]
+    public async Task CompressImageWorkflow_overwrite_reports_actual_output_disposition()
+    {
+        var fs = new FakeFileSystemService();
+        fs.ExistingFiles.Add(Path.Combine("AtomPix_Output", "a_atompix.jpg"));
+        var policy = new OutputPolicy(OutputPolicy.Default.LocationPolicy, OutputPolicy.Default.NamingPolicy, OverwritePolicy.Overwrite);
+        var services = CreateServices(fs);
+        var workflow = new CompressImageWorkflow(services);
+
+        var result = await workflow.ExecuteAsync(
+            new CompressImageRequest(new LocalPath("a.jpg"), CompressionProfile.BalancedDefault(), policy),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(ImageJobStatus.Succeeded, result.Value!.JobResult.Status);
+        Assert.Equal(OutputWriteDisposition.Overwritten, result.Value.OutputDisposition);
+        Assert.EndsWith("a_atompix.jpg", result.Value.JobResult.OutputPath!.Value.Value);
     }
 
     [Fact]
@@ -1118,6 +1139,27 @@ public sealed class WorkflowContractTests
         Assert.Equal(new ImageSize(10, 10), result.Value.InputSize);
         Assert.Equal(new ResolvedResizeSize(5, 5), result.Value.TargetSize);
         Assert.Equal(new ImageSize(5, 5), result.Value.ActualOutputSize);
+    }
+
+    [Fact]
+    public async Task ResizeImageWorkflow_still_encodes_when_prevent_upscaling_keeps_original_size()
+    {
+        var image = new FakeImageProcessor();
+        var workflow = new ResizeImageWorkflow(CreateServices(image: image));
+
+        var result = await workflow.ExecuteAsync(
+            new ResizeImageRequest(
+                new LocalPath("a.jpg"),
+                new PixelResizePolicy(20, 20, maintainAspectRatio: true, preventUpscaling: true),
+                OutputPolicy.Default,
+                SameFormatEncodingPolicy.Default),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(image.ResizeCalled);
+        Assert.Equal(ImageJobStatus.Succeeded, result.Value!.JobResult.Status);
+        Assert.Equal(new ResolvedResizeSize(10, 10), result.Value.TargetSize);
+        Assert.Equal(new ImageSize(10, 10), result.Value.ActualOutputSize);
     }
 
     [Fact]

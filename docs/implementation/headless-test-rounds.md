@@ -336,5 +336,5 @@ Publish Workflows win-x64 self-contained: passed
 Publish Imaging.Magick win-x64 self-contained: passed
 ```
 
-阶段性结论：底层/headless 可以进入 Desktop / UI 原型阶段；正式发布前仍需补 Desktop 产物、NativeAOT 实验、真实用户图片集、大图性能和跨平台权限。
+阶段性结论：底层/headless 可以进入 Desktop / UI 实现阶段；正式发布前仍需补 Desktop 产物、NativeAOT 实验、真实用户图片集、大图性能和跨平台权限。
 

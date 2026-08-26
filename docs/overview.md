@@ -31,7 +31,7 @@ AtomPix 是一款基于 C#、Avalonia 和 AtomUI 的跨平台桌面图片工具�
 | `architecture/` | 顶层架构、模块分层、依赖关系、项目目录规划和工程约束。 |
 | `modules/` | 各模块职责、边界、允许内容、禁止内容和推荐目录。 |
 | `implementation/` | 阶段性实现策略、测试策略、发布验证和工程执行说明。 |
-| `ui-prototype/` | Desktop 信息架构、MVP 页面原型、主要状态和 UI 契约映射。 |
+| `ui-design/` | 当前有效的 Desktop 视觉结构、交互说明和 SVG 原型。 |
 | `document-consistency.md` | 文档权威顺序、当前设计/历史记录区分和一致性维护规则。 |
 
 ## 阅读入口
@@ -53,7 +53,7 @@ AtomPix 是一款基于 C#、Avalonia 和 AtomUI 的跨平台桌面图片工具�
 12. docs/modules/desktop/overview.md
 13. docs/modules/desktop/interaction-state-design.md
 14. docs/modules/desktop/atomui-component-mapping.md
-15. docs/ui-prototype/README.md
+15. docs/ui-design/README.md
 16. docs/implementation/testing-and-release.md
 17. docs/implementation/roadmap.md
 18. docs/product/feature-detailing-plan.md（历史讨论顺序，可选）

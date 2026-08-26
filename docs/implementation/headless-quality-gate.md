@@ -1,27 +1,27 @@
 # AtomPix Headless 质量闸门（历史验收记录）
 
-> 文档状态：进入 UI 原型前的历史 headless 工程卫生基线
+> 文档状态：进入 Desktop / UI 实现前的历史 headless 工程卫生基线
 >
 > 基线时间：2026-06-26
 >
 > 范围：Core、Imaging.Abstractions、Infrastructure、Imaging.Magick、Workflows；不包含 Desktop / UI。
 
-> 当前状态：本文证明当时的 Headless 基线足以进入 UI 原型阶段；UI 原型和交互设计现已完成。本文不覆盖后来冻结的独立 Resize/Crop、实时批量进度、资源保护和诊断目标契约，现行测试计划见 `testing-and-release.md` 第 32–46 节。
+> 当前状态：本文证明当时的 Headless 基线足以进入 Desktop / UI 实现阶段。旧视觉基线现已退役，本文不构成当前界面视觉规范；本文也不覆盖后来冻结的独立 Resize/Crop、实时批量进度、资源保护和诊断目标契约，现行测试计划见 `testing-and-release.md` 第 32–46 节。
 
 ## 1. 目标
 
-本质量闸门用于判断 AtomPix 底层/headless 能力是否已经稳定到可以进入 Desktop / UI 原型阶段。
+本质量闸门用于判断 AtomPix 底层/headless 能力是否已经稳定到可以进入 Desktop / UI 实现阶段。
 
 当前结论：
 
 ```text
-底层模块已具备进入 UI 原型阶段的基础条件，但仍不能视为发布就绪。
+底层模块已具备进入 Desktop / UI 实现阶段的基础条件，但仍不能视为发布就绪。
 ```
 
-可以进入 UI 原型阶段的含义：
+可以进入 Desktop / UI 实现阶段的含义：
 
 - 可以创建 `AtomPix.Desktop` 工程。
-- 可以开始 Avalonia / AtomUI 组合根、页面和 ViewModel 原型。
+- 可以开始 Avalonia / AtomUI 组合根、页面和 ViewModel 实现。
 - UI 层应通过 Workflows 和 DI 组合根调用底层能力。
 
 不代表：
@@ -188,7 +188,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 结论：
 
 ```text
-通过上述验证后，可以进入 Desktop / UI 原型阶段。
+通过上述验证后，可以进入 Desktop / UI 实现阶段。
 ```
 ## 9. Round 3 第四阶段验收收口记录
 
@@ -239,7 +239,7 @@ tests/TestOutputs/Images/
 阶段性判断：
 
 ```text
-当前 headless 底层能力可以阶段性收口，可以进入 Desktop / UI 原型讨论和实现。
+当前 headless 底层能力可以阶段性收口，可以进入 Desktop / UI 讨论和实现。
 ```
 
 边界：

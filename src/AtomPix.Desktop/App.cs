@@ -6,9 +6,11 @@ using AtomPix.Desktop.Shell;
 using AtomPix.Desktop.Platform;
 using AtomUI;
 using AtomUI.Desktop.Controls;
+using AtomUI.Labs.Controls.ImageGallery;
 using AtomUI.Theme;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
 
 public sealed class App : Application
@@ -18,15 +20,19 @@ public sealed class App : Application
 
     public override void Initialize()
     {
+        var defaultCulture = CultureInfo.GetCultureInfo("zh-CN");
+        CultureInfo.DefaultThreadCurrentCulture = defaultCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = defaultCulture;
         this.UseAtomUI(builder =>
         {
-            builder.WithApplicationId("AtomPix");
-            builder.WithDefaultCultureInfo(CultureInfo.GetCultureInfo("zh-CN"));
-            builder.WithInitialTheme(IThemeManager.DEFAULT_THEME_ID);
+            builder.WithDefaultCultureInfo(defaultCulture);
             builder.UseAlibabaSansFont();
             builder.UseDesktopControls();
             builder.UseDesktopColorPicker();
+            builder.UseImageGallery();
         });
+
+        AvaloniaXamlLoader.Load(this);
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -34,7 +40,9 @@ public sealed class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             _services = DesktopCompositionRoot.Build();
-            desktop.MainWindow = new MainWindow(_services.GetRequiredService<ShellViewModel>());
+            desktop.MainWindow = new MainWindow(
+                _services.GetRequiredService<ShellViewModel>(),
+                _services.GetRequiredService<AvaloniaDesktopFeedbackService>());
             _exceptionBoundary = _services.GetRequiredService<DesktopExceptionBoundary>();
             _exceptionBoundary.Attach();
             desktop.Exit += HandleExit;

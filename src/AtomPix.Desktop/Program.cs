@@ -1,6 +1,5 @@
 namespace AtomPix.Desktop;
 
-using AtomUI;
 using Avalonia;
 
 internal static class Program
@@ -11,7 +10,6 @@ internal static class Program
 
     public static AppBuilder BuildAvaloniaApp() => AppBuilder
         .Configure<App>()
-        .UseAtomUIPlatformDetect(AtomUIWindowingPlatform.Auto)
-        .WithAtomUIDefaultOptions()
+        .UsePlatformDetect()
         .LogToTrace();
 }

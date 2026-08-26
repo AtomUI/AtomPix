@@ -83,7 +83,7 @@ public abstract record ResizePolicy
 
 public sealed record PixelResizePolicy : ResizePolicy
 {
-    public PixelResizePolicy(int? width, int? height, bool maintainAspectRatio)
+    public PixelResizePolicy(int? width, int? height, bool maintainAspectRatio, bool preventUpscaling = false)
     {
         if (width is <= 0)
         {
@@ -108,6 +108,7 @@ public sealed record PixelResizePolicy : ResizePolicy
         Width = width;
         Height = height;
         MaintainAspectRatio = maintainAspectRatio;
+        PreventUpscaling = preventUpscaling;
     }
 
     public int? Width { get; }
@@ -116,29 +117,48 @@ public sealed record PixelResizePolicy : ResizePolicy
 
     public bool MaintainAspectRatio { get; }
 
+    public bool PreventUpscaling { get; }
+
     public override ResolvedResizeSize Resolve(ImageSize inputSize)
     {
+        ResolvedResizeSize resolved;
         if (!MaintainAspectRatio)
         {
-            return new ResolvedResizeSize(Width!.Value, Height!.Value);
+            resolved = new ResolvedResizeSize(Width!.Value, Height!.Value);
         }
-
-        if (Width is { } width && Height is null)
+        else if (Width is { } width && Height is null)
         {
             var resolvedHeight = RoundAndClamp((decimal)inputSize.Height * width / inputSize.Width, nameof(Width));
-            return new ResolvedResizeSize(width, resolvedHeight);
+            resolved = new ResolvedResizeSize(width, resolvedHeight);
         }
-
-        if (Height is { } height && Width is null)
+        else if (Height is { } height && Width is null)
         {
             var resolvedWidth = RoundAndClamp((decimal)inputSize.Width * height / inputSize.Height, nameof(Height));
-            return new ResolvedResizeSize(resolvedWidth, height);
+            resolved = new ResolvedResizeSize(resolvedWidth, height);
+        }
+        else
+        {
+            var scale = Math.Min((decimal)Width!.Value / inputSize.Width, (decimal)Height!.Value / inputSize.Height);
+            resolved = new ResolvedResizeSize(
+                FloorAndClamp(inputSize.Width * scale, nameof(Width)),
+                FloorAndClamp(inputSize.Height * scale, nameof(Height)));
         }
 
-        var scale = Math.Min((decimal)Width!.Value / inputSize.Width, (decimal)Height!.Value / inputSize.Height);
+        if (!PreventUpscaling)
+        {
+            return resolved;
+        }
+
+        if (MaintainAspectRatio)
+        {
+            return resolved.Width > inputSize.Width || resolved.Height > inputSize.Height
+                ? new ResolvedResizeSize(inputSize.Width, inputSize.Height)
+                : resolved;
+        }
+
         return new ResolvedResizeSize(
-            FloorAndClamp(inputSize.Width * scale, nameof(Width)),
-            FloorAndClamp(inputSize.Height * scale, nameof(Height)));
+            Math.Min(resolved.Width, inputSize.Width),
+            Math.Min(resolved.Height, inputSize.Height));
     }
 }
 

@@ -18,29 +18,6 @@ public sealed partial class HomePageView : UserControl
         AddHandler(DragDrop.DropEvent, SourceDrop, RoutingStrategies.Tunnel | RoutingStrategies.Bubble);
     }
 
-    private void OpenRecentClick(object? sender, RoutedEventArgs args)
-    {
-        if (sender is AtomUI.Desktop.Controls.Button { DataContext: RecentItemViewModel item }
-            && DataContext is HomePageViewModel viewModel)
-            viewModel.OpenRecentCommand.Execute(item);
-    }
-
-    private void RemoveRecentClick(object? sender, RoutedEventArgs args)
-    {
-        if (sender is AtomUI.Desktop.Controls.Button { DataContext: RecentItemViewModel item }
-            && DataContext is HomePageViewModel viewModel)
-            viewModel.RemoveRecentCommand.Execute(item);
-    }
-
-    private void RelocateRecentClick(object? sender, RoutedEventArgs args)
-    {
-        if (sender is AtomUI.Desktop.Controls.Button { DataContext: RecentItemViewModel item }
-            && DataContext is HomePageViewModel viewModel)
-        {
-            viewModel.RelocateRecentCommand.Execute(item);
-        }
-    }
-
     private void SourceDragEnterOrOver(object? sender, DragEventArgs args)
     {
         var viewModel = DataContext as HomePageViewModel;

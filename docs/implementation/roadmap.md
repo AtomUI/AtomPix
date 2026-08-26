@@ -376,17 +376,17 @@ linux-x64
 osx-arm64
 ```
 
-NativeAOT 暂作为实验项：
+NativeAOT 暂作为实验项；2026-08-26 的 win-x64 已完成本机代码生成并通过 8 秒启动烟测，但因 Skia/HarfBuzz/Magick.NET 本机动态库仍不是字面单文件，正式默认仍为压缩单文件 + Partial Trim：
 
 ```text
-dotnet publish -c Release -r win-x64 /p:PublishAot=true
+./eng/publish.ps1 -RuntimeIdentifier win-x64 -Version 0.1.0 -PublishMode NativeAot
 ```
 
-NativeAOT 失败不阻塞第一阶段 MVP，但必须记录失败原因和阻塞点。
+NativeAOT 的完整 UI、四大功能与跨平台回归不阻塞第一阶段 MVP；失败时必须记录原因和阻塞点。
 
 ## 11. Phase 8: 目标契约补齐与 Desktop / UI
 
-Desktop 信息架构、原型和逐控件状态设计已经完成，不再“另行设计”。进入页面代码实现前，必须先补齐该页面依赖的正式目标契约，或提供语义等价的适配实现。
+Desktop 的业务交互、逐控件状态和组件边界已经完成；当前正式视觉目标冻结在 `docs/ui-design/README.md`。生产代码已经迁移为独立标题栏以及 Browse/Operate 普通两列工作区，并使用仓库内固定版本的 `AtomUI.Labs.Controls.ImageGallery` 承担浏览主体。后续视觉调整仍不得改写 Core/Workflow 语义。
 
 进入条件：
 
@@ -398,10 +398,9 @@ Workflows.Tests 通过
 Headless 业务场景测试通过
 ```
 
-已冻结的设计入口：
+仍有效的实现入口：
 
 ```text
-docs/ui-prototype/README.md
 docs/modules/desktop/overview.md
 docs/modules/desktop/interaction-state-design.md
 docs/modules/desktop/atomui-component-mapping.md
@@ -413,4 +412,6 @@ docs/implementation/testing-and-release.md（第 32–46 节）
 
 Desktop 首次落地时固定经过验证的 AtomUI/Avalonia 包版本，只注册主桌面控件和 ColorPicker 主题，并按组件映射文档的顺序先完成 Shell 与公共反馈，再实现图片视口、页面和虚拟化批量 ListView。禁止引用或注册 AtomUI DataGrid 包；`out-lib/AtomUI` 只是本地源码核对副本，不进入解决方案项目引用。
 
-截至 2026-08-07，本阶段的第一阶段功能施工、Desktop 交互闭环和工程发布门禁已经贯通：正式 Shell、首页、浏览器、四类单张页面、三类批量页面、设置、最近记录、诊断边界和关闭确认均已接入生产组合根，通用空页已移除。浏览器有界缓存与离场释放、结果文件存活检查、批量终态只读和精确恢复也已完成。Avalonia/AtomUI 真实无头渲染与输入自动化、2000 项批处理、10000 行虚拟化、16MP 并发预览和日志压力测试均已成为可执行门禁；CI 对 Windows/Linux/macOS 进行构建与 UI 自动化，并在原生 Runner 生成自包含单文件归档、SHA-256 和启动烟测。具体终态以 `testing-and-release.md` 第 51 节为准。多 DPI 和发行主体的平台签名/公证仍属于发布验收与外部凭据工作，不得把密钥写入源码。屏幕阅读器、UIA 动作模式和全页面纯键盘巡检不属于当前版本需求。
+截至 2026-08-26，本阶段功能施工、Desktop 交互闭环、ImageGallery/Shell 迁移和工程发布门禁均已贯通。图标轨、走廊统一批量输入、普通左右操作工作区、Crop 安全工作区和双列连续滚动设置页已接入生产组合根；旧宽 NavMenu、覆盖式 Drawer、设置 Overlay、独立批量来源页面和旧 UIA 导航口径已经清理。单张与批量处理复用同一个工具 View：批量运行只在原 Footer 增量显示进度和取消，终态由窗口级 Message/Notification 反馈并可打开批量结果 Dialog，不再跳转到第二套批量页。Avalonia/AtomUI 真实无头渲染与输入自动化、2000 项批处理、10000 行虚拟化、16MP 并发预览和日志压力测试均为可执行门禁；CI 对 Windows/Linux/macOS 构建并在原生 Runner 生成自包含单文件归档、校验文件和启动烟测。多 DPI 和发行主体的平台签名/公证仍属于发布验收与外部凭据工作，不得把密钥写入源码；屏幕阅读器和全页面纯键盘巡检不属于当前版本需求。
+
+2026-08-23 冻结、并于 2026-08-25 完成 Phase 8 技术重构：图片浏览器基础设施已迁移到 `AtomUI.Labs.Controls.ImageGallery`，Shell 已取消沉浸式标题栏和覆盖式 Drawer，改为独立标题栏、无工具时全宽 ImageGallery、有工具时左侧工作区与约 `380 px` 右侧处理面板并列。在正式 NuGet 发布前，继续使用复制到 AtomPix 仓库内、固定版本和 SHA-256 的本地 nupkg；禁止跨仓库 ProjectReference 或绝对路径 restore。供应链与许可门禁、版本/主题兼容、Desktop item/source adapter、Shell 两列布局、行为/压力回归和旧画廊清理均已进入生产实现，细则见 `docs/modules/desktop/atomui-labs-imagegallery-migration.md`。

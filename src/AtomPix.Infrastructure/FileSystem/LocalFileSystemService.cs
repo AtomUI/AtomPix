@@ -17,6 +17,11 @@ public sealed class LocalFileSystemService : IFileSystemService
 
     public Task<OperationResult> CreateDirectoryAsync(LocalPath directory, CancellationToken cancellationToken)
     {
+        return RunOnWorkerAsync(() => CreateDirectoryOnWorkerAsync(directory, cancellationToken));
+    }
+
+    private static Task<OperationResult> CreateDirectoryOnWorkerAsync(LocalPath directory, CancellationToken cancellationToken)
+    {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -34,6 +39,11 @@ public sealed class LocalFileSystemService : IFileSystemService
     }
 
     public Task<OperationResult<long>> GetFileSizeAsync(LocalPath path, CancellationToken cancellationToken)
+    {
+        return RunOnWorkerAsync(() => GetFileSizeOnWorkerAsync(path, cancellationToken));
+    }
+
+    private static Task<OperationResult<long>> GetFileSizeOnWorkerAsync(LocalPath path, CancellationToken cancellationToken)
     {
         try
         {
@@ -57,6 +67,13 @@ public sealed class LocalFileSystemService : IFileSystemService
     }
 
     public Task<OperationResult<IReadOnlyList<LocalPath>>> EnumerateFilesAsync(
+        LocalPath directory,
+        CancellationToken cancellationToken)
+    {
+        return RunOnWorkerAsync(() => EnumerateFilesOnWorkerAsync(directory, cancellationToken));
+    }
+
+    private static Task<OperationResult<IReadOnlyList<LocalPath>>> EnumerateFilesOnWorkerAsync(
         LocalPath directory,
         CancellationToken cancellationToken)
     {
@@ -100,6 +117,9 @@ public sealed class LocalFileSystemService : IFileSystemService
                 ex));
         }
     }
+
+    private static Task<T> RunOnWorkerAsync<T>(Func<Task<T>> operation) =>
+        Task.Run(operation, CancellationToken.None);
 
     public OperationResult<LocalPath> NormalizePath(LocalPath path)
     {

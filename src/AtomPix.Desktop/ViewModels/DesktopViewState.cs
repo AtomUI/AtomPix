@@ -25,6 +25,15 @@ public interface IDesktopForegroundTask
     void RequestCancellation();
 }
 
+public interface IToolEditorActions : IDesktopForegroundTask
+{
+    string StartActionLabel { get; }
+
+    System.Windows.Input.ICommand StartActionCommand { get; }
+
+    System.Windows.Input.ICommand CancelActionCommand { get; }
+}
+
 public sealed record DesktopChoiceOption<T>(string Label, T Value)
 {
     public override string ToString() => Label;

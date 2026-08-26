@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 
 public sealed class DesktopExceptionBoundary : IDisposable
 {
+    private const string DetachedPopupTargetMessage = "Target control is not attached to the visual tree";
     private readonly ILogger<DesktopExceptionBoundary> _logger;
     private readonly IDesktopDialogService _dialogs;
     private int _attached;
@@ -38,13 +39,28 @@ public sealed class DesktopExceptionBoundary : IDisposable
     private void HandleDispatcherException(object? sender, DispatcherUnhandledExceptionEventArgs args)
     {
         args.Handled = true;
+        if (IsTransientPopupDetachment(args.Exception))
+        {
+            LogTransientPresentationException(args.Exception);
+            return;
+        }
+
         Report(args.Exception, "DesktopUnhandledException", showDialog: true);
     }
 
     private void HandleUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs args)
     {
         args.SetObserved();
-        Report(args.Exception, "DesktopUnobservedTaskException", showDialog: true);
+        if (IsTransientPopupDetachment(args.Exception))
+        {
+            LogTransientPresentationException(args.Exception);
+            return;
+        }
+
+        // This callback runs later on the finalizer thread and is not a reliable
+        // representation of the user's current foreground action. Keep the
+        // diagnostic, but never interrupt an otherwise healthy editing session.
+        Report(args.Exception, "DesktopUnobservedTaskException", showDialog: false);
     }
 
     private void HandleFatalException(object? sender, UnhandledExceptionEventArgs args)
@@ -64,6 +80,29 @@ public sealed class DesktopExceptionBoundary : IDisposable
 
         if (showDialog && Interlocked.Exchange(ref _dialogVisible, 1) == 0)
             Dispatcher.UIThread.Post(() => _ = ShowDialogAsync(diagnosticId));
+    }
+
+    internal static bool IsTransientPopupDetachment(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        var candidates = exception is AggregateException aggregate
+            ? aggregate.Flatten().InnerExceptions
+            : [exception];
+
+        return candidates.Count > 0
+               && candidates.All(candidate => candidate is InvalidOperationException
+                   && string.Equals(
+                       candidate.Message,
+                       DetachedPopupTargetMessage,
+                       StringComparison.Ordinal));
+    }
+
+    private void LogTransientPresentationException(Exception exception)
+    {
+        _logger.LogWarning(
+            new EventId(9002, "DesktopTransientPopupDetachment"),
+            exception,
+            "A transient popup target was detached before positioning completed; the popup was discarded.");
     }
 
     private async Task ShowDialogAsync(string diagnosticId)

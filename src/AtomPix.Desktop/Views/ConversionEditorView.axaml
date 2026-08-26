@@ -1,113 +1,54 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:atom="https://atomui.net"
-             xmlns:antdicons="https://atomui.net/icons/antdesign"
-             xmlns:controls="using:AtomPix.Desktop.Controls"
-             xmlns:vm="using:AtomPix.Desktop.ViewModels"
-             x:Class="AtomPix.Desktop.Views.ConversionEditorView"
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:atom="https://atomui.net" xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels" x:Class="AtomPix.Desktop.Views.ConversionEditorView"
              x:DataType="vm:ConversionEditorViewModel">
-    <Grid Margin="34,28" RowDefinitions="Auto,*">
-        <StackPanel Spacing="6" Margin="0,0,0,20">
-            <TextBlock Text="转换格式" FontSize="26" FontWeight="SemiBold" />
-            <TextBlock Text="在 JPEG、PNG 与 WebP 之间转换，透明区域处理规则随目标格式确定。" FontSize="14" Opacity="0.64" />
-        </StackPanel>
-
-        <Grid Grid.Row="1">
-            <StackPanel IsVisible="{Binding IsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="18">
-                <atom:Empty PresetImage="Default" Description="先选择一张要转换的图片" />
-                <atom:Button Content="选择图片" ButtonType="Primary" Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
-                             Command="{Binding SelectImageCommand}" HorizontalAlignment="Center" />
+    <Grid Background="{DynamicResource AtomPixInspectorSurfaceBrush}">
+        <atom:ScrollViewer Padding="20,16,20,18" VerticalScrollBarVisibility="Auto"
+                           IsEnabled="{Binding !IsProcessing}">
+            <StackPanel Spacing="18">
+                <StackPanel Spacing="3">
+                    <TextBlock Classes="AtomPixInspectorContextName" Text="{Binding InputName}" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{Binding InputSummary}" />
+                </StackPanel>
+                <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" />
+                <StackPanel Spacing="11">
+                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="输出格式" />
+                    <atom:Segmented AutomationProperties.Name="转换输出格式"
+                                    ItemsSource="{Binding Formats}"
+                                    SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
+                                    IsExpanding="True" />
+                    <Grid IsVisible="{Binding IsLossyFormat}" ColumnDefinitions="*,74" ColumnSpacing="8">
+                        <atom:Slider Classes="AtomPixInspectorAlignedSlider"
+                                     AutomationProperties.Name="转换输出质量"
+                                     Minimum="1" Maximum="100"
+                                     Value="{Binding QualitySlider, Mode=TwoWay}" />
+                        <atom:NumericUpDown AutomationProperties.Name="转换输出质量数值"
+                                            Grid.Column="1" Minimum="1" Maximum="100" FormatString="0"
+                                            Value="{Binding Quality, Mode=TwoWay}" />
+                    </Grid>
+                    <TextBlock Classes="AtomPixInspectorCaption" IsVisible="{Binding IsLossyFormat}"
+                               Text="有损格式使用质量值；PNG 自动忽略" />
+                </StackPanel>
+                <StackPanel IsVisible="{Binding ShowTransparencyBackground}" Spacing="10">
+                    <Border Classes="AtomPixInspectorDivider" />
+                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="透明区域" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="JPEG 背景色" />
+                    <Grid ColumnDefinitions="42,*,Auto,Auto" ColumnSpacing="6">
+                        <controls:RgbColorPickerBridge Width="36" Height="36"
+                                                       HexValue="{Binding BackgroundHex, Mode=TwoWay}" />
+                        <atom:TextBox Grid.Column="1" AutomationProperties.Name="透明区域背景色"
+                                      Text="{Binding BackgroundHex, Mode=TwoWay}" PlaceholderText="#RRGGBB" />
+                        <atom:Button Grid.Column="2" Content="白" Command="{Binding UseWhiteCommand}" />
+                        <atom:Button Grid.Column="3" Content="黑" Command="{Binding UseBlackCommand}" />
+                    </Grid>
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{Binding TransparencySummary}" TextWrapping="Wrap" />
+                </StackPanel>
+                <atom:CheckBox Content="移除拍摄信息与位置数据" IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
+                <Border Classes="AtomPixInspectorDivider" />
+                <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
+                <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}"
+                           Foreground="{atom:SharedTokenResource ColorError}" TextWrapping="Wrap" />
             </StackPanel>
-
-            <Grid IsVisible="{Binding IsContentReady}" ColumnDefinitions="*,372" ColumnSpacing="20">
-                <Grid Grid.Column="0" RowDefinitions="*,Auto">
-                    <atom:Card Header="原图预览" SizeType="Middle">
-                        <controls:AtomPixImageViewport PreviewBytes="{Binding PreviewBytes}"
-                                                       BackgroundHex="{Binding PreviewBackgroundHex}"
-                                                       Margin="14" />
-                    </atom:Card>
-                    <atom:Card Grid.Row="1" Margin="0,16,0,0" SizeType="Small">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Spacing="3">
-                                <TextBlock Text="{Binding InputName}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding InputSummary}" Opacity="0.62" />
-                            </StackPanel>
-                            <atom:Button Grid.Column="1" Content="更换图片" Command="{Binding SelectImageCommand}" />
-                        </Grid>
-                    </atom:Card>
-                </Grid>
-
-                <atom:ScrollViewer Grid.Column="1">
-                    <StackPanel Spacing="14">
-                        <atom:Card Header="输出格式" SizeType="Middle">
-                            <StackPanel Spacing="14">
-                                <atom:Segmented AutomationProperties.Name="输出格式" ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat, Mode=TwoWay}" IsExpanding="True" />
-                                <StackPanel IsVisible="{Binding IsLossyFormat}" Spacing="8">
-                                    <TextBlock Text="输出质量" />
-                                    <Grid ColumnDefinitions="*,82" ColumnSpacing="10">
-                                        <atom:Slider AutomationProperties.Name="转换质量" Minimum="1" Maximum="100" Value="{Binding QualitySlider, Mode=TwoWay}" />
-                                        <atom:NumericUpDown AutomationProperties.Name="转换质量数值" Grid.Column="1" Minimum="1" Maximum="100" FormatString="0" Value="{Binding Quality, Mode=TwoWay}" />
-                                    </Grid>
-                                </StackPanel>
-                            </StackPanel>
-                        </atom:Card>
-
-                        <atom:Card Header="透明区域" SizeType="Middle">
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="{Binding TransparencySummary}" TextWrapping="Wrap" />
-                                <StackPanel IsVisible="{Binding ShowTransparencyBackground}" Spacing="8">
-                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                                        <controls:RgbColorPickerBridge Width="42" HexValue="{Binding BackgroundHex, Mode=TwoWay}" />
-                                        <atom:TextBox AutomationProperties.Name="透明区域背景色十六进制值" Grid.Column="1" Text="{Binding BackgroundHex, Mode=TwoWay}" PlaceholderText="#RRGGBB" />
-                                    </Grid>
-                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                                        <atom:Button Content="白色" Command="{Binding UseWhiteCommand}" />
-                                        <atom:Button Grid.Column="1" Content="黑色" Command="{Binding UseBlackCommand}" />
-                                    </Grid>
-                                </StackPanel>
-                            </StackPanel>
-                        </atom:Card>
-
-                        <atom:Card Header="拍摄信息" SizeType="Middle">
-                            <StackPanel Spacing="8">
-                                <atom:CheckBox Content="移除拍摄信息与位置数据" IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
-                                <TextBlock Text="ICC 色彩配置始终尽量保留；方向信息会在自动旋转后规范化。" Opacity="0.58" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </atom:Card>
-
-                        <atom:Card Header="输出设置" SizeType="Middle">
-                            <Border IsEnabled="{Binding !IsProcessing}">
-                                <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
-                            </Border>
-                        </atom:Card>
-
-                        <atom:Alert Type="Error" IsShowIcon="True" Message="参数无法提交" Description="{Binding DraftError}" IsVisible="{Binding HasDraftError}" />
-                        <atom:Alert Type="Error" IsShowIcon="True" Message="转换未完成" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
-                        <atom:Alert Type="Warning" IsShowIcon="True" Message="输出文件已不存在" Description="请重新处理原图片后再打开或继续调整尺寸。" IsVisible="{Binding IsResultOutputMissing}" />
-                        <atom:Card IsVisible="{Binding HasResult}" SizeType="Small">
-                            <StackPanel Spacing="7">
-                                <TextBlock Text="{Binding ResultTitle}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding ResultTransparency}" />
-                                <TextBlock Text="{Binding ResultSizeChange}" />
-                                <TextBlock Text="{Binding ResultOutputPath}" Opacity="0.58" TextTrimming="CharacterEllipsis"
-                                           atom:ToolTip.Tip="{Binding ResultOutputPath}" />
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding IsSuccess}">
-                                    <atom:Button Content="打开输出目录" Command="{Binding OpenOutputCommand}" />
-                                    <atom:Button Grid.Column="1" Content="继续调整尺寸" Command="{Binding ContinueResizeCommand}" />
-                                </Grid>
-                            </StackPanel>
-                        </atom:Card>
-                        <StackPanel IsVisible="{Binding HasDiagnosticId}" Spacing="6">
-                            <TextBlock Text="{Binding DiagnosticId}" FontFamily="Consolas" />
-                            <atom:Button Content="复制诊断编号" Command="{Binding CopyDiagnosticIdCommand}" HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <atom:Button Content="开始转换" ButtonType="Primary" Command="{Binding StartCommand}" IsVisible="{Binding !IsProcessing}" />
-                        <atom:Button Content="取消任务" IsDanger="True" Command="{Binding CancelCommand}" IsVisible="{Binding IsProcessing}" />
-                    </StackPanel>
-                </atom:ScrollViewer>
-            </Grid>
-
-            <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-        </Grid>
+        </atom:ScrollViewer>
     </Grid>
 </UserControl>

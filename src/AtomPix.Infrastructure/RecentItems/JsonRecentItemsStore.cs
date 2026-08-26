@@ -9,7 +9,6 @@ using AtomPix.Core.Settings;
 
 public sealed class JsonRecentItemsStore : IRecentItemsStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = AtomPixJsonOptions.CreateIndented();
     private readonly IAppPathProvider _pathProvider;
 
     public JsonRecentItemsStore(IAppPathProvider pathProvider)
@@ -30,7 +29,11 @@ public sealed class JsonRecentItemsStore : IRecentItemsStore
             }
 
             await using var stream = File.OpenRead(RecentItemsPath);
-            var items = await JsonSerializer.DeserializeAsync<List<RecentItem>>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
+            var items = await JsonSerializer.DeserializeAsync(
+                    stream,
+                    AtomPixJsonOptions.Context.ListRecentItem,
+                    cancellationToken)
+                .ConfigureAwait(false);
             return OperationResult<IReadOnlyList<RecentItem>>.Success(items ?? []);
         }
         catch (OperationCanceledException)
@@ -51,7 +54,12 @@ public sealed class JsonRecentItemsStore : IRecentItemsStore
         {
             cancellationToken.ThrowIfCancellationRequested();
             Directory.CreateDirectory(_pathProvider.AppDataDirectory.Value);
-            await JsonFileWriter.WriteAsync(RecentItemsPath, items, JsonOptions, cancellationToken).ConfigureAwait(false);
+            await JsonFileWriter.WriteAsync(
+                    RecentItemsPath,
+                    items.ToList(),
+                    AtomPixJsonOptions.Context.ListRecentItem,
+                    cancellationToken)
+                .ConfigureAwait(false);
             return OperationResult.Success();
         }
         catch (OperationCanceledException)

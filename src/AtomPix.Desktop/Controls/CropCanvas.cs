@@ -15,6 +15,8 @@ public sealed class CropCanvas : Control
 {
     public static readonly StyledProperty<byte[]?> PreviewBytesProperty =
         AvaloniaProperty.Register<CropCanvas, byte[]?>(nameof(PreviewBytes));
+    public static readonly StyledProperty<IImage?> ImageSourceProperty =
+        AvaloniaProperty.Register<CropCanvas, IImage?>(nameof(ImageSource));
     public static readonly StyledProperty<int> ImagePixelWidthProperty =
         AvaloniaProperty.Register<CropCanvas, int>(nameof(ImagePixelWidth));
     public static readonly StyledProperty<int> ImagePixelHeightProperty =
@@ -31,6 +33,10 @@ public sealed class CropCanvas : Control
         AvaloniaProperty.Register<CropCanvas, double>(nameof(LockedAspectRatio));
     public static readonly StyledProperty<bool> IsInteractionEnabledProperty =
         AvaloniaProperty.Register<CropCanvas, bool>(nameof(IsInteractionEnabled), true);
+    public static readonly StyledProperty<IBrush?> BackgroundProperty =
+        AvaloniaProperty.Register<CropCanvas, IBrush?>(nameof(Background));
+    public static readonly StyledProperty<IBrush?> ImageBorderBrushProperty =
+        AvaloniaProperty.Register<CropCanvas, IBrush?>(nameof(ImageBorderBrush));
 
     private const double HandleSize = 12;
     private Bitmap? _bitmap;
@@ -48,6 +54,11 @@ public sealed class CropCanvas : Control
     public event EventHandler<CropCanvasSelection>? SelectionChanged;
 
     public byte[]? PreviewBytes { get => GetValue(PreviewBytesProperty); set => SetValue(PreviewBytesProperty, value); }
+    /// <summary>
+    /// Non-owning decoded image supplied by the ImageGallery lease bridge.
+    /// The caller must keep its lease alive until this property is replaced or cleared.
+    /// </summary>
+    public IImage? ImageSource { get => GetValue(ImageSourceProperty); set => SetValue(ImageSourceProperty, value); }
     public int ImagePixelWidth { get => GetValue(ImagePixelWidthProperty); set => SetValue(ImagePixelWidthProperty, value); }
     public int ImagePixelHeight { get => GetValue(ImagePixelHeightProperty); set => SetValue(ImagePixelHeightProperty, value); }
     public int CropX { get => GetValue(CropXProperty); set => SetValue(CropXProperty, value); }
@@ -56,18 +67,28 @@ public sealed class CropCanvas : Control
     public int CropHeight { get => GetValue(CropHeightProperty); set => SetValue(CropHeightProperty, value); }
     public double LockedAspectRatio { get => GetValue(LockedAspectRatioProperty); set => SetValue(LockedAspectRatioProperty, value); }
     public bool IsInteractionEnabled { get => GetValue(IsInteractionEnabledProperty); set => SetValue(IsInteractionEnabledProperty, value); }
+    public IBrush? Background { get => GetValue(BackgroundProperty); set => SetValue(BackgroundProperty, value); }
+    public IBrush? ImageBorderBrush { get => GetValue(ImageBorderBrushProperty); set => SetValue(ImageBorderBrushProperty, value); }
 
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.FillRectangle(new SolidColorBrush(Color.Parse("#202733")), Bounds);
-        if (_bitmap is null || ImagePixelWidth <= 0 || ImagePixelHeight <= 0)
+        if (Background is { } background)
+        {
+            context.FillRectangle(background, Bounds);
+        }
+        var image = ImageSource ?? _bitmap;
+        if (image is null || ImagePixelWidth <= 0 || ImagePixelHeight <= 0)
         {
             return;
         }
 
         var imageRect = GetImageRect();
-        context.DrawImage(_bitmap, new Rect(_bitmap.Size), imageRect);
+        context.DrawImage(image, new Rect(image.Size), imageRect);
+        if (ImageBorderBrush is { } imageBorderBrush)
+        {
+            context.DrawRectangle(null, new Pen(imageBorderBrush, 1), imageRect);
+        }
         var selection = PixelsToView(new Rect(CropX, CropY, CropWidth, CropHeight), imageRect);
         var shade = new SolidColorBrush(Color.FromArgb(158, 16, 22, 34));
         context.FillRectangle(shade, new Rect(imageRect.X, imageRect.Y, imageRect.Width, Math.Max(0, selection.Y - imageRect.Y)));
@@ -96,6 +117,12 @@ public sealed class CropCanvas : Control
         {
             ReplaceBitmap(change.NewValue as byte[]);
         }
+        else if (change.Property == ImageSourceProperty
+            || change.Property == BackgroundProperty
+            || change.Property == ImageBorderBrushProperty)
+        {
+            InvalidateVisual();
+        }
         else if (change.Property == ImagePixelWidthProperty
             || change.Property == ImagePixelHeightProperty
             || change.Property == CropXProperty
@@ -113,7 +140,7 @@ public sealed class CropCanvas : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        if (!IsInteractionEnabled || _bitmap is null || ImagePixelWidth <= 0 || ImagePixelHeight <= 0)
+        if (!IsInteractionEnabled || (ImageSource is null && _bitmap is null) || ImagePixelWidth <= 0 || ImagePixelHeight <= 0)
         {
             return;
         }
@@ -142,7 +169,7 @@ public sealed class CropCanvas : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (!IsInteractionEnabled || _bitmap is null || ImagePixelWidth <= 0 || ImagePixelHeight <= 0)
+        if (!IsInteractionEnabled || (ImageSource is null && _bitmap is null) || ImagePixelWidth <= 0 || ImagePixelHeight <= 0)
         {
             return;
         }

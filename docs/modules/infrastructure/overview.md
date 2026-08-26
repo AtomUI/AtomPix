@@ -246,6 +246,8 @@ LocalFileSystemService
 
 `LocalFileSystemService.EnumerateFilesAsync` 只访问所选目录当前层级，不递归；成功时返回规范化绝对路径快照。它不判断图片格式、不排序、不去重、不 Probe 图片，也不生成预览。目录不存在、访问被拒绝、其他文件系统异常和取消分别映射为 Core 的结构化错误，不能用成功空集合掩盖枚举失败。
 
+本地 BCL 的目录枚举、目录创建和文件信息读取都是同步调用。`LocalFileSystemService` 的三个异步端口实现必须把实际文件系统访问调度到默认后台调度器，不能在 Desktop 调用线程中执行完整枚举后再以 `Task.FromResult` 伪装异步。Workflow 在首次 `await` 后继续完成规范化、去重和排序，页面线程应能先呈现 Loading；Workflow 与 Desktop 不再额外嵌套 `Task.Run`。
+
 `NormalizePath`、`PathsEqual` 和 `ComparePaths` 封装当前平台的路径规则；Windows 比较不区分大小写。Workflow 使用这些原子能力完成浏览集合或批量输入的去重、排序决胜，Infrastructure 本身不决定任何业务集合顺序。
 
 禁止事项：

@@ -12,17 +12,17 @@
 
 ## 1. 总原则
 
-AtomPix 第一阶段采用底层实现先于 Desktop 页面代码的策略。Desktop 设计与原型现已完成，但页面代码仍应在所依赖的底层目标契约可验证后落地。
+AtomPix 第一阶段采用底层实现先于 Desktop 页面代码的策略。Desktop 的功能交互与状态契约已经建立，迁移前页面也已具备功能基线；新视觉结构已经冻结在 `docs/ui-design/README.md`，生产页面尚待按该基线迁移，且仍应在所依赖的底层目标契约可验证后落地。
 
 这里的 UI 最后不是指不重视 UI，而是指：
 
 ```text
-所有底层模块充分实现并通过 headless 测试后，再展开 Desktop / UI 层的规划、原型、实现和测试。
+所有底层模块充分实现并通过 headless 测试后，再展开 Desktop / UI 层的规划、实现和测试。
 ```
 
 原因：
 
-- UI 层的规划、原型图和交互取舍强依赖用户确认。
+- UI 层的视觉设计和交互取舍强依赖用户确认。
 - UI 层测试也强依赖用户对真实界面体验的判断。
 - Core、Workflows、Infrastructure、Imaging.Abstractions、Imaging.Magick 都可以在没有 UI 的情况下实现和测试。
 - 先把底层能力测试扎实，可以避免 UI 实现时被底层不稳定反复打断。
@@ -542,10 +542,10 @@ dotnet publish src/AtomPix.Imaging.Magick/AtomPix.Imaging.Magick.csproj -c Relea
 - `AtomPix.Imaging.Magick` Release self-contained publish 通过。
 - 当前仍没有 `AtomPix.Desktop` 可执行项目，因此不能验证真实桌面 single-file、安装包或 NativeAOT 产物。
 
-进入 UI 原型阶段前置结论：
+进入 Desktop / UI 实现阶段的前置结论：
 
 ```text
-底层/headless 已具备进入 Desktop / UI 原型阶段的基础条件；正式发布前仍需继续补真实跨平台、权限、大图和包体验证。
+底层/headless 已具备进入 Desktop / UI 实现阶段的基础条件；正式发布前仍需继续补真实跨平台、权限、大图和包体验证。
 ```
 
 ## 22. Round 1 单元测试基线记录
@@ -742,26 +742,34 @@ Publish Imaging.Magick: passed
 
 建议新增独立的 `AtomPix.Desktop.Tests`，优先以不启动窗口的 ViewModel 单元测试覆盖：
 
-- 首页打开图片、打开文件夹和最近记录抽屉的 Loading、失败恢复与重复触发保护。
+- 首页打开图片、打开文件夹的 Loading、失败恢复与重复触发保护；当前版本不提供最近记录 UI。
 - 以假的 Desktop Picker/Launcher 服务覆盖单选、多选、目录选择、用户取消、平台不可用和系统调用失败；ViewModel 测试不得依赖真实 `Window`、`TopLevel` 或系统对话框。
-- 选择器成功结果进入对应 Workflow；取消保持页面和草稿不变且不记为失败；打开输出目录只调用 Desktop Launcher，不创建图片处理任务。
+- 选择器成功结果进入对应 Workflow；取消保持页面和草稿不变且不记为失败；当前版本不展示处理完成后的输出目录入口。
 - 图片浏览器集合加载、当前项切换、缺失项目保留，以及四项快捷入口只捕获当前图片。
-- 四类单张编辑器的 Empty、草稿校验、任务运行锁定、取消和同页终态回到草稿。
-- 压缩与转换页只显示原图预览；参数变化不启动处理后效果预览，正式任务开始前不显示预计文件体积。
+- 四类右侧处理面板的 Empty、草稿校验、任务运行锁定、取消和同面板终态回到草稿；Crop 还需覆盖主图裁剪模式。
+- 压缩与转换处理面板只显示原图预览；参数变化不启动处理后效果预览，正式任务开始前不显示预计文件体积。
 - 第一阶段不显示“保存为预设”入口，也不要求命名预设的 Core、Workflow 或存储契约。
-- 批量输入多次追加、运行快照不可变、取消确认、Partial 汇总、重试失败项和“继续处理其他图片”。
-- 设置页的 Dirty 派生、显式保存、保存失败保留草稿、重试，以及“恢复默认值”只修改草稿。
-- 前台任务运行期间主导航、输入替换和参数编辑全部禁用；查看进度和取消仍然可用。
+- 浏览走廊多次追加、全走廊批量范围、运行快照不可变、取消确认、Partial 汇总、重试失败项和处理未完成项。
+- **TODO（后期迭代，当前不执行）**：批量画廊自动跟随覆盖 20 项/可见 6 项基准：前 6 项 Running 不滚动，第 7 项 Running 时只平滑左移一个槽位并完整露出；`CurrentItem`、主图 Source 和解码代次均不改变。
+- **TODO（后期迭代，当前不执行）**：批量跟随覆盖活动项已可见、左右部分遮挡、跨多个槽位、窗口/DPI/左右列状态改变、虚拟化目标未实现、用户滚动后 `1200 ms` 暂停、Reduced Motion 立即定位，以及终态保持最后偏移。
+- **TODO（后期迭代，当前不执行）**：快速连续和乱序进度覆盖动画取消/改投与同帧合并：只跟随当前调用中最新合法 Running Sequence，不积压逐项动画；Skipped/Failed/Succeeded/Canceled 与最终 BatchResult 校正不额外触发滚动。
+- **TODO（后期迭代，当前不执行）**：缩略图状态 Presenter 覆盖 `null/Pending/Running/Succeeded/Failed/Skipped/Canceled` 七种快照，校验右上角 `20 DIP` 状态槽、`2 DIP` 内缩/keyline、六种语义图形、Token 颜色、与 CurrentItem 蒙版/底边条的 ZIndex，以及状态槽随图片而非视口滚动。
+- **TODO（后期迭代，当前不执行）**：Running 动效使用可控测试时钟验证 `800 ms` 顺时针线性周期、离开 Running 或容器 Detach 后停止、同帧终态不强制展示 Spinner；状态切换验证 `120 ms` 淡化，Reduced Motion 下旋转和淡化均为零时长。
+- **TODO（后期迭代，当前不执行）**：状态迁移覆盖 Pending→Running→四类终态和 Pending→Failed/Skipped/Canceled 直接终态；StartRejected 清除临时 Pending，最终 BatchResult 相同状态不重播动画、不同状态只权威校正而不滚动画廊。
+- **TODO（后期迭代，当前不执行）**：虚拟化回收覆盖 Running 容器复用后不残留旋转、颜色、图形、Tooltip 或自动化名称；重新实现时按稳定 Batch Index 恢复状态。普通浏览和单张任务不显示批量状态槽，输入收集阶段跳过项不伪装为执行期 Skipped。
+- **TODO（后期迭代，当前不执行）**：无障碍检查确认六种状态均由不同图形和中文名称表达、颜色不是唯一信息、Presenter 不进入 Tab 顺序；失败/跳过 Tooltip 使用脱敏原因，缩略图更新不逐项抢占 LiveRegion。
+- 设置页面的 Dirty 派生、显式保存、保存失败保留草稿、重试，以及“恢复默认值”只修改草稿。
+- 前台任务运行期间图标轨、输入替换、当前项切换和参数编辑全部禁用；查看进度和取消仍然可用。
 - `CanExecute`、可见性和恢复动作由状态组合派生，不出现相互矛盾的重复可写布尔状态。
 
-少量 Avalonia 集成测试用于验证命令绑定、禁用态、焦点恢复、取消确认弹窗和状态板关键布局；不应把每个 ViewModel 状态排列都重复做成昂贵的窗口级测试。
+少量 Avalonia 集成测试用于验证命令绑定、禁用态、焦点恢复、取消确认弹窗和关键状态投影；不应把每个 ViewModel 状态排列都重复做成昂贵的窗口级测试。
 
 AtomUI 集成验收至少覆盖：
 
 - 主桌面控件和 ColorPicker 主题在首个 Window 前完成注册，Light/Dark/FollowSystem 不缺资源；Desktop 项目没有 `AtomUI.Desktop.Controls.DataGrid` 包引用、命名空间或 `UseDesktopDataGrid()` 注册。
-- NavMenu 选择与 Shell Route 单向收敛；任务锁定时不可导航节点真实禁用。
+- 图标轨选中态与 `ActiveTool` 单向收敛；再次点击当前工具收起、切换工具替换右侧列，任务锁定时不可操作图标真实禁用。
 - Slider/NumericUpDown、ColorPicker/HEX/Core RgbColor 的双向投影不产生第二份状态或循环更新。
-- 批量 ListView 使用虚拟化面板；容器回收后不串用缩略图、Index、状态或命令，表头和五列行模板在窗口缩放与高 DPI 下保持对齐。
+- 图片走廊使用虚拟化面板；容器回收后不串用缩略图、Index、终态标记或命令，横向滚动、当前项跟随和批量状态投影在窗口缩放与高 DPI 下保持正确。
 - ImagePreviewer 只消费查看状态，并在 Sources 替换或页面 detach 后释放过期资源；主视口和 CropCanvas 在代次切换、DPI 和窗口缩放后仍正确释放资源并提交像素矩形。
 - Alert、Dialog/MessageBox、Message 和 Tooltip 的层级、owner、焦点恢复及关闭行为符合组件映射文档。
 
@@ -828,7 +836,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 懒加载调度：当前项 Probe/主预览优先；缩略图只加载可见区和预取窗口、并发有界，不允许为整个大目录无界启动任务。
 - 竞态与取消：快速切换当前项采用 latest-wins；更换来源、返回首页或销毁页面后，旧集合代次的晚返回结果不得写回。
 - 缓存与目录变化：缓存限于当前会话，离开集合释放 Bitmap；第一阶段不建立磁盘缩略图缓存，也不自动追加目录新增文件。
-- 业务隔离：首页打开文件夹不得调用 `AppendBatchInputsWorkflow`；浏览集合不能启动三类批量处理，四项快捷操作只捕获触发时的 `CurrentImagePath`。
+- 业务隔离：首页打开文件夹不得创建 `BatchJob`；浏览集合既能以 `CurrentImagePath` 启动四类单张处理，也能在 Compress、Convert、Resize 面板中按完整冻结顺序启动三类批量处理。Crop 不得出现批量入口。
 
 上述目标契约实现并通过后，才可把文件夹浏览标记为代码层完成。
 
@@ -850,7 +858,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 粒度边界：第一阶段只验证按完成项目数计算的阶梯比例；当前项使用不确定状态，不测试或伪造单张图片内部百分比。
 - 类型覆盖：压缩使用 `BatchCompressItemResult`；转换使用 `BatchConvertItemResult`；Batch Resize 使用 `BatchResizeItemResult`，实时结果字段满足各自终态不变量。
 
-上述目标契约实现并通过后，才可把原型中的实时批量进度标记为代码层完成。
+上述目标契约实现并通过后，才可把 UI 实时批量进度标记为代码层完成。
 
 ## 38. 批量终态恢复与 Skipped 契约测试规划
 
@@ -882,7 +890,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 颜色管理与顺序：带 ICC Profile 的透明样本在移除元数据前完成颜色空间感知的合成；`MetadataPolicy.Remove / Preserve` 都不得改变约定背景色语义。
 - Workflow：单张覆盖默认背景色，批量共享一套背景色；成功的 `ConvertImageResult / BatchConvertItemResult` 原样交付处理器透明结果，无透明项目返回 `NotPresent`；失败、取消、跳过不伪造结果；运行中修改设置不影响已经提交的 Profile。
 - 批量恢复：失败项和未完成项形成新草稿时复制旧提交背景色，不重新加载当前默认设置。
-- Desktop：只有 `HasTransparency && JPEG` 显示颜色控件；HEX 非法禁用开始/保存；切换到 PNG/WebP 隐藏控件但保留草稿；结果文案取 `TransparencyProcessingResult`。
+- Desktop：只有 `HasTransparency && JPEG` 显示颜色控件；HEX 非法时提交被拒绝并显示顶部中央 Message（设置保存仍禁用）；切换到 PNG/WebP 隐藏控件但保留草稿；结果文案取 `TransparencyProcessingResult`。
 
 上述目标契约实现并通过后，才可把“透明图片转 JPEG 背景色”从设计缺口标记为代码层完成。
 
@@ -891,7 +899,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 当前 MetadataPolicy、ICC 独立保留、方向规范化和 v1 设置兼容已经实现；真实相机样本矩阵仍需在发布验证中扩充。
 
 - Core：`MetadataPolicy` 只允许互斥的 `Preserve / Remove`；每个 Compression、Conversion 和 SameFormatEncoding 请求必须携带其中一个有效值。
-- AppSettings：三个默认 Profile 的 `MetadataPolicy` 必须相等；设置页保存一次同步更新三处，持久化值不一致时加载失败而不是任选其一。
+- AppSettings：三个默认 Profile 的 `MetadataPolicy` 必须相等；设置页面保存一次同步更新三处，持久化值不一致时加载失败而不是任选其一。
 - Probe：带 EXIF 但无 ICC、带 ICC 但无描述性元数据、两者都有和两者都没有四种样本，分别验证 `HasMetadata / HasColorProfile`，不得把 ICC 计入 `HasMetadata`。
 - Preserve：目标格式支持时保留 EXIF、GPS、IPTC、XMP、注释等仍有效信息，同时保留 ICC；不承诺原始 Profile 字节顺序完全一致。
 - Remove：删除 EXIF、GPS、IPTC、XMP、注释和内嵌缩略图等拍摄或描述性信息，但仍保留 ICC / ICM；不得使用无差别 `Strip()` 作为最终实现。
@@ -929,7 +937,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 冲突策略：序号先形成计划名，磁盘冲突再应用 Skip / Overwrite / AutoRename；`holiday_001.webp` 的自动重命名结果为 `holiday_001_1.webp`。
 - 源文件保护：展开后的每个输出仍与完整输入集合比较，命中时沿用 `OutputPathConflictsWithInput`。
 - 恢复任务：新草稿按自己的当前顺序重新编号，旧 BatchOutputPlan 和旧结果文件名不改变。
-- Desktop：占位符快捷项、实际生效格式、输出示例、缺少 `{index}` 提醒、非法格式禁用开始和运行期只读快照均有 ViewModel 测试。
+- Desktop：占位符快捷项、实际生效格式、输出示例、缺少 `{index}` 提醒、非法格式提交反馈和运行期只读快照均有 ViewModel 测试。
 
 ## 43. Custom / Smart 压缩契约测试规划
 
@@ -943,7 +951,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 无损格式：PNG 等只做格式支持的无损优化，不执行质量递减、不改变输出格式，`AppliedQuality = null`。
 - Workflow：单张原样投影 `AppliedQuality`；批量使用一套共享 Custom 质量，逐项结果与 JobId/顺序一致，失败、取消和跳过不得伪造实际质量。
 - 设置：允许持久化完整的 `DefaultCompressionProfile(Custom, Quality, MetadataPolicy)`；Custom 缺少合法质量时保存失败，Smart 不持久化内部候选值。
-- Desktop 单张：五种模式完整可选；Custom 的滑块与整数输入双向同步，非法值禁用开始；切换模式保留会话值但非 Custom 不提交；无损输出隐藏或禁用质量控件。
+- Desktop 单张：五种模式完整可选；Custom 的滑块与整数输入双向同步，非法值在提交时拒绝并显示顶部中央 Message；切换模式保留会话值但非 Custom 不提交；无损输出隐藏或禁用质量控件。
 - Desktop 批量：一个 Custom 质量应用于全部有损项目；混合批次显示受影响数量，全部无损时禁用并说明原因；运行和恢复均使用提交快照，不提供逐项覆盖。
 - Desktop 结果：Smart 和 Custom 显示 Workflow 返回的实际采用质量；无损输出显示“无损优化”，不得由模式名称反推质量。
 
@@ -975,7 +983,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 清理：成功、失败、取消和资源异常后均不遗留未提交候选、输出半成品或失去关联的私有像素缓存；清理错误不覆盖原资源错误。
 - Desktop：错误卡显示实际值和上限，不提供自动缩小绕过；磁盘不足提供释放空间、改输出目录和处理未完成项恢复动作。
 - Desktop：单张和批量分别显示“减少”“文件大小未变化”“增加”；展示差值和比例的绝对值，不显示负号或“节省负数”。没有数据时显示“暂无可比较结果”或隐藏单项体积行。
-- 原型验收：03/04 使用方向化体积文案，05 显示成功比较项数和总体变化，12 明确演示“体积增加但任务成功且结果已保存”。
+- Desktop 验收：右侧处理面板使用方向化体积文案；批量结果态显示成功比较项数和总体变化；“体积增加但任务成功且结果已保存”必须有明确反馈。
 
 ## 46. 诊断与本地日志契约测试规划
 
@@ -984,6 +992,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 - 作用域：一次 Desktop 命令到 Workflow、Imaging 和 Infrastructure 共享 OperationId；Headless 直接调用 Workflow 时自动创建，Core Job 创建后追加 JobId/BatchId。
 - DiagnosticId：只有未预期异常和全局错误边界生成 `APX-` + 12 位大写十六进制编号；UI 编号能够定位唯一日志事件，普通校验、Skip 和用户取消不生成。
 - 级别：开始/终态/取消为 Information，已知可恢复运行失败为 Warning，未预期异常为 Error；批量不逐项记录成功或每条 UI 进度。
+- `Dispatcher.UIThread.UnhandledException` 代表当前前台 UI 操作失效，可以显示带 DiagnosticId 的错误 Dialog；`TaskScheduler.UnobservedTaskException` 发生在后台任务最终化时，与用户当前点击没有可靠时序关系，只写入本机错误日志并标记 Observed，禁止随机打断仍可继续使用的浏览会话。错误 Dialog 正文必须显式绑定/赋值为脱敏文案，不得继承 Shell DataContext 后显示 ViewModel 类型名。
 - 单次异常所有者：同一原始异常只有一条携带脱敏调用栈的事件，外层终态不重复写入异常。
 - 隐私：输入/输出/缓存/设置路径、文件名、图片内容、EXIF/XMP/ICC 内容、命名格式和敏感凭据均不以明文出现；异常消息、调用栈和 `AtomPixError.Details` 也经过过滤。
 - PathToken：同一路径在同一 Session 内一致，使用不同会话密钥后不一致；扩展名、文件大小和尺寸作为独立字段时不泄漏文件名。
@@ -1053,7 +1062,7 @@ Total: 291 passed
 - 上一张、下一张、适应窗口、`1:1`、`25%..400%` 缩放、不可用项保留与显式移除均已接入 ViewModel 命令。
 - 压缩、转换、调整尺寸、裁剪四个快捷操作分别按输入格式、单帧约束及处理器能力计算 `CanExecute`，不再共享笼统开关。
 - 首页拖放采用薄 Avalonia Bridge；View 只提取一个本地文件或目录路径，随后复用 `OpenImageWorkflow` / `OpenFolderWorkflow`、最近记录和原地错误状态。
-- 压缩、转换、Resize、Crop 和批量页均展示并提交同一语义的 `OutputPolicy` 草稿：输出位置、子目录/自定义目录、文件名格式与 Skip/Overwrite/AutoRename。无效草稿禁用开始，源文件冲突改为 AutoRename 后修改的是用户可见字段且不会自动重启。
+- 压缩、转换、Resize、Crop 和批量页均展示并提交同一语义的 `OutputPolicy` 草稿：输出位置、子目录/自定义目录、文件名格式与 Skip/Overwrite/AutoRename。无效草稿在提交边界拒绝并显示顶部中央 Message，不得由命令系统静默吞掉；源文件冲突改为 AutoRename 后修改的是用户可见字段且不会自动重启。
 - 批量多图仍在冻结提交快照中自动补 `_{index}`；输出位置和冲突策略不再暗中沿用不可见默认值。
 - Shell 路由和 AtomUI NavMenu 选中态同步；失效最近记录可按原类型重新定位，替换来源验证成功后才删除旧记录。
 - 透明图片转 JPEG 的主预览显示当前背景色；CropCanvas 支持方向键 `1 px`、Shift + 方向键 `10 px` 微调。
@@ -1104,7 +1113,7 @@ tests/AtomPix.StressTests
   4096×4096 图片 Probe + 4 路并发受限 Preview
 ```
 
-Desktop 无窗口状态测试另外覆盖浏览器 Session 缓存与离场释放、Preview/Thumbnail/Probe 三类有界 LRU 缓存及缩略图引用释放、窗口重新激活时主动复核输出文件、批量终态只读、按冻结提交快照建立恢复草稿，以及失败项详情、诊断编号复制和重新定位。批量终态不只在命令层拒绝修改，右侧任务控件和移除入口也同步禁用或隐藏。
+该时点的 Desktop 无窗口状态测试曾覆盖 Preview/Thumbnail/Probe 三类有界 LRU；这属于 ImageGallery 迁移前历史实现。当前生产只保留 AtomPix Probe LRU，主图/缩略图调度、缓存和 Lease 由 ImageGallery 自己的专项测试覆盖。其余窗口重新激活时复核输出、批量终态只读、恢复草稿、失败详情、诊断编号复制和重新定位仍由 AtomPix Desktop 测试负责。
 
 Imaging.Magick 的输出提交已经收敛为同目录临时文件编码后原子替换。编码、替换或权限失败会清理临时文件并保留已有目标；可注入提交器稳定验证 `ImageWriteFailed / Permission` 与 `InsufficientDiskSpace / FileSystem`。批量 Workflow 对磁盘空间不足中止剩余项并保留既有成功结果。
 
@@ -1124,9 +1133,11 @@ eng/smoke-test.ps1
   从正式 publish 目录隐藏启动，若在观察窗口内异常退出则失败
 
 eng/windows-ui-automation.ps1
-  启动 win-x64 正式发布产物 -> 检查 UIA 主窗口与七个导航项
-  -> 实际导航到设置页 -> 检查“保存设置”自动化节点
+  隐藏启动 win-x64 正式发布产物 -> 检查 UIA 主窗口
+  -> 检查六个图标轨动作均以可用 Button 暴露
 ```
+
+Windows 发布进程脚本只负责验证正式 EXE 的原生窗口和 UIA 暴露。设置按钮的真实 Pointer Down/Up、`DesktopRoute.Settings` 参数绑定、普通设置页立即切换，以及“压缩配置/转换配置/输出配置/关于”连续内容组合，由 `AtomPix.Desktop.UiTests` 在 Avalonia Headless 的确定性坐标系内验证；不得在无人值守 Windows 会话中依赖前台焦点、多显示器位置或 DPI 虚拟化注入物理光标。设置态还必须断言全局图标轨和右侧工具面板隐藏、四个分区同时存在、左侧命令产生真实纵向偏移。
 
 `.github/workflows/ci.yml` 对 Windows、Linux、macOS 执行 Release 构建、全部非压力测试、Avalonia/AtomUI UI 自动化和依赖审计；独立 Windows 压力任务执行大批量、大图、日志与 ListView 虚拟化；三平台随后各自在原生 Runner 上打包并执行启动烟测，Linux 使用 Xvfb，Windows 额外执行正式发布进程的 UIA 导航检查。`.github/workflows/release.yml` 只在完整门禁通过后为版本 Tag 生成三平台不可变归档、独立 SHA-256 文件并发布 GitHub Release。
 
@@ -1152,4 +1163,145 @@ Windows 发布进程 UIA 导航烟测：通过
 ```
 
 签名证书、公证账号和商店身份属于发布主体持有的外部密钥，不写入仓库。流水线当前发布可校验的自包含便携包；若进入系统商店或启用平台代码签名，必须通过受保护 Secret 和独立签名 Job 注入，不得把证书、密码或长期凭据提交到源码。
+
+## 52. 2026-08-11 Desktop 现行视觉重构验收快照
+
+本节记录 2026-08-11 上一轮生产 Shell：沉浸式 Home/Browser、贴左图标轨、AtomUI 官方右侧 Drawer 和设置 Dialog。Browser 只维护一份可追加集合；压缩、转换和 Resize 在集合不少于两张时同时显示单张与批量动作，Crop 始终单张。批量运行状态投影到缩略图，Running 项驱动画廊真实横向偏移；恢复失败项或未完成项时，走廊同步重建为新的目标子集。该历史快照不再定义 2026-08-23 之后的正式视觉目标。
+
+本轮额外验证增量追加不会重载当前预览或丢失选择，工具面板打开后集合数量和批量动作会同步更新；设置页面的所有返回入口统一静默撤销未保存草稿，不显示二次确认。UI 自动化按现行首页尺寸、图片画廊、图标轨、普通右侧面板、设置连续页面及全生产 View 渲染重新建立。
+
+本机 Release 结果：
+
+```text
+Core: 42 passed
+Imaging.Abstractions: 18 passed
+Infrastructure: 37 passed
+Imaging.Magick: 55 passed
+Workflows: 103 passed
+Desktop 状态/交互: 50 passed
+Desktop UI 自动化: 12 passed
+独立压力项目: 3 passed
+Total: 320 passed
+Build: 0 warnings, 0 errors
+```
+
+该数字是 2026-08-11 本轮代码与文档同步后的本机基线；历史章节中的较小数字只描述其形成时点，不能作为当前完成度结论。
+
+## 53. 2026-08-24 AtomUI.Labs ImageGallery 迁移门禁
+
+生产代码迁移已完成；本节是每次发布必须重跑的专项测试门禁，最终通过数字记录在本节末尾。专项架构与供应链设计见 [AtomUI.Labs ImageGallery 接入与迁移设计](../modules/desktop/atomui-labs-imagegallery-migration.md)。
+
+迁移的第一道门禁不是页面截图，而是可复现依赖：
+
+- 仓库内本地 NuGet 源存在 `AtomUI.Labs.Controls.ImageGallery.6.0.8.nupkg`，SHA-256 为 `86B4A7E63D290356B05A804B37D8808C797FF5FC7C036057302ED6A48C2BB35F`；缺失或不一致时 Desktop 构建目标确定性失败。
+- `NuGet.config` 使用相对本地源，`RestorePackagesPath` 固定到仓库内 `eng/nuget-cache`；构建不读取 `D:\work\c#\AtomUI.Labs`，同版本开发机旧缓存不能掩盖本次重打包制品。
+- AtomUI Desktop/ColorPicker/Font/Icon 与 Labs 全部统一为 `6.0.8`，Avalonia 为 `12.1.1`；依赖图不得混装 `6.1.3` AtomUI Core 或出现重复资产。
+- CI 三平台 restore/build/publish 使用同一 nupkg；发布产物实际包含程序集和主题/语言资源。
+
+Desktop 状态与 UI 自动化至少新增或迁移以下覆盖：
+
+- `UseImageGallery()` 在首窗前幂等注册，Light/FollowSystem 首帧无缺失资源；公共 AXAML 命名空间可加载。
+- Home、Browser、Crop 与批量状态均从独立浅色标题栏下方开始；图片不进入标题栏下层，切图不会改变标题/Caption 前景或产生旧顶部渐变。
+- 打开图片或文件夹后 `ActiveTool=None`，ImageGallery 占满内容区且不存在空白右列；点击工具后同一窗口内形成“可伸缩左列 + 约 `380 px` 右列”，再次点击当前工具或关闭按钮恢复全宽浏览态，切换其他工具只替换右列内容。
+- Browse/Operate 切换不改变顶层 `ClientSize`，不创建 Drawer/Popup/遮罩，不播放边缘滑入动画；右列 Loading 首帧与 ActiveTool 在同一次 UI 提交中可见，不能等待图片预览或配置异步加载一至两秒。
+- Browser item/source adapter 的 Key/Identity 稳定，集合换代、项目移除、快速切换和离场取消后没有晚返回覆盖或 lease 泄漏。
+- JPEG/PNG/静态 WebP/BMP、JPEG EXIF 方向、损坏/被删除/资源超限项的主图与缩略图行为符合现有范围，错误文案不泄漏路径。
+- 默认 Fit 完整显示、白色留白、ActualSize、`25%..400%`、ImageGallery 原生 `ZoomStep`、放大平移与窗口尺寸隔离；AtomPix 不实现固定百分点步进，图片缩放不得改变顶层 ClientSize。
+- 追加图片、上一张/下一张、缩略图点击、选中项滚入可见、走廊滚轮横移和首末项不循环保持现有语义；Browse/Operate 切换后画廊只按 ImageGallery 自身 Bounds 重新居中和响应式收窄，不执行 Drawer 避让。
+- 10,000 项虚拟化、快速滚动、容器回收、主图优先加载、缓存预算与相邻预取压力达标，不能同时运行旧 Browser 缓存管线。
+- 当前版本只要求最终 `BatchResult` 校正与批量进度、当前处理项、终态在右侧面板完整通过；与 `CurrentItem` 分离的 `ActiveBatchIndex` 自动跟随、用户滚动暂停、缩略图六态及 Running 图标动画均属于后期 TODO，不阻断当前迁移。
+- 所有模式显式关闭 ImageGallery 主图上一张/下一张按钮，导航只保留走廊按钮和缩略图；Crop 模式以 `ResourceOnly` 额外停用默认主图呈现、命中和默认工具，但保留走廊、选择与逻辑主图加载。CropCanvas 独占 Pointer，只借用 expected item 对应外部 Lease 的 `IImage`，输出像素矩形不受 Gallery 缩放/旋转状态影响。
+- Crop 布局门禁必须在默认窗口、最小窗口和窗口尺寸变化后断言：CropCanvas 左边界位于导航轨安全区之后，底边界位于浮动画廊安全区之上，Gallery 仍占满自己的左列 Bounds；工作台使用 `#F5F7FA`，全画布不存在旧 `#202733` 深色填充。安全区只依赖共享 Layout Token 和 Avalonia `Measure / Arrange`，不得使用定时器或窗口绝对坐标。
+- Empty/Loading/Error/Unavailable 与“移出不可用项”等恢复动作可用；稳定 AutomationProperties 不依赖 Labs internal 类型、伪类或 Template Part。
+
+旧 `AtomPixImageGalleryViewer`、Browser 使用的 `AtomPixImageViewport`、旧主题、旧缩略图容器和重复缓存已经删除。Release build、全解决方案测试、UI 自动化、压力测试、当前平台 publish/启动烟测、依赖检查及 `git diff --check` 仍是每次迁移或升级的收口条件；其他平台 publish 由对应 CI runner 负责，不能用 Windows 本机构建冒充。
+
+设置快照在主窗口首帧后低优先级预加载；预加载和用户提前进入设置共享同一次 Load，磁盘读取完成后再把 `SettingsPageViewModel` 设为 `CurrentPage`。设置不使用 AtomUI Dialog、Overlay、遮罩或 Content 重托管。页面左列“压缩配置、转换配置、输出配置、关于”四个分区按钮必须拉伸为同宽并左对齐；右列四个分区必须同时存在于单一 ScrollViewer。点击左列触发约 `220 ms` 的纵向定位滚动，手动滚动同步左列选中态。设置采用显式保存，返回 Dirty 草稿时直接恢复最近一次已保存快照，禁止再次显示“保存/放弃/留在设置”提示。当前设置页没有主题选择，旧 `IDesktopAppearanceService` 及“打开设置即重设 RequestedThemeVariant”链路保持删除。对应 Headless 用例通过真实鼠标按下/释放进入设置，断言普通页面组合、连续分区、真实滚动偏移、设置态图标轨/工具面板隐藏及返回恢复。
+
+2026-08-25 本机最终 Release 收口结果：
+
+```text
+Core: 42 passed
+Imaging.Abstractions: 18 passed
+Infrastructure: 37 passed
+Imaging.Magick: 55 passed
+Workflows: 103 passed
+Desktop 状态/交互: 51 passed
+Desktop Headless UI: 7 passed（6 项功能/组合 + 1 项压力）
+独立压力项目: 3 passed
+Total: 316 passed
+Build: 0 warnings, 0 errors
+NuGet vulnerability audit: 14/14 项目无已知漏洞
+Windows 发布进程 UIA: passed
+Windows 发布目录 5 秒启动烟测: passed
+win-x64 self-contained single-file package: created with SHA-256 sidecar
+```
+
+## 54. 2026-08-26 设置默认值传播与任务快照门禁
+
+设置保存后的正式生效语义为：当前面板草稿、已经提交的单张任务和活动批量任务保持冻结；下一次明确创建的普通工具草稿/任务读取最新默认设置。浏览走廊切换当前图片属于同步输入，不属于新建草稿，不得重置用户已经编辑的参数。
+
+自动化门禁采用 11 项独立配置维度乘以 Compress、Convert、Resize、Crop 四大功能，共 44 个真实 Magick 解码/编码输出用例：
+
+| 配置维度 | Compress | Convert | Resize | Crop | 主要断言 |
+| --- | --- | --- | --- | --- | --- |
+| 压缩模式 | ✓ | ✓ | ✓ | ✓ | 设置可完整往返；Compress 使用目标模式 |
+| 自定义压缩质量 | ✓ | ✓ | ✓ | ✓ | 合法质量进入新 Compress 请求 |
+| 公共元数据策略 | ✓ | ✓ | ✓ | ✓ | 四类真实输出按 Preserve/Remove 执行 |
+| 转换格式 | ✓ | ✓ | ✓ | ✓ | Convert 扩展名和实际编码格式一致 |
+| 转换质量 | ✓ | ✓ | ✓ | ✓ | JPEG/WebP 有损质量进入新 Convert 请求 |
+| 透明铺底色 | ✓ | ✓ | ✓ | ✓ | 透明 PNG 转 JPEG 的角像素接近配置 RGB，不出现黑底 |
+| 输出位置模式 | ✓ | ✓ | ✓ | ✓ | SameAsInput/Subfolder/CustomDirectory 解析正确 |
+| 子目录名 | ✓ | ✓ | ✓ | ✓ | 四类输出进入配置子目录 |
+| 自定义输出目录 | ✓ | ✓ | ✓ | ✓ | 四类输出进入指定绝对目录 |
+| 文件名格式 | ✓ | ✓ | ✓ | ✓ | 输出基础名按 Token 展开 |
+| 同名文件策略 | ✓ | ✓ | ✓ | ✓ | Skip 产生 Skipped，且不伪造输出 |
+
+补充门禁：
+
+- Desktop 四类编辑器分别验证：保存设置后切换走廊当前项只更新输入并保留当前 Draft；再次 `LoadAsync` 创建新草稿后读取新 Profile、`SameFormatEncodingPolicy` 与 `OutputPolicy`。
+- Batch Compress、Batch Convert、Batch Resize 各使用 3 张真实 JPEG，验证批次共同使用最新保存的处理参数、输出目录和带 `{index}` 的命名策略；Crop 按产品范围仍只支持单张。
+- 单张与批量各有 1 个并发快照用例：图片处理已启动并被测试闸门暂停时保存另一套设置，释放后活动请求及批量剩余项目仍全部写入旧快照目录；随后新任务写入新目录。
+- 这些用例必须使用真实 `JsonAppSettingsStore`、`SaveSettingsWorkflow`、`LocalFileSystemService` 和 `MagickImageProcessor`，不能仅断言 ViewModel 字段或 Mock 调用。
+
+## 55. 2026-08-26 自包含、压缩单文件、Trim 与 NativeAOT 发布基线
+
+正式便携包通过 `eng/publish.ps1` 生成。脚本默认使用 `TrimmedSingleFile`，其语义固定为：
+
+- `SelfContained=true`：发布包包含对应 RID 的 .NET Runtime，终端用户不需要安装 .NET Runtime，更不需要安装 .NET SDK。
+- `PublishSingleFile=true` 与 `IncludeNativeLibrariesForSelfExtract=true`：托管程序集、运行时和本机库进入同一个应用入口文件；本机库由 .NET 单文件宿主按需解包。
+- `EnableCompressionInSingleFile=true`：启用 Bundle 内部压缩；外层 ZIP/TAR 仍使用最优压缩并生成 SHA-256 旁车文件。
+- `PublishTrimmed=true` 与 `TrimMode=partial`：正式单文件包启用保守的部分裁剪。不得把 `TrimMode=full` 直接用于发布，除非 AtomUI、Avalonia、ReactiveUI、COM 文件选择和完整 UI 回归均通过。
+- Release 包不携带 PDB；`release-manifest.json` 必须明确记录 `selfContained`、`publishMode`、`singleFile`、`singleFileCompression`、`trimmed`、`trimMode` 与 `nativeAot`，不能仅靠文件名推断。
+
+正式 Windows x64 本机构建命令：
+
+```powershell
+./eng/publish.ps1 -RuntimeIdentifier win-x64 -Version 0.1.0
+```
+
+发布模式如下：
+
+| `PublishMode` | 自包含 | 单文件 | Bundle 压缩 | Trim | NativeAOT | 定位 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `CompressedSingleFile` | 是 | 是 | 是 | 否 | 否 | 第三方裁剪回归时的保守回退 |
+| `TrimmedSingleFile`（默认） | 是 | 是 | 是 | Partial | 否 | 正式便携发布基线 |
+| `NativeAot` | 是 | 否 | 不适用 | Full（AOT 固有） | 是 | 实验产物，不覆盖正式单文件包 |
+
+NativeAOT 实验命令：
+
+```powershell
+./eng/publish.ps1 -RuntimeIdentifier win-x64 -Version 0.1.0 -PublishMode NativeAot
+```
+
+2026-08-26 的 win-x64 实测结论：NativeAOT 已完成本机代码生成，入口进程隐藏启动 8 秒未提前退出；但 Avalonia/Skia、HarfBuzz 与 Magick.NET 仍需要独立本机动态库，因此 AOT 目录不是字面意义上的单文件。AOT 包输出到 `.artifacts/publish-nativeaot`，归档名带 `-nativeaot`，不得覆盖或冒充默认的压缩单文件包。只有在四大图片功能、文件/目录选择、设置持久化、AtomUI 全页面及跨平台原生 Runner 回归完成后，才能考虑将 AOT 提升为正式模式。
+
+为保证裁剪后的真实可运行性，本轮已经完成以下代码收口：
+
+- 设置与最近项目 JSON 改用 `System.Text.Json` 源生成元数据；原子替换写入接收显式 `JsonTypeInfo<T>`，不再依赖运行时反射。
+- 本地 JSONL 日志改用 `Utf8JsonWriter` 写入受控标量，并保持 fail-open；日志异常不得再次遮蔽原始 UI 异常。
+- AtomPix 主题 `StyleInclude` 移入编译期 AXAML；批量结果 Dialog 的开关同步改为显式属性同步，清除 AtomPix 自有代码中的 IL2026 警告。
+- 默认 Trim 单文件发布后进程隐藏启动 8 秒未提前退出。win-x64 入口约 `38.90 MB`，归档约 `33.49 MB`；尺寸只作为本机基线，不作为跨平台固定阈值。
+
+仍可见的 Trim 分析警告来自 Built-in COM、AtomUI.Core、Avalonia.DesignerSupport、DynamicData 与 ReactiveUI 依赖链。它们是维持 `TrimMode=partial`、不把 Full Trim/AOT 直接设为正式唯一产物的依据，不能通过全局 `NoWarn` 隐藏。
 

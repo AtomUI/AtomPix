@@ -99,7 +99,7 @@ public sealed class LocalJsonLoggerProvider : ILoggerProvider, ISupportExternalS
                 fields["ExceptionStackTrace"] = SanitizeText(exception.StackTrace ?? string.Empty);
             }
 
-            var json = JsonSerializer.Serialize(fields);
+            var json = SerializeFields(fields);
             lock (_syncRoot)
             {
                 if (_disposed) return;
@@ -109,12 +109,7 @@ public sealed class LocalJsonLoggerProvider : ILoggerProvider, ISupportExternalS
                 CleanupBestEffort();
             }
         }
-        catch (Exception exceptionDuringLogging) when (exceptionDuringLogging is IOException
-            or UnauthorizedAccessException
-            or ArgumentException
-            or NotSupportedException
-            or JsonException
-            or CryptographicException)
+        catch (Exception)
         {
             // Logging is deliberately fail-open and cannot change a business result.
         }
@@ -163,6 +158,76 @@ public sealed class LocalJsonLoggerProvider : ILoggerProvider, ISupportExternalS
             withoutWindowsPaths,
             @"(?<![A-Za-z0-9])/(?:[^/\s\""']+/)*[^/\s\""']+",
             "[path]");
+    }
+
+    private static string SerializeFields(IReadOnlyDictionary<string, object?> fields)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var (name, value) in fields)
+            {
+                writer.WritePropertyName(name);
+                WriteValue(writer, value);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(stream.GetBuffer(), 0, checked((int)stream.Length));
+    }
+
+    private static void WriteValue(Utf8JsonWriter writer, object? value)
+    {
+        switch (value)
+        {
+            case null:
+                writer.WriteNullValue();
+                break;
+            case string text:
+                writer.WriteStringValue(text);
+                break;
+            case bool boolean:
+                writer.WriteBooleanValue(boolean);
+                break;
+            case byte number:
+                writer.WriteNumberValue(number);
+                break;
+            case short number:
+                writer.WriteNumberValue(number);
+                break;
+            case int number:
+                writer.WriteNumberValue(number);
+                break;
+            case long number:
+                writer.WriteNumberValue(number);
+                break;
+            case float number:
+                writer.WriteNumberValue(number);
+                break;
+            case double number:
+                writer.WriteNumberValue(number);
+                break;
+            case decimal number:
+                writer.WriteNumberValue(number);
+                break;
+            case DateTime valueDateTime:
+                writer.WriteStringValue(valueDateTime);
+                break;
+            case DateTimeOffset valueDateTimeOffset:
+                writer.WriteStringValue(valueDateTimeOffset);
+                break;
+            case Guid guid:
+                writer.WriteStringValue(guid);
+                break;
+            case Enum enumValue:
+                writer.WriteStringValue(enumValue.ToString());
+                break;
+            default:
+                writer.WriteStringValue(value.ToString());
+                break;
+        }
     }
 
     private string ResolveCurrentFile(int appendBytes)

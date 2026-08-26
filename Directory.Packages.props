@@ -4,13 +4,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Avalonia" Version="12.1.0" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.0" />
-    <PackageVersion Include="Avalonia.Headless" Version="12.1.0" />
-    <PackageVersion Include="AtomUI.Desktop.Controls" Version="6.1.2" />
-    <PackageVersion Include="AtomUI.Desktop.Controls.ColorPicker" Version="6.1.2" />
-    <PackageVersion Include="AtomUI.Fonts.AlibabaSans" Version="6.1.2" />
-    <PackageVersion Include="AtomUI.Icons.AntDesign" Version="6.1.2" />
+    <PackageVersion Include="Avalonia" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.1" />
+    <PackageVersion Include="AtomUI.Desktop.Controls" Version="6.0.8" />
+    <PackageVersion Include="AtomUI.Desktop.Controls.ColorPicker" Version="6.0.8" />
+    <PackageVersion Include="AtomUI.Fonts.AlibabaSans" Version="6.0.8" />
+    <PackageVersion Include="AtomUI.Icons.AntDesign" Version="6.0.8" />
+    <PackageVersion Include="AtomUI.Labs.Controls.ImageGallery" Version="6.0.8" />
     <PackageVersion Include="Magick.NET-Q8-AnyCPU" Version="14.16.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />

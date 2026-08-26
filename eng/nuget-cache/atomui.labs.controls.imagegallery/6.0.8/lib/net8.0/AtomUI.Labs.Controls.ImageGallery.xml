@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>AtomUI.Labs.Controls.ImageGallery</name>
+    </assembly>
+    <members>
+        <member name="T:AtomUI.Labs.Controls.ImageGallery.Appearance.ImageGalleryToolbarText">
+            <summary>
+            Renders a single toolbar label by centering its visible ink rather than its
+            font line box. Font ascenders, descenders and fallback fonts therefore do not
+            push the visible label below the toolbar's geometric center line.
+            </summary>
+        </member>
+        <member name="T:AtomUI.Labs.Controls.ImageGallery.Layout.ImageGalleryToolbarPanel">
+            <summary>
+            Lays out toolbar roles sequentially while forcing every role onto the same
+            cross-axis center line. StackPanel deliberately does not provide that
+            guarantee for children with different desired sizes.
+            </summary>
+        </member>
+        <member name="T:AtomUI.Labs.Controls.ImageGallery.Loading.ImageGalleryLoadScheduler">
+            <summary>
+            Per-gallery stable priority scheduler. Six regular operations may execute
+            concurrently; one bounded escape operation prevents a newly selected main
+            image from being trapped behind non-cooperative obsolete work.
+            </summary>
+        </member>
+        <member name="T:AtomUI.Labs.Controls.ImageGallery.ExifOrientedImage">
+            <summary>
+            Presents a decoded JPEG in its EXIF-defined logical orientation without
+            copying the decoded pixel buffer.
+            </summary>
+        </member>
+        <member name="M:AtomUI.Labs.Controls.ImageGallery.ExifOrientedImage.#ctor(Avalonia.Media.IImage,System.Int32)">
+            <summary>
+            Presents a decoded JPEG in its EXIF-defined logical orientation without
+            copying the decoded pixel buffer.
+            </summary>
+        </member>
+    </members>
+</doc>

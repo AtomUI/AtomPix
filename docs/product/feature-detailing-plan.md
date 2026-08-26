@@ -46,7 +46,7 @@
 
 `Imaging.Magick` 是第一阶段图片引擎实现，应被抽象契约约束，而不是反向污染契约和业务层。
 
-`Desktop` 当时最后讨论；当前信息架构、原型和交互状态已经完成设计，见 `docs/ui-prototype/` 与 `docs/modules/desktop/interaction-state-design.md`。
+`Desktop` 当时最后讨论。现行交互状态与业务边界见 `docs/modules/desktop/interaction-state-design.md`；旧视觉基线已经退役，新一轮视觉结构已经记录在 `docs/ui-design/README.md`，不得从更早的历史布局反推业务规则。
 
 ## 4. 第一阶段细化主题
 

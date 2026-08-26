@@ -135,6 +135,7 @@ AppData/AtomPix/logs/
 
 - 已知错误继续显示本地化原因和恢复动作，通常不显示诊断编号。
 - `AtomPixErrorCategory.Unexpected`、`AtomPixErrorCode.Unknown` 或 Desktop 全局错误边界显示通用错误文案和可复制 DiagnosticId。
+- Avalonia Popup 在 Tooltip 锚点已被虚拟化或随页面离场而脱离视觉树后产生的精确 `Target control is not attached to the visual tree` 属于已知展示瞬态：Desktop 将其标记为 handled、以 Warning 记录且不生成 DiagnosticId、不显示错误弹窗。只允许按异常类型和完整消息精确匹配；其他 `InvalidOperationException` 仍进入正常全局错误边界。虚拟化缩略图本身不得挂载 Tooltip，以从源头避免该竞态。
 - UI 不显示 OperationId、原始异常消息、调用栈或日志原文。
 - 复制诊断编号只复制 `APX-...` 值，不附带路径、图片信息或剪贴板中的其他内容。
 - 第一阶段不提供日志浏览器、自动上传或遥测开关。

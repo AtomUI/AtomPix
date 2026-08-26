@@ -379,7 +379,8 @@ public abstract record ResizePolicy;
 public sealed record PixelResizePolicy(
     int? Width,
     int? Height,
-    bool MaintainAspectRatio) : ResizePolicy;
+    bool MaintainAspectRatio,
+    bool PreventUpscaling = false) : ResizePolicy;
 
 public sealed record PercentageResizePolicy(
     decimal Percentage) : ResizePolicy;
@@ -400,12 +401,15 @@ public sealed record PercentageResizePolicy(
 - `PixelResizePolicy + MaintainAspectRatio = true` 时，至少提供 `Width` 或 `Height` 之一。
 - 保持比例且只提供一边时，另一边按原始宽高比计算。
 - 保持比例且同时提供两边时，两者表示最大边界，按 `min(Width / OriginalWidth, Height / OriginalHeight)` 计算缩放比例。
+- `PreventUpscaling` 只属于 Pixel 模式，默认 `false`。开启后不得把任何输出边放大到超过原图对应边。
+- 开启 `PreventUpscaling` 且保持比例时，如果正常解析结果会放大任意一边，则最终尺寸回退为原图尺寸。
+- 开启 `PreventUpscaling` 且关闭保持比例时，两边分别使用 `min(Target, Original)`；因此允许一边缩小、另一边保持原尺寸。
 - `PercentageResizePolicy.Percentage` 使用十进制正数，允许小数和大于 `100%` 的放大，例如 `12.5%`、`125%`、`200%`。
 - 百分比同时作用于两边，天然保持比例，不再携带 `MaintainAspectRatio`、`Width` 或 `Height`。
 - 所有计算后的像素尺寸必须大于 0；小数像素按照 Core 统一的取整规则转换为整数。
 - Resize 不裁剪、不补边；裁剪必须使用后续独立模型。
 
-Desktop 第一阶段提供 `25%`、`50%`、`75%` 三个百分比快捷值，同时允许输入自定义正数百分比。快捷值属于 UI 便利能力，不进入 Core 枚举。
+Desktop 第一阶段只提供百分比滑块与整数输入框，两者双向同步；不提供 `25%`、`50%`、`75%` 快捷选择。该取舍只影响 UI，Core 仍接收任意合法正数百分比。
 
 ### 8.4.1 尺寸值对象与统一解析
 
@@ -457,9 +461,14 @@ Percentage：
   Scale = Percentage / 100
   ResolvedWidth  = round(OriginalWidth * Scale)
   ResolvedHeight = round(OriginalHeight * Scale)
+
+Pixel，PreventUpscaling = true：
+  保持比例：若上述结果任一边大于原图对应边，则回退为 OriginalWidth × OriginalHeight
+  不保持比例：ResolvedWidth = min(ResolvedWidth, OriginalWidth)
+             ResolvedHeight = min(ResolvedHeight, OriginalHeight)
 ```
 
-只提供一边时，该边严格等于用户输入；同时提供两个最大边界时使用向下取整，保证结果不超过任一边界。百分比计算使用统一的中点远离零取整；任何结果最小钳制为 `1 × 1`。
+只提供一边时，该边严格等于用户输入；同时提供两个最大边界时使用向下取整，保证结果不超过任一边界。启用禁止放大后，由上述 Pixel 规则对解析结果进行最后钳制。百分比计算使用统一的中点远离零取整；任何结果最小钳制为 `1 × 1`。即使禁止放大最终得到原图尺寸，任务仍按用户显式操作正常编码并生成输出，不映射为 `Skipped`。
 
 Workflow 在 Probe 后把逻辑 `ImageSize` 和 `ResizePolicy` 交给 Core 解析，再根据 Imaging Capabilities 检查极端尺寸、内存或引擎限制。Core 不冻结特定图片库的最大尺寸常量。
 
@@ -480,7 +489,7 @@ public sealed record SameFormatEncodingPolicy(
 - JPEG / WebP 等有损格式使用 `LossyQuality`。
 - PNG、BMP 等无损格式忽略 `LossyQuality`，但仍执行 `MetadataPolicy`。
 - 输出格式与输入格式一致；该策略不承担格式转换。
-- Resize/Crop 页面不暴露质量控件；Desktop 或默认设置流程必须把已经解析完成的明确策略传入正式 Workflow Request。
+- Resize/Crop 处理面板不暴露质量控件；Desktop 或默认设置流程必须把已经解析完成的明确策略传入正式 Workflow Request。
 - 第一阶段产品值固定为 `LossyQuality = 90`，但仍作为明确请求字段传递，避免依赖图片引擎默认值；MVP UI 不允许编辑它。
 - 默认 `MetadataPolicy = Remove`，并允许用户通过公共处理默认值修改；运行中的 Request 使用提交时快照，不受随后设置变更影响。
 - 多帧或动画输入在 Job 创建前拒绝，不进入同格式重新编码。
@@ -532,7 +541,7 @@ public enum MetadataPolicy
 默认行为说明：
 
 - 压缩模式只决定质量或编码策略，不决定元数据策略。
-- 新安装或恢复默认值时，公共 `MetadataPolicy` 为 `Remove`；设置页修改时同时更新压缩、转换和同格式编码三个默认 Profile 的该字段。
+- 新安装或恢复默认值时，公共 `MetadataPolicy` 为 `Remove`；设置页面修改时同时更新压缩、转换和同格式编码三个默认 Profile 的该字段。
 - 页面切换 Smart、HighQuality、Balanced、Maximum 或 Custom 时保留当前独立元数据选择，不因模式变化重置；任何选择都不删除 ICC。
 - 保存 `Custom` 为默认方案时，`DefaultCompressionProfile` 必须同时保存其合法 `Quality`；只保存模式而遗漏质量属于非法设置。
 
@@ -1419,7 +1428,7 @@ DefaultCompressionProfile.MetadataPolicy
   = DefaultSameFormatEncodingPolicy.MetadataPolicy
 ```
 
-设置页的公共开关一次更新三处。读取到不一致的持久化值视为 `SettingsLoadFailed`，不能任意选择其中一个；单次处理页面仍可只覆盖当前请求的 MetadataPolicy，且不写回默认设置。
+设置页面的公共开关一次更新三处。读取到不一致的持久化值视为 `SettingsLoadFailed`，不能任意选择其中一个；单次处理面板仍可只覆盖当前请求的 MetadataPolicy，且不写回默认设置。
 
 ### 12.2 ThemeMode
 

@@ -12,7 +12,7 @@ using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
 
-public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -20,7 +20,6 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
     private readonly IDesktopClipboardService _clipboard;
     private readonly ResultOutputGuard _outputGuard;
     private readonly OpenImageWorkflow _openImage;
-    private readonly CreatePreviewWorkflow _createPreview;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly ConvertImageWorkflow _convert;
     private readonly DesktopNavigationCoordinator _navigation;
@@ -31,7 +30,6 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
     private DesktopExecutionState _executionState = DesktopExecutionState.Draft;
     private LocalPath? _inputPath;
     private ImageProbeResult? _probe;
-    private byte[]? _previewBytes;
     private DesktopChoiceOption<OutputImageFormat> _selectedFormat;
     private decimal _quality = 80;
     private string _backgroundHex = "#FFFFFF";
@@ -48,7 +46,6 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         IDesktopClipboardService clipboard,
         ResultOutputGuard outputGuard,
         OpenImageWorkflow openImage,
-        CreatePreviewWorkflow createPreview,
         LoadSettingsWorkflow loadSettings,
         ConvertImageWorkflow convert,
         DesktopNavigationCoordinator navigation)
@@ -59,11 +56,10 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         _clipboard = clipboard ?? throw new ArgumentNullException(nameof(clipboard));
         _outputGuard = outputGuard ?? throw new ArgumentNullException(nameof(outputGuard));
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
-        _createPreview = createPreview ?? throw new ArgumentNullException(nameof(createPreview));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _convert = convert ?? throw new ArgumentNullException(nameof(convert));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged);
+        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
 
         Formats =
         [
@@ -73,7 +69,7 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         ];
         _selectedFormat = Formats[2];
         SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => CanStart);
+        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
         CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
         UseWhiteCommand = new RelayCommand<object?>(_ => BackgroundHex = "#FFFFFF", _ => !IsProcessing);
         UseBlackCommand = new RelayCommand<object?>(_ => BackgroundHex = "#000000", _ => !IsProcessing);
@@ -84,6 +80,7 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
 
     public IReadOnlyList<DesktopChoiceOption<OutputImageFormat>> Formats { get; }
     public OutputPolicyEditorViewModel Output { get; }
+    public OperationResultFeedback ResultFeedback { get; } = new();
     public DesktopContentState ContentState { get => _contentState; private set { if (SetProperty(ref _contentState, value)) NotifyState(); } }
     public DesktopExecutionState ExecutionState { get => _executionState; private set { if (SetProperty(ref _executionState, value)) NotifyState(); } }
     public DesktopChoiceOption<OutputImageFormat> SelectedFormat
@@ -99,8 +96,17 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
     public double QualitySlider
     {
         get => decimal.ToDouble(Quality);
-        set => Quality = Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
+        set => Quality = decimal.Round(
+            Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture),
+            0,
+            MidpointRounding.AwayFromZero);
     }
+
+    public string StartActionLabel => "单张处理";
+
+    System.Windows.Input.ICommand IToolEditorActions.StartActionCommand => StartCommand;
+
+    System.Windows.Input.ICommand IToolEditorActions.CancelActionCommand => CancelCommand;
     public string BackgroundHex
     {
         get => _backgroundHex;
@@ -135,13 +141,11 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
     public string InputName => _inputPath is null ? string.Empty : Path.GetFileName(_inputPath.Value.Value);
     public string InputPath => _inputPath?.Value ?? string.Empty;
     public string InputSummary => _probe is null ? string.Empty : $"{_probe.Width} × {_probe.Height}  ·  {_probe.Format.ToString().ToUpperInvariant()}";
-    public byte[]? PreviewBytes { get => _previewBytes; private set => SetProperty(ref _previewBytes, value); }
     public string? DraftError
     {
         get
         {
-            if (!TryBuildProfile(out _, out var error)) return error;
-            Output.TryBuild(out _, out error);
+            TryBuildProfile(out _, out var error);
             return error;
         }
     }
@@ -181,17 +185,25 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
 
     public void RefreshResultAvailability() => NotifyResult();
 
-    public async Task LoadAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default)
+    public Task LoadAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(context, initializeDraft: true, cancellationToken);
+
+    public Task SynchronizeInputAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(context, initializeDraft: false, cancellationToken);
+
+    private async Task LoadCoreAsync(
+        SingleImageNavigationContext context,
+        bool initializeDraft,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var initializeDraft = _inputPath is null;
         var generation = BeginLoad(cancellationToken, out var loadCancellation);
         _inputPath = context.InputPath;
         _probe = context.Probe;
-        PreviewBytes = null;
         ErrorMessage = null;
         DiagnosticId = null;
         _lastResult = null;
+        ResultFeedback.Dismiss();
         _transparencyResult = null;
         ExecutionState = DesktopExecutionState.Draft;
         ContentState = DesktopContentState.Loading;
@@ -207,10 +219,6 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         }
 
         ContentState = DesktopContentState.Ready;
-        var preview = await _createPreview.ExecuteAsync(new CreatePreviewRequest(context.InputPath, 1600), loadCancellation.Token);
-        if (!IsCurrentLoad(generation, loadCancellation)) return;
-        if (preview.Succeeded) PreviewBytes = preview.Value!.Preview.EncodedBytes;
-        else SetError(preview.Error);
     }
 
     public void Clear()
@@ -219,8 +227,8 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         _inputPath = null;
         _probe = null;
         _lastResult = null;
+        ResultFeedback.Dismiss();
         _transparencyResult = null;
-        PreviewBytes = null;
         ErrorMessage = null;
         DiagnosticId = null;
         ExecutionState = DesktopExecutionState.Draft;
@@ -249,14 +257,23 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_inputPath is null
-            || !TryBuildProfile(out var profile, out _)
-            || !Output.TryBuild(out var outputPolicy, out _)) return;
+        if (_inputPath is null) return;
+        if (!TryBuildProfile(out var profile, out var profileError))
+        {
+            ResultFeedback.ShowWarning(profileError ?? "当前转换配置无效。");
+            return;
+        }
+        if (!Output.TryBuild(out var outputPolicy, out var outputError))
+        {
+            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
+            return;
+        }
         if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
         DiagnosticId = null;
+        ResultFeedback.Dismiss();
         ExecutionState = DesktopExecutionState.Processing;
         try
         {
@@ -266,6 +283,7 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
                 if (result.Error?.Code == AtomPixErrorCode.OutputPathConflictsWithInput) await HandleSourceConflictAsync(executionCancellation.Token);
                 else SetError(result.Error);
                 ExecutionState = result.Error?.Code == AtomPixErrorCode.OperationCanceled ? DesktopExecutionState.Canceled : DesktopExecutionState.Failure;
+                if (ExecutionState == DesktopExecutionState.Canceled) ResultFeedback.ShowCanceled();
                 return;
             }
 
@@ -273,6 +291,7 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
             _transparencyResult = result.Value.Transparency;
             ExecutionState = ToExecutionState(_lastResult.Status);
             if (_lastResult.Status == ImageJobStatus.Failed) SetError(_lastResult.Error);
+            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, "转换完成", ResultSizeChange);
             NotifyResult();
         }
         finally
@@ -387,6 +406,7 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
 
     private void MarkDraftChanged()
     {
+        ResultFeedback.Dismiss();
         if (ExecutionState is DesktopExecutionState.Success or DesktopExecutionState.Failure or DesktopExecutionState.Canceled or DesktopExecutionState.Skipped)
         {
             ExecutionState = DesktopExecutionState.Draft;

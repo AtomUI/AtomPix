@@ -1,13 +1,14 @@
 namespace AtomPix.Infrastructure;
 
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 internal static class JsonFileWriter
 {
     public static async Task WriteAsync<T>(
         string path,
         T value,
-        JsonSerializerOptions options,
+        JsonTypeInfo<T> typeInfo,
         CancellationToken cancellationToken)
     {
         var directory = Path.GetDirectoryName(path);
@@ -23,7 +24,7 @@ internal static class JsonFileWriter
         {
             await using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 16 * 1024, useAsync: true))
             {
-                await JsonSerializer.SerializeAsync(stream, value, options, cancellationToken).ConfigureAwait(false);
+                await JsonSerializer.SerializeAsync(stream, value, typeInfo, cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
 

@@ -243,6 +243,25 @@ public sealed class CoreModelTests
     }
 
     [Fact]
+    public void Pixel_resize_can_prevent_upscaling_with_aspect_and_independent_axes()
+    {
+        var input = new ImageSize(800, 600);
+
+        Assert.Equal(
+            new ResolvedResizeSize(800, 600),
+            new PixelResizePolicy(1600, 1200, true, preventUpscaling: true).Resolve(input));
+        Assert.Equal(
+            new ResolvedResizeSize(400, 600),
+            new PixelResizePolicy(400, 1200, false, preventUpscaling: true).Resolve(input));
+        Assert.Equal(
+            new ResolvedResizeSize(400, 300),
+            new PixelResizePolicy(400, 300, true, preventUpscaling: true).Resolve(input));
+        Assert.Equal(
+            new ResolvedResizeSize(1600, 1200),
+            new PixelResizePolicy(1600, 1200, true).Resolve(input));
+    }
+
+    [Fact]
     public void Crop_rules_validate_logical_image_bounds_without_changing_the_rectangle()
     {
         var crop = new CropRectangle(10, 20, 100, 80);

@@ -187,6 +187,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     private decimal? _pixelWidth;
     private decimal? _pixelHeight;
     private bool _maintainAspectRatio = true;
+    private bool _preventUpscaling;
     private decimal _percentage = 50;
     private SameFormatEncodingPolicy _sameFormatEncoding = SameFormatEncodingPolicy.Default;
     private string? _errorMessage;
@@ -266,7 +267,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         RemoveInputCommand = new RelayCommand<BatchItemViewModel>(RemoveInput, item => item is not null && CanEditInputs);
         InsertNameTokenCommand = new RelayCommand<object?>(_ => FileNamePattern += "{name}", _ => CanEditDraft);
         InsertIndexTokenCommand = new RelayCommand<object?>(_ => FileNamePattern += "{index}", _ => CanEditDraft && !FileNamePattern.Contains("{index}", StringComparison.Ordinal));
-        StartCommand = new AsyncCommand(StartAsync, () => CanStart);
+        StartCommand = new AsyncCommand(StartAsync, () => CanAttemptStart);
         CancelCommand = new AsyncCommand(CancelAsync, () => IsProcessing && !IsCanceling);
         RetryFailedCommand = new RelayCommand<object?>(_ => RecoverFailed(), _ => HasFailedItems && !IsProcessing);
         ProcessUnfinishedCommand = new RelayCommand<object?>(_ => RecoverUnfinished(), _ => HasUnfinishedItems && !IsProcessing);
@@ -278,14 +279,12 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         RelocateInputCommand = new AsyncCommand<BatchItemViewModel>(RelocateInputAsync, item => item is { CanRelocate: true } && !IsProcessing);
         CopyItemDiagnosticIdCommand = new AsyncCommand<BatchItemViewModel>(CopyItemDiagnosticIdAsync, item => item is { HasDiagnosticId: true });
         CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
-        Use25PercentCommand = new RelayCommand<object?>(_ => Percentage = 25, _ => CanEditDraft);
-        Use50PercentCommand = new RelayCommand<object?>(_ => Percentage = 50, _ => CanEditDraft);
-        Use75PercentCommand = new RelayCommand<object?>(_ => Percentage = 75, _ => CanEditDraft);
         UseWhiteCommand = new RelayCommand<object?>(_ => BackgroundHex = "#FFFFFF", _ => CanEditDraft);
         UseBlackCommand = new RelayCommand<object?>(_ => BackgroundHex = "#000000", _ => CanEditDraft);
     }
 
     public ObservableCollection<BatchItemViewModel> Items { get; } = [];
+    public event EventHandler<IReadOnlyList<LocalPath>>? RecoveryDraftCreated;
     public IReadOnlyList<DesktopChoiceOption<BatchTaskKind>> TaskKinds { get; }
     public IReadOnlyList<DesktopChoiceOption<CompressionMode>> CompressionModes { get; }
     public IReadOnlyList<DesktopChoiceOption<OutputImageFormat>> ConversionFormats { get; }
@@ -295,16 +294,25 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     public DesktopChoiceOption<BatchTaskKind> SelectedTask { get => _selectedTask; set { if (value is not null && SetProperty(ref _selectedTask, value)) NotifyDraft(); } }
     public DesktopChoiceOption<CompressionMode> SelectedCompressionMode { get => _selectedCompressionMode; set { if (value is not null && SetProperty(ref _selectedCompressionMode, value)) NotifyDraft(); } }
     public decimal CustomQuality { get => _customQuality; set { if (SetProperty(ref _customQuality, value)) { OnPropertyChanged(nameof(CustomQualitySlider)); NotifyDraft(); } } }
-    public double CustomQualitySlider { get => decimal.ToDouble(CustomQuality); set => CustomQuality = Convert.ToDecimal(value); }
+    public double CustomQualitySlider
+    {
+        get => decimal.ToDouble(CustomQuality);
+        set => CustomQuality = decimal.Round(Convert.ToDecimal(value), 0, MidpointRounding.AwayFromZero);
+    }
     public DesktopChoiceOption<OutputImageFormat> SelectedFormat { get => _selectedFormat; set { if (value is not null && SetProperty(ref _selectedFormat, value)) NotifyDraft(); } }
     public decimal ConversionQuality { get => _conversionQuality; set { if (SetProperty(ref _conversionQuality, value)) { OnPropertyChanged(nameof(ConversionQualitySlider)); NotifyDraft(); } } }
-    public double ConversionQualitySlider { get => decimal.ToDouble(ConversionQuality); set => ConversionQuality = Convert.ToDecimal(value); }
+    public double ConversionQualitySlider
+    {
+        get => decimal.ToDouble(ConversionQuality);
+        set => ConversionQuality = decimal.Round(Convert.ToDecimal(value), 0, MidpointRounding.AwayFromZero);
+    }
     public string BackgroundHex { get => _backgroundHex; set { if (SetProperty(ref _backgroundHex, value ?? string.Empty)) NotifyDraft(); } }
     public bool RemoveMetadata { get => _removeMetadata; set { if (SetProperty(ref _removeMetadata, value)) NotifyDraft(); } }
     public DesktopChoiceOption<ResizeDraftMode> SelectedResizeMode { get => _selectedResizeMode; set { if (value is not null && SetProperty(ref _selectedResizeMode, value)) NotifyDraft(); } }
     public decimal? PixelWidth { get => _pixelWidth; set { if (SetProperty(ref _pixelWidth, value)) NotifyDraft(); } }
     public decimal? PixelHeight { get => _pixelHeight; set { if (SetProperty(ref _pixelHeight, value)) NotifyDraft(); } }
     public bool MaintainAspectRatio { get => _maintainAspectRatio; set { if (SetProperty(ref _maintainAspectRatio, value)) NotifyDraft(); } }
+    public bool PreventUpscaling { get => _preventUpscaling; set { if (SetProperty(ref _preventUpscaling, value)) NotifyDraft(); } }
     public decimal Percentage { get => _percentage; set { if (SetProperty(ref _percentage, value)) NotifyDraft(); } }
     public string FileNamePattern { get => Output.FileNamePattern; set => Output.FileNamePattern = value; }
     public bool IsAppending { get => _isAppending; private set { if (SetProperty(ref _isAppending, value)) NotifyState(); } }
@@ -312,6 +320,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     public bool IsCanceling { get => _isCanceling; private set { if (SetProperty(ref _isCanceling, value)) NotifyState(); } }
     public bool IsEmpty => Items.Count == 0;
     public bool HasInputs => Items.Count > 0;
+    public string InputCollectionSummary => $"浏览走廊中的 {Items.Count} 张图片；顺序与缩略图状态保持一致。";
     public bool CanEditInputs => !IsAppending && !IsProcessing && !HasResult;
     public bool CanEditDraft => !IsProcessing && !HasResult;
     public bool IsCompressTask => SelectedTask.Value == BatchTaskKind.Compress;
@@ -326,6 +335,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     public int LossyItemCount => Items.Count(item => item.UsesLossyQuality);
     public string? DraftError { get { TryBuildSubmission(out _, out var error); return error; } }
     public bool HasDraftError => !string.IsNullOrWhiteSpace(DraftError);
+    public bool CanAttemptStart => HasInputs && !IsAppending && !IsProcessing && !HasResult;
     public bool CanStart => _initialized && HasInputs && !IsAppending && !IsProcessing && !HasResult && TryBuildSubmission(out _, out _);
     public string EffectivePattern => Items.Count > 1 && !FileNamePattern.Contains("{index}", StringComparison.Ordinal) ? FileNamePattern + "_{index}" : FileNamePattern;
     public bool PatternWillAppendIndex => Items.Count > 1 && !FileNamePattern.Contains("{index}", StringComparison.Ordinal) && !HasDraftError;
@@ -377,9 +387,6 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     public AsyncCommand<BatchItemViewModel> RelocateInputCommand { get; }
     public AsyncCommand<BatchItemViewModel> CopyItemDiagnosticIdCommand { get; }
     public AsyncCommand CopyDiagnosticIdCommand { get; }
-    public RelayCommand<object?> Use25PercentCommand { get; }
-    public RelayCommand<object?> Use50PercentCommand { get; }
-    public RelayCommand<object?> Use75PercentCommand { get; }
     public RelayCommand<object?> UseWhiteCommand { get; }
     public RelayCommand<object?> UseBlackCommand { get; }
 
@@ -404,6 +411,89 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         _sameFormatEncoding = value.DefaultSameFormatEncodingPolicy;
         _initialized = true;
         OnPropertyChanged(string.Empty);
+        NotifyDraft();
+    }
+
+    public async Task PrepareAsync(
+        BatchTaskKind kind,
+        IReadOnlyList<LocalPath> inputs,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(inputs);
+        if (IsProcessing) return;
+
+        // The unified tool drawer submits a complete visible draft immediately after
+        // this preparation step. Batch execution must therefore not reload defaults
+        // (or depend on a settings read succeeding) at click time. Defaults remain the
+        // responsibility of LoadAsync for standalone/new drafts; this path is initialized
+        // by the caller-owned snapshot instead.
+        _initialized = true;
+
+        _previousBatchResult = _lastBatchResult;
+        _lastBatchResult = null;
+        _submittedSnapshot = null;
+        Items.Clear();
+        ProgressRatio = 0;
+        ProgressSummary = "尚未开始";
+        ClearError();
+        NoticeMessage = null;
+        SelectedTask = TaskKinds.First(option => option.Value == kind);
+
+        await AppendAsync(inputs, [], cancellationToken);
+        foreach (var item in Items) item.SetPlan(string.Empty);
+        NotifyCollectionChanged();
+        NotifyResult();
+    }
+
+    public void ApplyCompressionDraft(
+        CompressionMode mode,
+        decimal quality,
+        bool removeMetadata,
+        OutputPolicy outputPolicy)
+    {
+        SelectedTask = TaskKinds.First(option => option.Value == BatchTaskKind.Compress);
+        SelectedCompressionMode = CompressionModes.First(option => option.Value == mode);
+        CustomQuality = quality;
+        RemoveMetadata = removeMetadata;
+        Output.Apply(outputPolicy);
+        NotifyDraft();
+    }
+
+    public void ApplyConversionDraft(
+        OutputImageFormat format,
+        decimal quality,
+        string backgroundHex,
+        bool removeMetadata,
+        OutputPolicy outputPolicy)
+    {
+        SelectedTask = TaskKinds.First(option => option.Value == BatchTaskKind.Convert);
+        SelectedFormat = ConversionFormats.First(option => option.Value == format);
+        ConversionQuality = quality;
+        BackgroundHex = backgroundHex;
+        RemoveMetadata = removeMetadata;
+        Output.Apply(outputPolicy);
+        NotifyDraft();
+    }
+
+    public void ApplyResizeDraft(
+        ResizeDraftMode mode,
+        decimal? width,
+        decimal? height,
+        bool maintainAspectRatio,
+        bool preventUpscaling,
+        decimal percentage,
+        SameFormatEncodingPolicy encodingPolicy,
+        OutputPolicy outputPolicy)
+    {
+        SelectedTask = TaskKinds.First(option => option.Value == BatchTaskKind.Resize);
+        SelectedResizeMode = ResizeModes.First(option => option.Value == mode);
+        PixelWidth = width;
+        PixelHeight = height;
+        MaintainAspectRatio = maintainAspectRatio;
+        PreventUpscaling = preventUpscaling;
+        Percentage = percentage;
+        _sameFormatEncoding = encodingPolicy;
+        Output.Apply(outputPolicy);
         NotifyDraft();
     }
 
@@ -476,7 +566,11 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!TryBuildSubmission(out var submission, out _)) return;
+        if (!TryBuildSubmission(out var submission, out var submissionError))
+        {
+            SetPlainError(submissionError ?? "当前批量处理配置无效。");
+            return;
+        }
         if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
@@ -666,6 +760,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         ClearError();
         NotifyCollectionChanged();
         NotifyResult();
+        RecoveryDraftCreated?.Invoke(this, selected);
         _ = ProbeMissingItemsAsync(CancellationToken.None);
     }
 
@@ -693,6 +788,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
                 _pixelWidth = pixel.Width;
                 _pixelHeight = pixel.Height;
                 _maintainAspectRatio = pixel.MaintainAspectRatio;
+                _preventUpscaling = pixel.PreventUpscaling;
                 break;
 
             case PercentageResizePolicy percentage:
@@ -858,7 +954,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
 
     private ResizePolicy BuildResizePolicy() => SelectedResizeMode.Value switch
     {
-        ResizeDraftMode.Pixel => new PixelResizePolicy(ToOptionalPositiveInteger(PixelWidth), ToOptionalPositiveInteger(PixelHeight), MaintainAspectRatio),
+        ResizeDraftMode.Pixel => new PixelResizePolicy(ToOptionalPositiveInteger(PixelWidth), ToOptionalPositiveInteger(PixelHeight), MaintainAspectRatio, PreventUpscaling),
         ResizeDraftMode.Percentage => new PercentageResizePolicy(Percentage),
         _ => throw new ArgumentOutOfRangeException()
     };
@@ -868,6 +964,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         foreach (var item in Items) item.SetCanRemove(CanEditInputs);
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasInputs));
+        OnPropertyChanged(nameof(InputCollectionSummary));
         OnPropertyChanged(nameof(TransparentItemCount));
         OnPropertyChanged(nameof(LossyItemCount));
         OnPropertyChanged(nameof(InputDirectory));
@@ -889,6 +986,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         OnPropertyChanged(nameof(ShowBatchTransparency));
         OnPropertyChanged(nameof(DraftError));
         OnPropertyChanged(nameof(HasDraftError));
+        OnPropertyChanged(nameof(CanAttemptStart));
         OnPropertyChanged(nameof(CanStart));
         OnPropertyChanged(nameof(EffectivePattern));
         OnPropertyChanged(nameof(PatternWillAppendIndex));
@@ -904,6 +1002,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         foreach (var item in Items) item.SetCanRemove(CanEditInputs);
         OnPropertyChanged(nameof(CanEditInputs));
         OnPropertyChanged(nameof(CanEditDraft));
+        OnPropertyChanged(nameof(CanAttemptStart));
         OnPropertyChanged(nameof(CanStart));
         AddFilesCommand.NotifyCanExecuteChanged();
         AddFolderCommand.NotifyCanExecuteChanged();

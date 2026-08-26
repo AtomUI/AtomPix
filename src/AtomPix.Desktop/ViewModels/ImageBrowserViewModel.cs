@@ -1,7 +1,6 @@
 namespace AtomPix.Desktop.ViewModels;
 
 using AtomPix.Core.ValueObjects;
-using AtomPix.Core.Results;
 using AtomPix.Core.Errors;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
@@ -9,6 +8,7 @@ using AtomPix.Core.Conversion;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
+using AtomUI.Labs.Controls.ImageGallery;
 
 public enum BrowserItemAvailability
 {
@@ -17,32 +17,38 @@ public enum BrowserItemAvailability
     Unavailable
 }
 
+public enum BrowserTaskStatus
+{
+    None,
+    Pending,
+    Running,
+    Succeeded,
+    Failed,
+    Skipped,
+    Canceled
+}
+
 public sealed class BrowserItemViewModel : ObservableObject
 {
     private ImageProbeResult? _probe;
-    private readonly Func<BrowserItemViewModel, CancellationToken, Task> _loadThumbnail;
     private BrowserItemAvailability _availability;
-    private byte[]? _thumbnailBytes;
-    private bool _isThumbnailLoading;
-    private string? _thumbnailError;
+    private BrowserTaskStatus _taskStatus;
 
     public BrowserItemViewModel(
         LocalPath path,
         string displayName,
-        Func<BrowserItemViewModel, CancellationToken, Task> loadThumbnail,
         Action<BrowserItemViewModel> removeUnavailable)
     {
         Path = path;
         DisplayName = displayName;
-        _loadThumbnail = loadThumbnail ?? throw new ArgumentNullException(nameof(loadThumbnail));
         ArgumentNullException.ThrowIfNull(removeUnavailable);
-        EnsureThumbnailCommand = new AsyncCommand(
-            cancellationToken => _loadThumbnail(this, cancellationToken),
-            () => ThumbnailBytes is null && !IsThumbnailLoading && Availability != BrowserItemAvailability.Unavailable);
         RemoveCommand = new RelayCommand<object?>(_ => removeUnavailable(this), _ => IsUnavailable);
+        GalleryItem = new ImageGalleryItemAdapter(this);
     }
 
     public LocalPath Path { get; }
+
+    public ImageGalleryItemAdapter GalleryItem { get; }
 
     public string DisplayName { get; }
 
@@ -54,7 +60,6 @@ public sealed class BrowserItemViewModel : ObservableObject
             if (SetProperty(ref _availability, value))
             {
                 OnPropertyChanged(nameof(IsUnavailable));
-                EnsureThumbnailCommand.NotifyCanExecuteChanged();
                 RemoveCommand.NotifyCanExecuteChanged();
             }
         }
@@ -63,37 +68,44 @@ public sealed class BrowserItemViewModel : ObservableObject
     public bool IsUnavailable => Availability == BrowserItemAvailability.Unavailable;
     public ImageProbeResult? Probe => _probe;
 
-    public byte[]? ThumbnailBytes
+    public BrowserTaskStatus TaskStatus
     {
-        get => _thumbnailBytes;
+        get => _taskStatus;
         internal set
         {
-            if (SetProperty(ref _thumbnailBytes, value))
-            {
-                EnsureThumbnailCommand.NotifyCanExecuteChanged();
-            }
+            if (!SetProperty(ref _taskStatus, value)) return;
+            OnPropertyChanged(nameof(HasTaskStatus));
+            OnPropertyChanged(nameof(IsTaskPending));
+            OnPropertyChanged(nameof(IsTaskRunning));
+            OnPropertyChanged(nameof(IsTaskSucceeded));
+            OnPropertyChanged(nameof(IsTaskFailed));
+            OnPropertyChanged(nameof(IsTaskSkipped));
+            OnPropertyChanged(nameof(IsTaskCanceled));
+            OnPropertyChanged(nameof(TaskStatusText));
+            OnPropertyChanged(nameof(ThumbnailAutomationName));
         }
     }
 
-    public bool IsThumbnailLoading
+    public bool HasTaskStatus => TaskStatus != BrowserTaskStatus.None;
+    public bool IsTaskPending => TaskStatus == BrowserTaskStatus.Pending;
+    public bool IsTaskRunning => TaskStatus == BrowserTaskStatus.Running;
+    public bool IsTaskSucceeded => TaskStatus == BrowserTaskStatus.Succeeded;
+    public bool IsTaskFailed => TaskStatus == BrowserTaskStatus.Failed;
+    public bool IsTaskSkipped => TaskStatus == BrowserTaskStatus.Skipped;
+    public bool IsTaskCanceled => TaskStatus == BrowserTaskStatus.Canceled;
+    public string TaskStatusText => TaskStatus switch
     {
-        get => _isThumbnailLoading;
-        internal set
-        {
-            if (SetProperty(ref _isThumbnailLoading, value))
-            {
-                EnsureThumbnailCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
-    public string? ThumbnailError
-    {
-        get => _thumbnailError;
-        internal set => SetProperty(ref _thumbnailError, value);
-    }
-
-    public AsyncCommand EnsureThumbnailCommand { get; }
+        BrowserTaskStatus.Pending => "等待处理",
+        BrowserTaskStatus.Running => "正在处理",
+        BrowserTaskStatus.Succeeded => "处理成功",
+        BrowserTaskStatus.Failed => "处理失败",
+        BrowserTaskStatus.Skipped => "已跳过",
+        BrowserTaskStatus.Canceled => "已取消",
+        _ => string.Empty
+    };
+    public string ThumbnailAutomationName => HasTaskStatus
+        ? $"{DisplayName}，{TaskStatusText}"
+        : DisplayName;
 
     public RelayCommand<object?> RemoveCommand { get; }
 
@@ -107,59 +119,52 @@ public sealed class BrowserItemViewModel : ObservableObject
 public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 {
     private readonly OpenImageWorkflow _openImage;
-    private readonly CreatePreviewWorkflow _createPreview;
     private readonly ImageProcessorCapabilities _capabilities;
     private readonly IDesktopNavigator _navigator;
     private readonly IDesktopLauncherService _launcher;
-    private readonly SemaphoreSlim _thumbnailConcurrency = new(2, 2);
+    private readonly IDesktopPickerService? _picker;
     private readonly BoundedLruCache<string, ImageProbeResult> _probeCache;
-    private readonly BoundedLruCache<string, byte[]> _previewCache;
-    private readonly BoundedLruCache<string, RetainedThumbnail> _thumbnailCache;
     private readonly object _cacheSync = new();
     private CancellationTokenSource? _loadCancellation;
-    private CancellationTokenSource? _thumbnailCancellation;
     private int _generation;
-    private int _collectionGeneration;
     private DesktopContentState _state = DesktopContentState.Empty;
     private IReadOnlyList<BrowserItemViewModel> _items = Array.Empty<BrowserItemViewModel>();
+    private IReadOnlyList<ImageGalleryItemAdapter> _galleryItems = Array.Empty<ImageGalleryItemAdapter>();
     private BrowserItemViewModel? _currentItem;
     private ImageProbeResult? _currentProbe;
-    private byte[]? _previewBytes;
     private string? _errorMessage;
     private LocalPath? _directoryPath;
-    private bool _isFitMode = true;
-    private double _zoomPercent = 100;
+    private int _activeBatchIndex = -1;
+    private bool _isCropMode;
+    private CropEditorViewModel? _cropEditor;
+    private bool _isInteractionLocked;
 
     public ImageBrowserViewModel(
         OpenImageWorkflow openImage,
-        CreatePreviewWorkflow createPreview,
         IImageProcessor imageProcessor,
         IDesktopNavigator navigator,
         IDesktopLauncherService launcher,
         IDesktopClipboardService clipboard,
-        BrowserCacheOptions? cacheOptions = null)
+        IDesktopPickerService? picker = null)
     {
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
-        _createPreview = createPreview ?? throw new ArgumentNullException(nameof(createPreview));
         _capabilities = (imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor))).Capabilities;
+        var resources = _capabilities.Resources;
+        GalleryLoadLimits = new ImageGalleryLoadLimits(
+            resources.MaxInputFileSizeBytes,
+            resources.MaxInputPixelCount,
+            Math.Max(resources.MaxInputWidth, resources.MaxInputHeight),
+            resources.MaxInputPixelCount > long.MaxValue / 4
+                ? long.MaxValue
+                : resources.MaxInputPixelCount * 4);
         _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
-        cacheOptions ??= new BrowserCacheOptions();
+        _picker = picker;
         var pathComparer = PathComparer();
         _probeCache = new BoundedLruCache<string, ImageProbeResult>(
-            cacheOptions.ProbeEntryLimit,
-            cacheOptions.ProbeEntryLimit,
+            256,
+            256,
             _ => 1,
-            pathComparer);
-        _previewCache = new BoundedLruCache<string, byte[]>(
-            cacheOptions.PreviewEntryLimit,
-            cacheOptions.PreviewByteBudget,
-            bytes => bytes.LongLength,
-            pathComparer);
-        _thumbnailCache = new BoundedLruCache<string, RetainedThumbnail>(
-            cacheOptions.ThumbnailEntryLimit,
-            cacheOptions.ThumbnailByteBudget,
-            entry => entry.Bytes.LongLength,
             pathComparer);
         Diagnostic = new DiagnosticErrorViewModel(clipboard);
 
@@ -168,15 +173,12 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         PreviousCommand = new AsyncCommand(cancellationToken => MoveAsync(-1, cancellationToken), () => CanGoPrevious);
         NextCommand = new AsyncCommand(cancellationToken => MoveAsync(1, cancellationToken), () => CanGoNext);
         RemoveUnavailableCommand = new RelayCommand<BrowserItemViewModel>(RemoveUnavailable, item => item.IsUnavailable);
-        FitCommand = new RelayCommand<object?>(_ => SetFitMode());
-        ActualSizeCommand = new AsyncCommand(LoadActualSizeAsync, () => CanUseCurrentImage);
-        ZoomOutCommand = new RelayCommand<object?>(_ => SetZoom(ZoomPercent - 25), _ => CanZoomOut);
-        ZoomInCommand = new RelayCommand<object?>(_ => SetZoom(ZoomPercent + 25), _ => CanZoomIn);
         CompressCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Compress), _ => CanCompress);
         ConvertCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Convert), _ => CanConvert);
         ResizeCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Resize), _ => CanResize);
         CropCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Crop), _ => CanCrop);
         OpenDirectoryCommand = new AsyncCommand(OpenDirectoryAsync, () => DirectoryPath is not null || CurrentItem is not null);
+        AddImagesCommand = new AsyncCommand(AddImagesAsync, () => _picker is not null && !_isInteractionLocked && State != DesktopContentState.Loading);
     }
 
     public DesktopContentState State
@@ -189,6 +191,7 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(IsLoading));
                 OnPropertyChanged(nameof(IsEmpty));
                 OnPropertyChanged(nameof(IsReady));
+                OnPropertyChanged(nameof(IsCurrentUnavailable));
                 OnPropertyChanged(nameof(CanUseCurrentImage));
                 NotifyNavigationState();
                 NotifyCommands();
@@ -202,21 +205,88 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     public bool IsReady => State == DesktopContentState.Ready;
 
+    public bool IsCurrentUnavailable => State == DesktopContentState.Failure && CurrentItem?.IsUnavailable == true;
+
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public DiagnosticErrorViewModel Diagnostic { get; }
 
     public IReadOnlyList<BrowserItemViewModel> Items
     {
         get => _items;
-        private set => SetProperty(ref _items, value);
+        private set
+        {
+            if (SetProperty(ref _items, value))
+            {
+                // ImageGallery treats its descriptor set as the identity boundary for
+                // safe image leases. Keep one stable ItemsSource snapshot per browser
+                // collection instead of returning a fresh array on every binding read;
+                // otherwise a Shell layout refresh can rebuild descriptors underneath
+                // an already-ready image and TryAcquireCurrentImage must reject it.
+                _galleryItems = value.Select(item => item.GalleryItem).ToArray();
+                OnPropertyChanged(nameof(HasItems));
+                OnPropertyChanged(nameof(GalleryItems));
+                OnPropertyChanged(nameof(IsGalleryToolbarVisible));
+                OnPropertyChanged(nameof(CanUseGalleryFilmstripNavigation));
+                OnPropertyChanged(nameof(CurrentIndex));
+                OnPropertyChanged(nameof(CurrentPositionText));
+            }
+        }
     }
 
+    public bool HasItems => Items.Count > 0;
+
+    public ImageGalleryLoadLimits GalleryLoadLimits { get; }
+
+    public IReadOnlyList<ImageGalleryItemAdapter> GalleryItems => _galleryItems;
+
+    public ImageGalleryItemAdapter? SelectedGalleryItem
+    {
+        get => CurrentItem?.GalleryItem;
+        set
+        {
+            if (value is not null && !ReferenceEquals(value.Item, _currentItem))
+            {
+                CurrentItem = value.Item;
+            }
+        }
+    }
+
+    public int ActiveBatchIndex
+    {
+        get => _activeBatchIndex;
+        private set => SetProperty(ref _activeBatchIndex, value);
+    }
+
+    public bool IsCropMode
+    {
+        get => _isCropMode;
+        private set
+        {
+            if (SetProperty(ref _isCropMode, value))
+            {
+                OnPropertyChanged(nameof(ViewerBackgroundHex));
+                OnPropertyChanged(nameof(GalleryMainImageMode));
+                OnPropertyChanged(nameof(IsGalleryToolbarVisible));
+            }
+        }
+    }
+
+    public string ViewerBackgroundHex => IsCropMode ? "#F5F7FA" : "#FFFFFF";
+    public ImageGalleryMainImageMode GalleryMainImageMode =>
+        IsCropMode ? ImageGalleryMainImageMode.ResourceOnly : ImageGalleryMainImageMode.Presented;
+    public bool IsGalleryToolbarVisible => HasItems && !IsCropMode;
+    public bool CanUseGalleryFilmstripNavigation => HasItems && !IsInteractionLocked;
+    public CropEditorViewModel? CropEditor
+    {
+        get => _cropEditor;
+        private set => SetProperty(ref _cropEditor, value);
+    }
     public BrowserItemViewModel? CurrentItem
     {
         get => _currentItem;
         set
         {
-            if (value is not null && !ReferenceEquals(_currentItem, value))
+            if (!_isInteractionLocked && value is not null && !ReferenceEquals(_currentItem, value))
             {
                 _ = SelectItemAsync(value, CancellationToken.None);
             }
@@ -230,15 +300,10 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _directoryPath, value))
             {
+                OnPropertyChanged(nameof(CurrentSourceLabel));
                 OpenDirectoryCommand.NotifyCanExecuteChanged();
             }
         }
-    }
-
-    public byte[]? PreviewBytes
-    {
-        get => _previewBytes;
-        private set => SetProperty(ref _previewBytes, value);
     }
 
     public string? ErrorMessage
@@ -257,11 +322,35 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     public string CurrentPath => CurrentItem?.Path.Value ?? string.Empty;
 
+    public string CurrentSourceLabel
+    {
+        get
+        {
+            if (DirectoryPath is null)
+            {
+                return "单张图片";
+            }
+
+            var trimmed = Path.TrimEndingDirectorySeparator(DirectoryPath.Value.Value);
+            return Path.GetFileName(trimmed) is { Length: > 0 } name ? name : trimmed;
+        }
+    }
+
+    public string CurrentPositionText => CurrentIndex < 0 ? string.Empty : $"{CurrentIndex + 1} / {Items.Count}";
+
     public string CurrentDimensions => _currentProbe is null ? string.Empty : $"{_currentProbe.Width} × {_currentProbe.Height}";
 
     public string CurrentFormat => _currentProbe?.Format.ToString().ToUpperInvariant() ?? string.Empty;
 
     public string CurrentFileSize => _currentProbe is null ? string.Empty : FormatBytes(_currentProbe.FileSizeBytes);
+
+    public string CurrentTransparency => _currentProbe is null
+        ? string.Empty
+        : _currentProbe.HasTransparency ? "有" : "无";
+
+    public string CurrentFrameSummary => _currentProbe is null
+        ? string.Empty
+        : _currentProbe.FrameCount > 1 ? $"{_currentProbe.FrameCount} 帧" : "否";
 
     public string CurrentMetadata => _currentProbe is null
         ? string.Empty
@@ -288,61 +377,14 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         && IsSingleFrameSupportedInput
         && _capabilities.Crop?.SupportedSameFormatFormats.Contains(_currentProbe!.Format) == true;
 
-    public bool CanGoPrevious => State != DesktopContentState.Loading && CurrentIndex > 0;
+    public bool CanGoPrevious => !_isInteractionLocked && State != DesktopContentState.Loading && CurrentIndex > 0;
 
-    public bool CanGoNext => State != DesktopContentState.Loading && CurrentIndex >= 0 && CurrentIndex < Items.Count - 1;
+    public bool CanGoNext => !_isInteractionLocked && State != DesktopContentState.Loading && CurrentIndex >= 0 && CurrentIndex < Items.Count - 1;
 
-    public bool IsFitMode
+    public bool IsInteractionLocked
     {
-        get => _isFitMode;
-        private set
-        {
-            if (SetProperty(ref _isFitMode, value))
-            {
-                OnPropertyChanged(nameof(ZoomDisplayText));
-            }
-        }
-    }
-
-    public double ZoomPercent
-    {
-        get => _zoomPercent;
-        private set
-        {
-            if (SetProperty(ref _zoomPercent, value))
-            {
-                OnPropertyChanged(nameof(ZoomScale));
-                OnPropertyChanged(nameof(ZoomDisplayText));
-                OnPropertyChanged(nameof(CanZoomIn));
-                OnPropertyChanged(nameof(CanZoomOut));
-                ZoomInCommand.NotifyCanExecuteChanged();
-                ZoomOutCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
-    public double ZoomScale => ZoomPercent / 100d;
-
-    public string ZoomDisplayText => IsFitMode ? "适应窗口" : $"{ZoomPercent:0}%";
-
-    public bool CanZoomIn => PreviewBytes is not null && (IsFitMode || ZoomPercent < 400);
-
-    public bool CanZoomOut => PreviewBytes is not null && (IsFitMode || ZoomPercent > 25);
-
-    public BrowserCacheSnapshot CacheSnapshot
-    {
-        get
-        {
-            lock (_cacheSync)
-            {
-                return new BrowserCacheSnapshot(
-                    _previewCache.Count,
-                    _previewCache.TotalSize,
-                    _thumbnailCache.Count,
-                    _thumbnailCache.TotalSize,
-                    _probeCache.Count);
-            }
-        }
+        get => _isInteractionLocked;
+        private set => SetProperty(ref _isInteractionLocked, value);
     }
 
     public RelayCommand<object?> BackCommand { get; }
@@ -355,14 +397,6 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     public RelayCommand<BrowserItemViewModel> RemoveUnavailableCommand { get; }
 
-    public RelayCommand<object?> FitCommand { get; }
-
-    public AsyncCommand ActualSizeCommand { get; }
-
-    public RelayCommand<object?> ZoomOutCommand { get; }
-
-    public RelayCommand<object?> ZoomInCommand { get; }
-
     public RelayCommand<object?> CompressCommand { get; }
 
     public RelayCommand<object?> ConvertCommand { get; }
@@ -373,24 +407,22 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     public AsyncCommand OpenDirectoryCommand { get; }
 
+    public AsyncCommand AddImagesCommand { get; }
+
     public async Task LoadAsync(BrowserNavigationContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         CancelLoading();
-        CancelThumbnailLoading();
         ClearSessionData();
         var generation = ++_generation;
-        var collectionGeneration = ++_collectionGeneration;
         var loadCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _loadCancellation = loadCancellation;
-        _thumbnailCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         DirectoryPath = context.DirectoryPath;
         Items = context.Items
             .Select(item => new BrowserItemViewModel(
                 item.Path,
                 item.DisplayName,
-                (browserItem, requestCancellation) => EnsureThumbnailAsync(browserItem, collectionGeneration, requestCancellation),
                 RemoveUnavailable))
             .ToArray();
         ClearCurrent();
@@ -434,13 +466,14 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         CancelLoading();
-        CancelThumbnailLoading();
         ClearSessionData();
-        _thumbnailConcurrency.Dispose();
     }
+
+    public void EndSession() => ReleaseSession();
 
     private async Task SelectItemAsync(BrowserItemViewModel item, CancellationToken cancellationToken)
     {
+        if (_isInteractionLocked) return;
         CancelLoading();
         var generation = ++_generation;
         var loadCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -459,42 +492,6 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         await SelectItemAsync(Items[targetIndex], cancellationToken);
     }
 
-    private async Task LoadActualSizeAsync(CancellationToken cancellationToken)
-    {
-        if (CurrentItem is null || _currentProbe is null)
-        {
-            return;
-        }
-
-        var item = CurrentItem;
-        var generation = _generation;
-        var maxPixelSize = Math.Max(_currentProbe.Width, _currentProbe.Height);
-        if (maxPixelSize <= 1600)
-        {
-            SetZoom(100);
-            return;
-        }
-
-        State = DesktopContentState.Loading;
-        ErrorMessage = null;
-        var previewBytes = await GetPreviewBytesAsync(item.Path, maxPixelSize, cancellationToken);
-        if (generation != _generation || cancellationToken.IsCancellationRequested || !ReferenceEquals(CurrentItem, item))
-        {
-            return;
-        }
-
-        if (!previewBytes.Succeeded)
-        {
-            SetWorkflowError(previewBytes.Error);
-            State = DesktopContentState.Ready;
-            return;
-        }
-
-        PreviewBytes = previewBytes.Value!;
-        SetZoom(100);
-        State = DesktopContentState.Ready;
-    }
-
     private async Task<bool> LoadItemCoreAsync(
         BrowserItemViewModel item,
         ImageProbeResult? knownProbe,
@@ -502,10 +499,11 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         CancellationToken cancellationToken)
     {
         SetCurrentItem(item);
+        _currentProbe = null;
+        NotifyCurrentDetails();
         item.Availability = BrowserItemAvailability.Pending;
         State = DesktopContentState.Loading;
         ErrorMessage = null;
-        PreviewBytes = null;
 
         var probe = knownProbe ?? item.Probe;
         var pathKey = NormalizeCachePath(item.Path);
@@ -539,24 +537,8 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         item.SetProbe(probe);
         lock (_cacheSync) _probeCache.Set(pathKey, probe);
 
-        var previewBytes = await GetPreviewBytesAsync(item.Path, 1600, cancellationToken);
-        if (generation != _generation || cancellationToken.IsCancellationRequested)
-        {
-            return false;
-        }
-
-        if (!previewBytes.Succeeded)
-        {
-            item.Availability = BrowserItemAvailability.Unavailable;
-            SetWorkflowError(previewBytes.Error);
-            State = DesktopContentState.Failure;
-            return false;
-        }
-
         _currentProbe = probe;
-        PreviewBytes = previewBytes.Value!;
         item.Availability = BrowserItemAvailability.Ready;
-        SetFitMode();
         State = DesktopContentState.Ready;
         NotifyCurrentDetails();
         return true;
@@ -575,12 +557,9 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var pathSnapshot = CurrentItem.Path;
-        var probeSnapshot = _currentProbe;
-        ReleaseSession();
         _navigator.Navigate(new DesktopNavigationRequest(
             route,
-            new SingleImageNavigationContext(pathSnapshot, probeSnapshot)));
+            new SingleImageNavigationContext(CurrentItem.Path, _currentProbe)));
     }
 
     private async Task OpenDirectoryAsync(CancellationToken cancellationToken)
@@ -601,11 +580,50 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         }
     }
 
+    private async Task AddImagesAsync(CancellationToken cancellationToken)
+    {
+        if (_picker is null) return;
+        var selection = await _picker.PickImagesAsync(cancellationToken);
+        if (selection.Status == DesktopSelectionStatus.Canceled) return;
+        if (selection.Status != DesktopSelectionStatus.Selected)
+        {
+            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage);
+            return;
+        }
+
+        var comparer = PathComparer();
+        var appended = new List<BrowserItemViewModel>();
+        var known = new HashSet<string>(Items.Select(item => Path.GetFullPath(item.Path.Value)), comparer);
+        foreach (var value in selection.Paths)
+        {
+            var path = new LocalPath(value);
+            if (known.Add(Path.GetFullPath(path.Value)))
+            {
+                appended.Add(new BrowserItemViewModel(
+                    path,
+                    Path.GetFileName(path.Value),
+                    RemoveUnavailable));
+            }
+        }
+
+        if (appended.Count == 0) return;
+
+        var hadItems = Items.Count > 0;
+        Items = Items.Concat(appended).ToArray();
+        NotifyNavigationState();
+        NotifyCommands();
+        if (!hadItems)
+        {
+            await SelectItemAsync(appended[0], cancellationToken);
+        }
+    }
+
     private void SetCurrentItem(BrowserItemViewModel item)
     {
         if (SetProperty(ref _currentItem, item, nameof(CurrentItem)))
         {
             NotifyCurrentDetails();
+            OnPropertyChanged(nameof(SelectedGalleryItem));
             NotifyNavigationState();
             OpenDirectoryCommand.NotifyCanExecuteChanged();
         }
@@ -615,8 +633,8 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
     {
         _currentItem = null;
         _currentProbe = null;
-        PreviewBytes = null;
         OnPropertyChanged(nameof(CurrentItem));
+        OnPropertyChanged(nameof(SelectedGalleryItem));
         NotifyCurrentDetails();
         NotifyNavigationState();
     }
@@ -625,18 +643,21 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(CurrentDisplayName));
         OnPropertyChanged(nameof(CurrentPath));
+        OnPropertyChanged(nameof(CurrentIndex));
+        OnPropertyChanged(nameof(CurrentPositionText));
         OnPropertyChanged(nameof(CurrentDimensions));
         OnPropertyChanged(nameof(CurrentFormat));
         OnPropertyChanged(nameof(CurrentFileSize));
+        OnPropertyChanged(nameof(CurrentTransparency));
+        OnPropertyChanged(nameof(CurrentFrameSummary));
         OnPropertyChanged(nameof(CurrentMetadata));
         OnPropertyChanged(nameof(CurrentColorProfile));
+        OnPropertyChanged(nameof(IsCurrentUnavailable));
         OnPropertyChanged(nameof(CanUseCurrentImage));
         OnPropertyChanged(nameof(CanCompress));
         OnPropertyChanged(nameof(CanConvert));
         OnPropertyChanged(nameof(CanResize));
         OnPropertyChanged(nameof(CanCrop));
-        OnPropertyChanged(nameof(CanZoomIn));
-        OnPropertyChanged(nameof(CanZoomOut));
         NotifyCommands();
     }
 
@@ -646,77 +667,58 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         ConvertCommand.NotifyCanExecuteChanged();
         ResizeCommand.NotifyCanExecuteChanged();
         CropCommand.NotifyCanExecuteChanged();
-        ActualSizeCommand.NotifyCanExecuteChanged();
-        ZoomInCommand.NotifyCanExecuteChanged();
-        ZoomOutCommand.NotifyCanExecuteChanged();
+        AddImagesCommand.NotifyCanExecuteChanged();
     }
 
-    private int CurrentIndex => CurrentItem is null ? -1 : FindIndex(Items, item => ReferenceEquals(item, CurrentItem));
+    public int CurrentIndex => CurrentItem is null ? -1 : FindIndex(Items, item => ReferenceEquals(item, CurrentItem));
+
+    public bool TryCreateCurrentContext(out SingleImageNavigationContext? context)
+    {
+        if (CurrentItem is null || _currentProbe is null)
+        {
+            context = null;
+            return false;
+        }
+
+        context = new SingleImageNavigationContext(CurrentItem.Path, _currentProbe);
+        return true;
+    }
+
+    public void SetCropMode(bool value, CropEditorViewModel? editor = null)
+    {
+        CropEditor = value ? editor : null;
+        IsCropMode = value;
+    }
+
+    public void SetInteractionLocked(bool value)
+    {
+        if (IsInteractionLocked == value) return;
+        IsInteractionLocked = value;
+        OnPropertyChanged(nameof(CanUseGalleryFilmstripNavigation));
+        NotifyNavigationState();
+        NotifyCommands();
+    }
+
+    public void ResetBatchStatuses()
+    {
+        foreach (var item in Items) item.TaskStatus = BrowserTaskStatus.None;
+        ActiveBatchIndex = -1;
+    }
+
+    public void SetBatchStatus(LocalPath path, BrowserTaskStatus status)
+    {
+        var item = Items.FirstOrDefault(candidate => PathsEqual(candidate.Path, path));
+        if (item is null) return;
+        item.TaskStatus = status;
+        ActiveBatchIndex = status == BrowserTaskStatus.Running
+            ? FindIndex(Items, candidate => ReferenceEquals(candidate, item))
+            : FindIndex(Items, candidate => candidate.TaskStatus == BrowserTaskStatus.Running);
+    }
 
     private bool IsSingleFrameSupportedInput => _currentProbe is not null
         && _capabilities.SupportedInputFormats.Contains(_currentProbe.Format)
         && (!_currentProbe.IsAnimated || _capabilities.SupportsAnimatedImages)
         && _currentProbe.FrameCount == 1;
-
-    private async Task EnsureThumbnailAsync(
-        BrowserItemViewModel item,
-        int collectionGeneration,
-        CancellationToken requestCancellation)
-    {
-        if (item.ThumbnailBytes is not null || item.IsUnavailable || collectionGeneration != _collectionGeneration)
-        {
-            return;
-        }
-
-        var collectionCancellation = _thumbnailCancellation;
-        if (collectionCancellation is null)
-        {
-            return;
-        }
-
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(requestCancellation, collectionCancellation.Token);
-        var entered = false;
-        try
-        {
-            item.IsThumbnailLoading = true;
-            await _thumbnailConcurrency.WaitAsync(linked.Token);
-            entered = true;
-            if (item.ThumbnailBytes is not null || collectionGeneration != _collectionGeneration)
-            {
-                return;
-            }
-
-            var preview = await GetPreviewBytesAsync(item.Path, 240, linked.Token, cacheResult: false);
-            if (collectionGeneration != _collectionGeneration || linked.IsCancellationRequested)
-            {
-                return;
-            }
-
-            if (preview.Succeeded)
-            {
-                item.ThumbnailBytes = preview.Value!;
-                RetainThumbnail(item, preview.Value!);
-                item.ThumbnailError = null;
-            }
-            else
-            {
-                item.Availability = BrowserItemAvailability.Unavailable;
-                item.ThumbnailError = DesktopErrorText.FromWorkflow(preview.Error);
-            }
-        }
-        catch (OperationCanceledException) when (linked.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            if (entered)
-            {
-                _thumbnailConcurrency.Release();
-            }
-
-            item.IsThumbnailLoading = false;
-        }
-    }
 
     private void RemoveUnavailable(BrowserItemViewModel item)
     {
@@ -754,21 +756,6 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         _ = SelectItemAsync(remaining[nextIndex], CancellationToken.None);
     }
 
-    private void SetFitMode()
-    {
-        IsFitMode = true;
-        OnPropertyChanged(nameof(CanZoomIn));
-        OnPropertyChanged(nameof(CanZoomOut));
-        ZoomInCommand.NotifyCanExecuteChanged();
-        ZoomOutCommand.NotifyCanExecuteChanged();
-    }
-
-    private void SetZoom(double percent)
-    {
-        IsFitMode = false;
-        ZoomPercent = Math.Clamp(percent, 25, 400);
-    }
-
     private void NotifyNavigationState()
     {
         OnPropertyChanged(nameof(CanGoPrevious));
@@ -779,91 +766,25 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     private void CancelLoading()
     {
-        ActualSizeCommand.Cancel();
         _loadCancellation?.Cancel();
         _loadCancellation?.Dispose();
         _loadCancellation = null;
     }
 
-    private void CancelThumbnailLoading()
-    {
-        _thumbnailCancellation?.Cancel();
-        _thumbnailCancellation?.Dispose();
-        _thumbnailCancellation = null;
-    }
-
-    private async Task<OperationResult<byte[]>> GetPreviewBytesAsync(
-        LocalPath path,
-        int maxPixelSize,
-        CancellationToken cancellationToken,
-        bool cacheResult = true)
-    {
-        var key = $"{NormalizeCachePath(path)}\0{maxPixelSize}";
-        if (cacheResult)
-        {
-            lock (_cacheSync)
-            {
-                if (_previewCache.TryGetValue(key, out var cached))
-                {
-                    return OperationResult<byte[]>.Success(cached!);
-                }
-            }
-        }
-
-        var preview = await _createPreview.ExecuteAsync(
-            new CreatePreviewRequest(path, maxPixelSize),
-            cancellationToken);
-        if (!preview.Succeeded)
-        {
-            return OperationResult<byte[]>.Failure(preview.Error!);
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var bytes = preview.Value!.Preview.EncodedBytes;
-        if (cacheResult)
-        {
-            lock (_cacheSync) _previewCache.Set(key, bytes);
-        }
-        return OperationResult<byte[]>.Success(bytes);
-    }
-
-    private void RetainThumbnail(BrowserItemViewModel item, byte[] bytes)
-    {
-        IReadOnlyList<RetainedThumbnail> evicted;
-        lock (_cacheSync)
-        {
-            evicted = _thumbnailCache.Set(
-                NormalizeCachePath(item.Path),
-                new RetainedThumbnail(item, bytes));
-        }
-
-        foreach (var entry in evicted)
-        {
-            if (ReferenceEquals(entry.Item.ThumbnailBytes, entry.Bytes))
-            {
-                entry.Item.ThumbnailBytes = null;
-            }
-        }
-    }
-
     private void ReleaseSession()
     {
         CancelLoading();
-        CancelThumbnailLoading();
         ++_generation;
-        ++_collectionGeneration;
         ClearSessionData();
         State = DesktopContentState.Empty;
     }
 
     private void ClearSessionData()
     {
-        foreach (var item in Items)
-        {
-            item.ThumbnailBytes = null;
-            item.ThumbnailError = null;
-        }
         Items = Array.Empty<BrowserItemViewModel>();
+        ActiveBatchIndex = -1;
+        IsCropMode = false;
+        CropEditor = null;
         DirectoryPath = null;
         ClearCurrent();
         ErrorMessage = null;
@@ -871,8 +792,6 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         lock (_cacheSync)
         {
             _probeCache.Clear();
-            _previewCache.Clear();
-            _thumbnailCache.Clear();
         }
     }
 
@@ -880,6 +799,9 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     private static StringComparer PathComparer() =>
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static bool PathsEqual(LocalPath left, LocalPath right) =>
+        PathComparer().Equals(Path.GetFullPath(left.Value), Path.GetFullPath(right.Value));
 
     private void SetWorkflowError(AtomPixError? error)
     {
@@ -925,6 +847,4 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
         return $"{value:0.##} {units[unitIndex]}";
     }
-
-    private sealed record RetainedThumbnail(BrowserItemViewModel Item, byte[] Bytes);
 }

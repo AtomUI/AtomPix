@@ -59,7 +59,7 @@ src/AtomPix.Workflows/
 - `LoadSettingsWorkflow`
 - `SaveSettingsWorkflow`
 
-四类图片处理 Workflow 同级存在：压缩、转换、调整尺寸、裁剪。Desktop 不应通过“压缩页的附属选项”代替独立 Resize 或 Crop Workflow。
+四类图片处理 Workflow 同级存在：压缩、转换、调整尺寸、裁剪。Desktop 不应通过“压缩面板的附属选项”代替独立 Resize 或 Crop Workflow。
 
 ## 6. 典型流程边界
 
@@ -857,7 +857,7 @@ Task<OperationResult<BatchResizeResult>> ExecuteAsync(
 3. 委托给对应的显式参数单张 Workflow。
 ```
 
-`DefaultConversionProfile` 包含默认 `TransparencyPolicy`。单张或批量页面允许修改当前草稿颜色；一旦委托给显式参数 Workflow，设置页后续变化不能回写已提交请求。
+`DefaultConversionProfile` 包含默认 `TransparencyPolicy`。转换处理面板允许修改当前单张或批量草稿颜色；一旦委托给显式参数 Workflow，设置页面后续变化不能回写已提交请求。
 
 `MetadataPolicy` 同样作为 `CompressionProfile`、`ConversionProfile` 或 `SameFormatEncodingPolicy` 的不可变请求快照传递。Workflows 只冻结并转发 `Preserve / Remove`，不自行枚举、删除或重写任何 Profile / Attribute，也不把 ICC 纳入该策略；ICC 保留、Orientation 规范化和目标格式能力降级由 Imaging 实现负责。
 
@@ -972,6 +972,8 @@ Workflows 负责把 `OutputPolicy` 解析为最终 `OutputPath`。
 
 文件名和目录策略的最终决策必须在 Workflows 完成。通过全部公共校验和源文件冲突检查后、创建 Job 前，Workflow 对 `BatchOutputPlan` 中需要处理的不同输出目录调用 `IFileSystemService.CreateDirectoryAsync`；单张流程同样准备自己的输出目录。Workflows 不直接使用 BCL 创建目录，Infrastructure 只实现端口，Imaging.Magick 只在既有目录中按最终路径安全写入。
 
+单张输出解析还必须返回实际 `OutputWriteDisposition`：无冲突新建为 `Created`，发生冲突后另取可用路径为 `AutoRenamed`，确实替换既有输出为 `Overwritten`，按策略未执行为 `SkippedExisting`。它是 Workflow 的执行决策结果，不等同于用户请求中的 `OverwritePolicy`；Desktop 只能消费该结果生成终态反馈，不能通过所选策略反推实际发生的文件行为。
+
 目录准备失败属于 `StartRejected`，不创建 Job。任务接受后目录被外部删除、权限变化或空间耗尽，则由 Imaging 返回结构化失败并驱动已创建 Job 的终态；不能把运行期失败回写成启动拒绝。
 
 ## 16. 默认设置加载失败语义补充
@@ -1029,7 +1031,7 @@ AddAtomPixWorkflows()
 
 ## 19. 批量输入收集与追加契约
 
-批量图片处理 Workflow 只接收已经展开、过滤并去重后的文件路径。目录选择与多次追加通过独立的 `AppendBatchInputsWorkflow` 形成稳定输入计划，不能由各个批量处理 Workflow 重复实现。
+批量图片处理 Workflow 只接收已经展开、过滤并去重后的文件路径。`AppendBatchInputsWorkflow` 继续负责文件候选的稳定追加、过滤与去重，不能由各个批量处理 Workflow 重复实现。当前 Desktop 目标中，首页文件夹由 `OpenFolderWorkflow` 建立浏览集合；进入浏览器后只把多选文件传给追加流程，不再暴露追加目录入口。
 
 目标请求与结果：
 
@@ -1083,12 +1085,13 @@ public enum BatchInputSkipReason
 - 目录自身无法访问或枚举被取消时，返回结构化失败；不得用一个空计划静默覆盖 `ExistingInputs`。
 - 返回的 `InputPaths` 是不可变快照。后续 `BatchCompressRequest`、`BatchConvertRequest` 和 `BatchResizeRequest` 只接收该快照中的文件路径，不再接收目录。
 - `AppendBatchInputsWorkflow` 不创建 `BatchJob`，也不开始图片处理；用户确认参数并点击开始后才创建批量任务。
+- `SelectedDirectories` 保留为 Workflow 的通用/迁移期输入能力，但当前 Desktop 只有首页“打开文件夹”入口；浏览器走廊调用本流程时该字段必须为空。后续若删除该字段，应作为独立契约迁移处理，不能让 Desktop 自行枚举目录替代它。
 
 目录枚举和路径规范化通过 Infrastructure 文件系统端口实现；Workflows 负责能力过滤、追加规则、顺序、去重和结果组织。Imaging.Magick 不枚举目录。
 
 ## 20. OpenFolderWorkflow 与浏览集合契约
 
-`OpenFolderWorkflow` 把一个本地目录转换为轻量、不可变的图片浏览集合。它是首页“打开文件夹”的应用流程，不是批量输入流程。
+`OpenFolderWorkflow` 把一个本地目录转换为轻量、不可变的图片浏览集合。它是首页“打开文件夹”的应用流程，本身不创建批量计划或任务；但返回的浏览集合就是用户随后在 Compress、Convert 或 Resize 面板发起批量处理时的可见输入范围。
 
 请求与结果：
 
@@ -1130,7 +1133,7 @@ public sealed record BrowserImageCandidate(
 - 第一阶段固定不递归子目录，Request 不提供 `Recursive` 或 `IncludeSubdirectories` 字段。
 - 扩展名过滤只用于候选发现，不证明文件内容有效；损坏、伪装格式或枚举后被删除的文件在后续 `OpenImageWorkflow` 中形成结构化失败。
 - 本流程不逐项 Probe、不生成缩略图、不创建预览、不监听目录变化，也不创建 `ImageJob` 或 `BatchJob`。
-- 本流程不调用 `AppendBatchInputsWorkflow`，也不返回或复用 `BatchInputPlan`。
+- 本流程不调用 `AppendBatchInputsWorkflow`，也不直接返回或复用 `BatchInputPlan`；Desktop 只在用户点击批量开始时，从当前走廊的冻结路径建立正式批量请求。
 - 目录不存在返回 `InputDirectoryNotFound`；无访问权限或枚举失败返回对应 `Permission` / `FileSystem` 错误；取消返回 `OperationCanceled`。
 - 目录可访问但没有候选图片属于成功，不把空目录伪装成失败。
 
@@ -1139,13 +1142,14 @@ public sealed record BrowserImageCandidate(
 ```text
 当前候选项
   -> OpenImageWorkflow 探测格式、尺寸、帧数和可用性
-  -> CreatePreviewWorkflow 生成主预览
+  -> Desktop adapter 提供稳定路径身份与文件 Source
+  -> AtomUI.Labs ImageGallery 按当前视口加载主图
 
-当前可见的非当前候选项
-  -> CreatePreviewWorkflow 使用较小 MaxPixelSize 延迟生成缩略图
+当前可见/预取的候选项
+  -> ImageGallery 在自己的资源上限、调度与缓存内加载缩略图
 ```
 
-`CreatePreviewWorkflow` 同时服务主预览与缩略图；两者只是 `MaxPixelSize`、调度优先级和 Desktop 缓存策略不同，第一阶段不新增 `CreateThumbnailWorkflow`。
+`CreatePreviewWorkflow` 仍作为框架无关的显式预览契约保留并独立测试，但生产 Browser 和 Crop 不消费它。浏览显示不新增 `CreateThumbnailWorkflow`；Gallery/Avalonia 类型也不进入 Workflow。该边界避免 Workflow 与 ImageGallery 同时维护一套主图/缩略图解码和缓存。
 
 ## 21. 浏览器单张快捷操作语义
 
@@ -1164,8 +1168,8 @@ Desktop 从浏览器发起快捷操作时必须先捕获当前 `LocalPath`，再
 
 - 单张请求只能携带触发时的一个输入路径，不接收浏览文件夹、缩略图列表或当前目录。
 - 浏览器当前图片在请求创建后发生切换，不改变该请求的输入。
-- 打开文件夹成功不能隐式调用 `AppendBatchInputsWorkflow` 或创建 `BatchJob`。
-- 批量 Workflow 只能由批量任务页使用明确的 `BatchInputPlan.InputPaths` 启动。
+- 打开文件夹成功不能隐式创建 `BatchJob`；它只建立可浏览、可继续追加的会话集合。
+- 批量 Workflow 只能由 Compress、Convert 或 Resize 右侧面板，在用户点击“批量处理”后，使用当前走廊冻结出的明确 `BatchInputPlan.InputPaths` 启动；Crop 永远不启动批量 Workflow。
 - Workflows 不读取 Desktop 的当前选择状态；当前路径由 Desktop 在调用边界显式传入。
 
 ## 22. 批量恢复动作与普通新任务复用
@@ -1292,7 +1296,7 @@ public enum BatchOutputDecision
 
 批量按照 [Job 状态编排设计](job-state-orchestration.md) 的资源影响范围执行：单项文件、尺寸、内存或像素缓存限制只使当前项 Failed 并继续；输出卷或公共私有缓存位置真实磁盘不足使当前项 Failed 后中止批次。批量输入收集阶段不把资源超限项目归类成 `BatchInputPlan.SkippedItems`。
 
-资源数值属于图片处理能力，不读取 `AppSettings`，运行期间也不因设置页变化而改变。Workflow 不分配 Memory/Map/Disk 配额；这些上限由组合根在图片引擎初始化时配置，实际资源由引擎在任务中按需申请。
+资源数值属于图片处理能力，不读取 `AppSettings`，运行期间也不因设置页面变化而改变。Workflow 不分配 Memory/Map/Disk 配额；这些上限由组合根在图片引擎初始化时配置，实际资源由引擎在任务中按需申请。
 
 ## 26. 诊断作用域与记录边界
 

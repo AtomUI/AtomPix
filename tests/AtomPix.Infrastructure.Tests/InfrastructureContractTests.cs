@@ -141,6 +141,10 @@ public sealed class InfrastructureContractTests : IDisposable
         Assert.True(load.Succeeded);
         Assert.Equal(AppSettings.Default.ThemeMode, load.Value!.ThemeMode);
         Assert.Equal(AppSettings.CurrentSchemaVersion, load.Value.SchemaVersion);
+        Assert.Equal(90, load.Value.DefaultSameFormatEncodingPolicy.LossyQuality.Value);
+        Assert.Equal(
+            AppSettings.Default.DefaultCompressionProfile.Quality,
+            load.Value.DefaultCompressionProfile.Quality);
     }
 
     [Fact]

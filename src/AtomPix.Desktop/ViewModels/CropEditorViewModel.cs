@@ -20,7 +20,7 @@ public sealed record CropRatioOption(string Label, int? WidthUnits, int? HeightU
     public override string ToString() => Label;
 }
 
-public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -28,7 +28,6 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
     private readonly IDesktopClipboardService _clipboard;
     private readonly ResultOutputGuard _outputGuard;
     private readonly OpenImageWorkflow _openImage;
-    private readonly CreatePreviewWorkflow _createPreview;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly CropImageWorkflow _crop;
     private readonly DesktopNavigationCoordinator _navigation;
@@ -39,7 +38,6 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
     private DesktopExecutionState _executionState = DesktopExecutionState.Draft;
     private LocalPath? _inputPath;
     private ImageProbeResult? _probe;
-    private byte[]? _previewBytes;
     private CropRatioOption _selectedRatio;
     private decimal _cropX;
     private decimal _cropY;
@@ -59,7 +57,6 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         IDesktopClipboardService clipboard,
         ResultOutputGuard outputGuard,
         OpenImageWorkflow openImage,
-        CreatePreviewWorkflow createPreview,
         LoadSettingsWorkflow loadSettings,
         CropImageWorkflow crop,
         DesktopNavigationCoordinator navigation)
@@ -70,27 +67,22 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         _clipboard = clipboard ?? throw new ArgumentNullException(nameof(clipboard));
         _outputGuard = outputGuard ?? throw new ArgumentNullException(nameof(outputGuard));
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
-        _createPreview = createPreview ?? throw new ArgumentNullException(nameof(createPreview));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _crop = crop ?? throw new ArgumentNullException(nameof(crop));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged);
+        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
 
         Ratios =
         [
-            new CropRatioOption("自由比例", null, null),
+            new CropRatioOption("自定义", null, null),
             new CropRatioOption("3:2", 3, 2),
             new CropRatioOption("4:3", 4, 3),
             new CropRatioOption("5:4", 5, 4),
-            new CropRatioOption("1:1", 1, 1),
-            new CropRatioOption("4:5", 4, 5),
-            new CropRatioOption("3:4", 3, 4),
-            new CropRatioOption("2:3", 2, 3)
+            new CropRatioOption("1:1", 1, 1)
         ];
         _selectedRatio = Ratios[0];
         SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        ResetSelectionCommand = new RelayCommand<object?>(_ => ResetSelection(), _ => IsContentReady && !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => CanStart);
+        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
         CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
         OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
         ContinueResizeCommand = new RelayCommand<object?>(_ => ContinueResize(), _ => IsSuccess);
@@ -99,6 +91,7 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
 
     public IReadOnlyList<CropRatioOption> Ratios { get; }
     public OutputPolicyEditorViewModel Output { get; }
+    public OperationResultFeedback ResultFeedback { get; } = new();
     public DesktopContentState ContentState { get => _contentState; private set { if (SetProperty(ref _contentState, value)) NotifyState(); } }
     public DesktopExecutionState ExecutionState { get => _executionState; private set { if (SetProperty(ref _executionState, value)) NotifyState(); } }
     public CropRatioOption SelectedRatio
@@ -161,6 +154,7 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
     public int ImagePixelWidth => _probe?.Width ?? 0;
     public int ImagePixelHeight => _probe?.Height ?? 0;
     public double LockedAspectRatio => SelectedRatio.Ratio;
+    public bool IsCustomRatio => SelectedRatio.Ratio <= 0;
     public bool IsEmpty => ContentState == DesktopContentState.Empty;
     public bool IsContentLoading => ContentState == DesktopContentState.Loading;
     public bool IsContentReady => ContentState == DesktopContentState.Ready;
@@ -173,19 +167,18 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
     public string InputName => _inputPath is null ? string.Empty : Path.GetFileName(_inputPath.Value.Value);
     public string InputPath => _inputPath?.Value ?? string.Empty;
     public string InputSummary => _probe is null ? string.Empty : $"{_probe.Width} × {_probe.Height}  ·  {_probe.Format.ToString().ToUpperInvariant()}";
-    public byte[]? PreviewBytes { get => _previewBytes; private set => SetProperty(ref _previewBytes, value); }
     public string EstimatedOutput => TryBuildCropRectangle(out var area, out _) ? $"{area!.Width} × {area.Height} px" : "—";
     public string? DraftError
     {
         get
         {
-            if (!TryBuildCropRectangle(out _, out var error)) return error;
-            Output.TryBuild(out _, out error);
+            TryBuildCropRectangle(out _, out var error);
             return error;
         }
     }
     public bool HasDraftError => !string.IsNullOrWhiteSpace(DraftError);
     public string EncodingSummary => $"保留原格式 · 有损质量 {_encodingPolicy.LossyQuality.Value} · {(_encodingPolicy.MetadataPolicy == AtomPix.Core.Compression.MetadataPolicy.Remove ? "移除拍摄信息" : "保留拍摄信息")} · ICC 保留";
+    public SameFormatEncodingPolicy EncodingPolicy => _encodingPolicy;
     public string? ErrorMessage { get => _errorMessage; private set { if (SetProperty(ref _errorMessage, value)) OnPropertyChanged(nameof(HasError)); } }
     public string? DiagnosticId { get => _diagnosticId; private set { if (SetProperty(ref _diagnosticId, value)) { OnPropertyChanged(nameof(HasDiagnosticId)); CopyDiagnosticIdCommand.NotifyCanExecuteChanged(); } } }
     public string ResultTitle => _lastResult?.Status switch
@@ -203,7 +196,6 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
     public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult);
 
     public AsyncCommand SelectImageCommand { get; }
-    public RelayCommand<object?> ResetSelectionCommand { get; }
     public AsyncCommand StartCommand { get; }
     public RelayCommand<object?> CancelCommand { get; }
     public AsyncCommand OpenOutputCommand { get; }
@@ -214,16 +206,25 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
 
     public void RefreshResultAvailability() => NotifyResult();
 
-    public async Task LoadAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default)
+    public Task LoadAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(context, initializeDraft: true, cancellationToken);
+
+    public Task SynchronizeInputAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(context, initializeDraft: false, cancellationToken);
+
+    private async Task LoadCoreAsync(
+        SingleImageNavigationContext context,
+        bool initializeDraft,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         var generation = BeginLoad(cancellationToken, out var loadCancellation);
         _inputPath = context.InputPath;
         _probe = context.Probe;
-        PreviewBytes = null;
         ErrorMessage = null;
         DiagnosticId = null;
         _lastResult = null;
+        ResultFeedback.Dismiss();
         _actualOutputSize = null;
         ExecutionState = DesktopExecutionState.Draft;
         ContentState = DesktopContentState.Loading;
@@ -231,18 +232,17 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         NotifyInput();
         NotifyResult();
 
-        var settings = await _loadSettings.ExecuteAsync(new LoadSettingsRequest(), loadCancellation.Token);
-        if (!IsCurrentLoad(generation, loadCancellation)) return;
-        if (!settings.Succeeded) { SetError(settings.Error); ContentState = DesktopContentState.Failure; return; }
-        Output.Apply(settings.Value!.Settings.DefaultOutputPolicy);
-        _encodingPolicy = settings.Value.Settings.DefaultSameFormatEncodingPolicy;
-        OnPropertyChanged(nameof(EncodingSummary));
+        if (initializeDraft)
+        {
+            var settings = await _loadSettings.ExecuteAsync(new LoadSettingsRequest(), loadCancellation.Token);
+            if (!IsCurrentLoad(generation, loadCancellation)) return;
+            if (!settings.Succeeded) { SetError(settings.Error); ContentState = DesktopContentState.Failure; return; }
+            Output.Apply(settings.Value!.Settings.DefaultOutputPolicy);
+            _encodingPolicy = settings.Value.Settings.DefaultSameFormatEncodingPolicy;
+            OnPropertyChanged(nameof(EncodingSummary));
+        }
 
         ContentState = DesktopContentState.Ready;
-        var preview = await _createPreview.ExecuteAsync(new CreatePreviewRequest(context.InputPath, 1800), loadCancellation.Token);
-        if (!IsCurrentLoad(generation, loadCancellation)) return;
-        if (preview.Succeeded) PreviewBytes = preview.Value!.Preview.EncodedBytes;
-        else SetError(preview.Error);
     }
 
     public void ApplyCanvasSelection(CropCanvasSelection selection)
@@ -268,8 +268,8 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         _inputPath = null;
         _probe = null;
         _lastResult = null;
+        ResultFeedback.Dismiss();
         _actualOutputSize = null;
-        PreviewBytes = null;
         ErrorMessage = null;
         DiagnosticId = null;
         ExecutionState = DesktopExecutionState.Draft;
@@ -293,14 +293,23 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_inputPath is null
-            || !TryBuildCropRectangle(out var area, out _)
-            || !Output.TryBuild(out var outputPolicy, out _)) return;
+        if (_inputPath is null) return;
+        if (!TryBuildCropRectangle(out var area, out var cropError))
+        {
+            ResultFeedback.ShowWarning(cropError ?? "当前剪裁区域无效。");
+            return;
+        }
+        if (!Output.TryBuild(out var outputPolicy, out var outputError))
+        {
+            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
+            return;
+        }
         if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
         DiagnosticId = null;
+        ResultFeedback.Dismiss();
         ExecutionState = DesktopExecutionState.Processing;
         try
         {
@@ -310,12 +319,14 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
                 if (result.Error?.Code == AtomPixErrorCode.OutputPathConflictsWithInput) await HandleSourceConflictAsync(executionCancellation.Token);
                 else SetError(result.Error);
                 ExecutionState = result.Error?.Code == AtomPixErrorCode.OperationCanceled ? DesktopExecutionState.Canceled : DesktopExecutionState.Failure;
+                if (ExecutionState == DesktopExecutionState.Canceled) ResultFeedback.ShowCanceled();
                 return;
             }
             _lastResult = result.Value!.JobResult;
             _actualOutputSize = result.Value.ActualOutputSize;
             ExecutionState = ToExecutionState(_lastResult.Status);
             if (_lastResult.Status == ImageJobStatus.Failed) SetError(_lastResult.Error);
+            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, "裁剪完成", ResultDetails);
             NotifyResult();
         }
         finally { _executionCancellation = null; _navigation.EndForegroundTask(); }
@@ -359,13 +370,6 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         _navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
     }
     private async Task CopyDiagnosticIdAsync(CancellationToken cancellationToken) { if (DiagnosticId is not null) await _clipboard.SetTextAsync(DiagnosticId, cancellationToken); }
-
-    private void ResetSelection()
-    {
-        ResetSelectionCore();
-        MarkDraftChanged();
-        NotifySelection();
-    }
 
     private void ResetSelectionCore()
     {
@@ -454,6 +458,7 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
 
     private void MarkDraftChanged()
     {
+        ResultFeedback.Dismiss();
         if (ExecutionState is DesktopExecutionState.Success or DesktopExecutionState.Failure or DesktopExecutionState.Canceled or DesktopExecutionState.Skipped)
         {
             ExecutionState = DesktopExecutionState.Draft;
@@ -482,6 +487,7 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         OnPropertyChanged(nameof(CanvasWidth));
         OnPropertyChanged(nameof(CanvasHeight));
         OnPropertyChanged(nameof(LockedAspectRatio));
+        OnPropertyChanged(nameof(IsCustomRatio));
         OnPropertyChanged(nameof(EstimatedOutput));
         OnPropertyChanged(nameof(DraftError));
         OnPropertyChanged(nameof(HasDraftError));
@@ -502,7 +508,6 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         OnPropertyChanged(nameof(IsSuccess));
         OnPropertyChanged(nameof(CanStart));
         SelectImageCommand.NotifyCanExecuteChanged();
-        ResetSelectionCommand.NotifyCanExecuteChanged();
         StartCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         OpenOutputCommand.NotifyCanExecuteChanged();

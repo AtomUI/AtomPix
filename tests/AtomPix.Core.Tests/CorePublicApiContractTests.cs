@@ -45,6 +45,7 @@ public sealed class CorePublicApiContractTests
             "AtomPix.Core.Output.OutputNamingMode",
             "AtomPix.Core.Output.OutputNamingPolicy",
             "AtomPix.Core.Output.OutputPolicy",
+            "AtomPix.Core.Output.OutputWriteDisposition",
             "AtomPix.Core.Output.OverwritePolicy",
             "AtomPix.Core.Ports.IAppPathProvider",
             "AtomPix.Core.Ports.IAppSettingsStore",

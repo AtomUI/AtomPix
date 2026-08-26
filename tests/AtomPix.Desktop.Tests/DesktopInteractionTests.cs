@@ -18,11 +18,12 @@ using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
+using AtomUI.Labs.Controls.ImageGallery;
 
 public sealed class DesktopInteractionTests
 {
     [Fact]
-    public async Task Home_open_image_uses_workflow_then_navigates_to_browser()
+    public async Task Home_open_image_builds_lightweight_browser_collection_without_eager_probe()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "home-open.jpg"));
         var processor = new TestImageProcessor(path);
@@ -34,14 +35,34 @@ public sealed class DesktopInteractionTests
 
         await viewModel.OpenImageCommand.ExecuteAsync();
 
-        Assert.Equal(1, processor.ProbeCallCount);
+        Assert.Equal(0, processor.ProbeCallCount);
         Assert.NotNull(requested);
         Assert.Equal(DesktopRoute.Browse, requested!.Route);
         var context = Assert.IsType<BrowserNavigationContext>(requested.Context);
-        Assert.Equal(path, context.PreferredPath);
+        Assert.Null(context.PreferredPath);
         Assert.Single(context.Items);
         Assert.Equal(DesktopContentState.Ready, viewModel.State);
         Assert.False(viewModel.HasError);
+    }
+
+    [Fact]
+    public async Task Home_tool_entry_preserves_multi_selection_for_browser_batch_collection()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "home-tool-a.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "home-tool-b.jpg"));
+        var processor = new TestImageProcessor(first);
+        var picker = new TestPicker(DesktopSelectionResult.Selected(first.Value, second.Value));
+        var navigation = new DesktopNavigationCoordinator();
+        DesktopNavigationRequest? requested = null;
+        navigation.NavigationRequested += (_, request) => requested = request;
+        var viewModel = CreateHome(picker, processor, navigation);
+
+        await viewModel.OpenForCompressCommand.ExecuteAsync();
+
+        Assert.Equal(0, processor.ProbeCallCount);
+        Assert.Equal(DesktopRoute.Compress, requested?.Route);
+        var context = Assert.IsType<BrowserToolNavigationContext>(requested?.Context);
+        Assert.Equal([first, second], context.Browser.Items.Select(item => item.Path));
     }
 
     [Fact]
@@ -86,14 +107,13 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Browser_loads_probe_and_preview_without_framework_image_types_in_view_model()
+    public async Task Browser_loads_probe_and_exposes_file_backed_gallery_items_without_decoding_in_view_model()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "browser.jpg"));
         var processor = new TestImageProcessor(path);
         var navigation = new DesktopNavigationCoordinator();
         var browser = new ImageBrowserViewModel(
             new OpenImageWorkflow(processor),
-            new CreatePreviewWorkflow(processor),
             processor,
             navigation,
             new TestLauncher(),
@@ -107,30 +127,55 @@ public sealed class DesktopInteractionTests
         Assert.Equal(DesktopContentState.Ready, browser.State);
         Assert.Equal(path.Value, browser.CurrentPath);
         Assert.Equal("1200 × 800", browser.CurrentDimensions);
-        Assert.Equal(TestImageProcessor.PreviewPayload, browser.PreviewBytes);
         Assert.Equal(1, processor.ProbeCallCount);
-        Assert.Equal(1, processor.PreviewCallCount);
+        Assert.Equal(0, processor.PreviewCallCount);
+        var galleryItem = Assert.Single(browser.GalleryItems);
+        Assert.Same(browser.CurrentItem, galleryItem.Item);
+        Assert.Equal(Path.GetFullPath(path.Value), galleryItem.Key);
+        Assert.Equal(galleryItem.Key, galleryItem.MainImageSource.Identity);
     }
 
     [Fact]
-    public async Task Browser_bounds_preview_and_thumbnail_memory_during_large_navigation_session()
+    public async Task Browser_maps_resource_limits_and_crop_mode_to_image_gallery_contract()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "browser-crop-resource.jpg"));
+        var processor = new TestImageProcessor(path);
+        using var browser = CreateBrowser(processor);
+        await browser.LoadAsync(new BrowserNavigationContext(
+            null,
+            [new BrowserImageCandidate(path, "browser-crop-resource.jpg")]));
+
+        var resources = processor.Capabilities.Resources;
+        Assert.Equal(resources.MaxInputFileSizeBytes, browser.GalleryLoadLimits.MaximumEncodedBytes);
+        Assert.Equal(resources.MaxInputPixelCount, browser.GalleryLoadLimits.MaximumSourcePixelCount);
+        Assert.Equal(Math.Max(resources.MaxInputWidth, resources.MaxInputHeight), browser.GalleryLoadLimits.MaximumDimension);
+        Assert.Equal(resources.MaxInputPixelCount * 4, browser.GalleryLoadLimits.MaximumDecodedBytes);
+        Assert.Equal(ImageGalleryMainImageMode.Presented, browser.GalleryMainImageMode);
+        Assert.True(browser.CanUseGalleryFilmstripNavigation);
+        Assert.True(browser.IsGalleryToolbarVisible);
+
+        browser.SetCropMode(true);
+
+        Assert.Equal(ImageGalleryMainImageMode.ResourceOnly, browser.GalleryMainImageMode);
+        Assert.True(browser.CanUseGalleryFilmstripNavigation);
+        Assert.False(browser.IsGalleryToolbarVisible);
+
+        browser.SetInteractionLocked(true);
+        Assert.False(browser.CanUseGalleryFilmstripNavigation);
+    }
+
+    [Fact]
+    public async Task Browser_large_collection_exposes_lightweight_gallery_adapters_without_desktop_preview_memory()
     {
         var firstPath = new LocalPath(Path.Combine("C:\\images", "image-0.jpg"));
         var processor = new TestImageProcessor(firstPath);
         var navigation = new DesktopNavigationCoordinator();
         using var browser = new ImageBrowserViewModel(
             new OpenImageWorkflow(processor),
-            new CreatePreviewWorkflow(processor),
             processor,
             navigation,
             new TestLauncher(),
-            new TestClipboard(),
-            new BrowserCacheOptions(
-                previewByteBudget: 8,
-                previewEntryLimit: 2,
-                thumbnailByteBudget: 8,
-                thumbnailEntryLimit: 2,
-                probeEntryLimit: 2));
+            new TestClipboard());
         var candidates = Enumerable.Range(0, 6)
             .Select(index => new BrowserImageCandidate(
                 new LocalPath(Path.Combine("C:\\images", $"image-{index}.jpg")),
@@ -140,18 +185,13 @@ public sealed class DesktopInteractionTests
         await browser.LoadAsync(new BrowserNavigationContext(null, candidates));
         foreach (var item in browser.Items)
         {
-            await item.EnsureThumbnailCommand.ExecuteAsync();
             await browser.SelectItemCommand.ExecuteAsync(item);
         }
 
-        var snapshot = browser.CacheSnapshot;
-        Assert.InRange(snapshot.PreviewEntryCount, 0, 2);
-        Assert.InRange(snapshot.PreviewBytes, 0, 8);
-        Assert.Equal(2, snapshot.RetainedThumbnailCount);
-        Assert.Equal(8, snapshot.RetainedThumbnailBytes);
-        Assert.Equal(2, browser.Items.Count(item => item.ThumbnailBytes is not null));
-        Assert.Null(browser.Items[0].ThumbnailBytes);
-        Assert.InRange(snapshot.ProbeEntryCount, 0, 2);
+        Assert.Equal(candidates.Length, browser.GalleryItems.Count);
+        Assert.Equal(candidates.Length, browser.GalleryItems.Select(item => item.Key).Distinct().Count());
+        Assert.All(browser.GalleryItems, item => Assert.Equal(item.Key, item.MainImageSource.Identity));
+        Assert.Equal(0, processor.PreviewCallCount);
     }
 
     [Fact]
@@ -172,8 +212,7 @@ public sealed class DesktopInteractionTests
     public async Task Settings_save_updates_all_metadata_profiles_as_one_public_preference()
     {
         var store = new MutableSettingsStore(AppSettings.Default);
-        var appearance = new TestAppearance();
-        var viewModel = CreateSettings(store, appearance);
+        var viewModel = CreateSettings(store);
         await viewModel.LoadAsync();
 
         viewModel.SelectedCompressionMode = viewModel.CompressionModes.Single(option => option.Value == CompressionMode.Custom);
@@ -189,7 +228,27 @@ public sealed class DesktopInteractionTests
         Assert.Equal(MetadataPolicy.Preserve, store.LastSaved.DefaultConversionProfile.MetadataPolicy);
         Assert.Equal(MetadataPolicy.Preserve, store.LastSaved.DefaultSameFormatEncodingPolicy.MetadataPolicy);
         Assert.False(viewModel.IsDirty);
-        Assert.Equal(store.LastSaved.ThemeMode, appearance.LastApplied);
+        Assert.Equal(AppSettings.Default.ThemeMode, store.LastSaved.ThemeMode);
+    }
+
+    [Fact]
+    public async Task Settings_invalid_dirty_draft_keeps_save_action_available_and_reports_validation_error()
+    {
+        var store = new MutableSettingsStore(AppSettings.Default);
+        var viewModel = CreateSettings(store);
+        await viewModel.LoadAsync();
+
+        viewModel.BackgroundHex = "not-a-color";
+
+        Assert.True(viewModel.IsDirty);
+        Assert.False(viewModel.IsDraftValid);
+        Assert.True(viewModel.SaveCommand.CanExecute(null));
+
+        await viewModel.SaveCommand.ExecuteAsync();
+
+        Assert.Equal(0, store.SaveCount);
+        Assert.True(viewModel.HasError);
+        Assert.True(viewModel.IsDirty);
     }
 
     [Fact]
@@ -205,7 +264,7 @@ public sealed class DesktopInteractionTests
             new RecentItemsSettings(true, 8));
         var store = new MutableSettingsStore(custom);
         var dialogs = new TestDialogs { ConfirmResult = true };
-        var viewModel = CreateSettings(store, new TestAppearance(), dialogs);
+        var viewModel = CreateSettings(store, dialogs);
         await viewModel.LoadAsync();
 
         await viewModel.RestoreDefaultsCommand.ExecuteAsync();
@@ -216,11 +275,11 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Settings_discard_choice_restores_original_snapshot_before_leaving()
+    public async Task Settings_close_discards_unsaved_draft_without_prompt()
     {
         var store = new MutableSettingsStore(AppSettings.Default);
-        var dialogs = new TestDialogs { UnsavedChoice = UnsavedChangesChoice.Discard };
-        var viewModel = CreateSettings(store, new TestAppearance(), dialogs);
+        var dialogs = new TestDialogs();
+        var viewModel = CreateSettings(store, dialogs);
         await viewModel.LoadAsync();
         viewModel.RecentMaxCount = 7;
 
@@ -230,6 +289,138 @@ public sealed class DesktopInteractionTests
         Assert.False(viewModel.IsDirty);
         Assert.Equal(20, viewModel.RecentMaxCount);
         Assert.Equal(0, store.SaveCount);
+    }
+
+    [Fact]
+    public async Task Settings_concurrent_preload_and_open_share_one_load()
+    {
+        var store = new DelayedSettingsStore();
+        using var viewModel = CreateSettings(store);
+
+        var preload = viewModel.LoadAsync();
+        await store.LoadStarted.Task;
+        var open = viewModel.LoadAsync();
+
+        Assert.Equal(1, store.LoadCount);
+        Assert.False(open.IsCompleted);
+
+        store.Complete(AppSettings.Default);
+        await Task.WhenAll(preload, open);
+
+        Assert.Equal(1, store.LoadCount);
+        Assert.True(viewModel.IsLoaded);
+        Assert.True(viewModel.IsReady);
+    }
+
+    [Fact]
+    public async Task Compression_saved_defaults_apply_only_to_new_draft()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "compression-settings-first.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "compression-settings-second.jpg"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var store = new MutableSettingsStore(AppSettings.Default);
+        using var editor = CreateCompressionEditor(processor, fileSystem, new DesktopNavigationCoordinator(), store);
+        await editor.LoadAsync(new SingleImageNavigationContext(first, processor.Probe));
+        editor.Output.SubfolderName = "CurrentDraft";
+
+        var updated = CreateUpdatedEditorDefaults();
+        await store.SaveAsync(updated, CancellationToken.None);
+        await editor.SynchronizeInputAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("CurrentDraft", editor.Output.SubfolderName);
+        Assert.Equal(CompressionMode.Smart, editor.SelectedMode.Value);
+
+        await editor.LoadAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("NewDefaults", editor.Output.SubfolderName);
+        Assert.Equal(CompressionMode.Custom, editor.SelectedMode.Value);
+        Assert.Equal(37, editor.CustomQuality);
+        Assert.False(editor.RemoveMetadata);
+    }
+
+    [Fact]
+    public async Task Conversion_saved_defaults_apply_only_to_new_draft()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "conversion-settings-first.png"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "conversion-settings-second.png"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var store = new MutableSettingsStore(AppSettings.Default);
+        using var editor = CreateConversionEditor(processor, fileSystem, new DesktopNavigationCoordinator(), store);
+        await editor.LoadAsync(new SingleImageNavigationContext(first, processor.Probe));
+        editor.Output.SubfolderName = "CurrentDraft";
+
+        var updated = CreateUpdatedEditorDefaults();
+        await store.SaveAsync(updated, CancellationToken.None);
+        await editor.SynchronizeInputAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("CurrentDraft", editor.Output.SubfolderName);
+        Assert.Equal(OutputImageFormat.WebP, editor.SelectedFormat.Value);
+
+        await editor.LoadAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("NewDefaults", editor.Output.SubfolderName);
+        Assert.Equal(OutputImageFormat.Jpeg, editor.SelectedFormat.Value);
+        Assert.Equal(41, editor.Quality);
+        Assert.False(editor.RemoveMetadata);
+    }
+
+    [Fact]
+    public async Task Resize_saved_defaults_apply_only_to_new_draft()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-settings-first.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-settings-second.jpg"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var store = new MutableSettingsStore(AppSettings.Default);
+        using var editor = CreateResizeEditor(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            fileSystem,
+            new DesktopNavigationCoordinator(),
+            store);
+        await editor.LoadAsync(new SingleImageNavigationContext(first, processor.Probe));
+        editor.Output.SubfolderName = "CurrentDraft";
+
+        var updated = CreateUpdatedEditorDefaults();
+        await store.SaveAsync(updated, CancellationToken.None);
+        await editor.SynchronizeInputAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("CurrentDraft", editor.Output.SubfolderName);
+        Assert.Equal(SameFormatEncodingPolicy.Default.LossyQuality, editor.EncodingPolicy.LossyQuality);
+
+        await editor.LoadAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("NewDefaults", editor.Output.SubfolderName);
+        Assert.Equal(new ImageQuality(77), editor.EncodingPolicy.LossyQuality);
+        Assert.Equal(MetadataPolicy.Preserve, editor.EncodingPolicy.MetadataPolicy);
+    }
+
+    [Fact]
+    public async Task Crop_saved_defaults_apply_only_to_new_draft()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "crop-settings-first.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "crop-settings-second.jpg"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var store = new MutableSettingsStore(AppSettings.Default);
+        using var editor = CreateCropEditor(processor, fileSystem, new DesktopNavigationCoordinator(), store);
+        await editor.LoadAsync(new SingleImageNavigationContext(first, processor.Probe));
+        editor.Output.SubfolderName = "CurrentDraft";
+
+        var updated = CreateUpdatedEditorDefaults();
+        await store.SaveAsync(updated, CancellationToken.None);
+        await editor.SynchronizeInputAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("CurrentDraft", editor.Output.SubfolderName);
+        Assert.Equal(SameFormatEncodingPolicy.Default.LossyQuality, editor.EncodingPolicy.LossyQuality);
+
+        await editor.LoadAsync(new SingleImageNavigationContext(second, processor.Probe));
+
+        Assert.Equal("NewDefaults", editor.Output.SubfolderName);
+        Assert.Equal(new ImageQuality(77), editor.EncodingPolicy.LossyQuality);
+        Assert.Equal(MetadataPolicy.Preserve, editor.EncodingPolicy.MetadataPolicy);
     }
 
     [Fact]
@@ -271,6 +462,29 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
+    public async Task Resize_editor_links_pixel_dimensions_only_while_aspect_ratio_is_enabled()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-linked-pixels.jpg"));
+        var processor = new TestImageProcessor(path, width: 1200, height: 800);
+        using var viewModel = CreateResizeEditor(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            new TestFileSystem([path]),
+            new DesktopNavigationCoordinator());
+        await viewModel.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+
+        viewModel.PixelWidth = 600;
+        Assert.Equal(400, viewModel.PixelHeight);
+
+        viewModel.PixelHeight = 200;
+        Assert.Equal(300, viewModel.PixelWidth);
+
+        viewModel.MaintainAspectRatio = false;
+        viewModel.PixelWidth = 500;
+        Assert.Equal(200, viewModel.PixelHeight);
+    }
+
+    [Fact]
     public async Task Resize_editor_executes_existing_workflow_and_releases_shell_lock()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-run.jpg"));
@@ -295,21 +509,31 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Resize_preview_failure_keeps_valid_source_ready_for_formal_processing()
+    public async Task Non_crop_editors_reuse_browser_preview_without_duplicate_encoding()
     {
-        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-preview-failure.jpg"));
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "editor-reuses-browser-preview.jpg"));
         var processor = new TestImageProcessor(path) { FailPreview = true };
-        var viewModel = CreateResizeEditor(
+        var fileSystem = new TestFileSystem([path]);
+        using var resize = CreateResizeEditor(
             new TestPicker(DesktopSelectionResult.Canceled()),
             processor,
-            new TestFileSystem([path]),
+            fileSystem,
             new DesktopNavigationCoordinator());
+        using var compression = CreateCompressionEditor(processor, fileSystem, new DesktopNavigationCoordinator());
+        using var conversion = CreateConversionEditor(processor, fileSystem, new DesktopNavigationCoordinator());
 
-        await viewModel.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        var context = new SingleImageNavigationContext(path, processor.Probe);
+        await compression.LoadAsync(context);
+        await conversion.LoadAsync(context);
+        await resize.LoadAsync(context);
 
-        Assert.Equal(DesktopContentState.Ready, viewModel.ContentState);
-        Assert.True(viewModel.HasError);
-        Assert.True(viewModel.CanStart);
+        Assert.Equal(0, processor.PreviewCallCount);
+        Assert.Equal(DesktopContentState.Ready, compression.ContentState);
+        Assert.Equal(DesktopContentState.Ready, conversion.ContentState);
+        Assert.Equal(DesktopContentState.Ready, resize.ContentState);
+        Assert.False(compression.HasError);
+        Assert.False(conversion.HasError);
+        Assert.False(resize.HasError);
     }
 
     [Fact]
@@ -329,7 +553,29 @@ public sealed class DesktopInteractionTests
         Assert.Equal(76, processor.LastCompressRequest!.Profile.Quality!.Value.Value);
         Assert.Equal(DesktopExecutionState.Success, viewModel.ExecutionState);
         Assert.Equal("实际质量：76", viewModel.AppliedQualityText);
+        Assert.True(viewModel.ResultFeedback.IsVisible);
+        Assert.True(viewModel.ResultFeedback.IsSuccess);
+        Assert.Contains("压缩完成", viewModel.ResultFeedback.Message);
         Assert.False(navigation.IsNavigationLocked);
+    }
+
+    [Fact]
+    public async Task Compression_quality_slider_quantizes_visual_values_to_valid_integer_quality()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "compress-slider-quality.jpg"));
+        var processor = new TestImageProcessor(path);
+        using var viewModel = CreateCompressionEditor(
+            processor,
+            new TestFileSystem([path]),
+            new DesktopNavigationCoordinator());
+        await viewModel.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        viewModel.SelectedMode = viewModel.Modes.Single(option => option.Value == CompressionMode.Custom);
+
+        viewModel.CustomQualitySlider = 64.6;
+
+        Assert.Equal(65, viewModel.CustomQuality);
+        Assert.True(viewModel.CanStart);
+        Assert.True(viewModel.StartCommand.CanExecute(null));
     }
 
     [Fact]
@@ -376,6 +622,32 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
+    public async Task Crop_editor_exposes_only_supported_ratios_and_preserves_selection_when_entering_custom_mode()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "crop-ratios.jpg"));
+        var processor = new TestImageProcessor(path, width: 1200, height: 800);
+        using var viewModel = CreateCropEditor(processor, new TestFileSystem([path]), new DesktopNavigationCoordinator());
+        await viewModel.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+
+        Assert.Equal(["自定义", "3:2", "4:3", "5:4", "1:1"], viewModel.Ratios.Select(option => option.Label));
+        Assert.True(viewModel.IsCustomRatio);
+
+        viewModel.SelectedRatio = viewModel.Ratios.Single(option => option.Label == "1:1");
+        Assert.False(viewModel.IsCustomRatio);
+        Assert.Equal(800, viewModel.CropWidth);
+        Assert.Equal(800, viewModel.CropHeight);
+        Assert.Equal(200, viewModel.CropX);
+        Assert.Equal(0, viewModel.CropY);
+
+        viewModel.SelectedRatio = viewModel.Ratios[0];
+        Assert.True(viewModel.IsCustomRatio);
+        Assert.Equal(800, viewModel.CropWidth);
+        Assert.Equal(800, viewModel.CropHeight);
+        Assert.Equal(200, viewModel.CropX);
+        Assert.Equal(0, viewModel.CropY);
+    }
+
+    [Fact]
     public async Task Home_drop_single_file_reuses_open_image_workflow_and_recent_navigation()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "drop-file.jpg"));
@@ -414,7 +686,7 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Browser_previous_next_zoom_and_fit_commands_follow_selection_state()
+    public async Task Browser_previous_next_commands_follow_selection_while_zoom_is_owned_by_image_gallery()
     {
         var first = new LocalPath(Path.Combine(Path.GetTempPath(), "browser-1.jpg"));
         var second = new LocalPath(Path.Combine(Path.GetTempPath(), "browser-2.jpg"));
@@ -426,18 +698,18 @@ public sealed class DesktopInteractionTests
 
         Assert.False(browser.CanGoPrevious);
         Assert.True(browser.CanGoNext);
+        Assert.True(browser.HasItems);
+        Assert.Equal(0, browser.CurrentIndex);
+        Assert.Equal("1 / 2", browser.CurrentPositionText);
         await browser.NextCommand.ExecuteAsync();
         Assert.Equal(second, browser.CurrentItem!.Path);
+        Assert.Equal(1, browser.CurrentIndex);
+        Assert.Equal("2 / 2", browser.CurrentPositionText);
         Assert.True(browser.CanGoPrevious);
         Assert.False(browser.CanGoNext);
 
-        await browser.ActualSizeCommand.ExecuteAsync();
-        Assert.False(browser.IsFitMode);
-        Assert.Equal(100, browser.ZoomPercent);
-        browser.ZoomInCommand.Execute(null);
-        Assert.Equal(125, browser.ZoomPercent);
-        browser.FitCommand.Execute(null);
-        Assert.True(browser.IsFitMode);
+        Assert.Same(browser.CurrentItem!.GalleryItem, browser.SelectedGalleryItem);
+        Assert.Equal(0, processor.PreviewCallCount);
     }
 
     [Fact]
@@ -473,6 +745,50 @@ public sealed class DesktopInteractionTests
         Assert.True(browser.CanConvert);
         Assert.False(browser.CanResize);
         Assert.False(browser.CanCrop);
+        Assert.True(browser.CompressCommand.CanExecute(null));
+        Assert.True(browser.ConvertCommand.CanExecute(null));
+        Assert.False(browser.ResizeCommand.CanExecute(null));
+        Assert.False(browser.CropCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData(DesktopRoute.Compress)]
+    [InlineData(DesktopRoute.Convert)]
+    [InlineData(DesktopRoute.Resize)]
+    [InlineData(DesktopRoute.Crop)]
+    public async Task Browser_quick_action_commands_capture_current_image_and_navigate(DesktopRoute route)
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), $"browser-{route}.jpg"));
+        var processor = new TestImageProcessor(path);
+        var navigation = new DesktopNavigationCoordinator();
+        DesktopNavigationRequest? requested = null;
+        navigation.NavigationRequested += (_, request) => requested = request;
+        using var browser = new ImageBrowserViewModel(
+            new OpenImageWorkflow(processor),
+            processor,
+            navigation,
+            new TestLauncher(),
+            new TestClipboard());
+
+        await browser.LoadAsync(new BrowserNavigationContext(
+            null,
+            [new BrowserImageCandidate(path, Path.GetFileName(path.Value))]));
+
+        var command = route switch
+        {
+            DesktopRoute.Compress => browser.CompressCommand,
+            DesktopRoute.Convert => browser.ConvertCommand,
+            DesktopRoute.Resize => browser.ResizeCommand,
+            DesktopRoute.Crop => browser.CropCommand,
+            _ => throw new ArgumentOutOfRangeException(nameof(route), route, null)
+        };
+        command.Execute(null);
+
+        Assert.NotNull(requested);
+        Assert.Equal(route, requested.Route);
+        var context = Assert.IsType<SingleImageNavigationContext>(requested.Context);
+        Assert.Equal(path, context.InputPath);
+        Assert.Equal(processor.Probe, context.Probe);
     }
 
     [Fact]
@@ -496,6 +812,61 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
+    public void Output_policy_editor_exposes_one_contextual_location_surface_and_live_subfolder_hint()
+    {
+        var editor = new OutputPolicyEditorViewModel(new TestPicker(DesktopSelectionResult.Canceled()));
+
+        Assert.True(editor.IsSubfolder);
+        Assert.False(editor.IsSameAsInput);
+        Assert.False(editor.IsCustomDirectory);
+        editor.SubfolderName = "Exports";
+        Assert.Equal("图片将保存到：每张原图所在目录 / Exports", editor.SubfolderDestinationHint);
+
+        editor.SelectedLocation = editor.Locations.Single(option => option.Value == OutputLocationMode.SameAsInput);
+        Assert.False(editor.IsSubfolder);
+        Assert.True(editor.IsSameAsInput);
+        Assert.False(editor.IsCustomDirectory);
+
+        editor.SelectedLocation = editor.Locations.Single(option => option.Value == OutputLocationMode.CustomDirectory);
+        Assert.False(editor.IsSubfolder);
+        Assert.False(editor.IsSameAsInput);
+        Assert.True(editor.IsCustomDirectory);
+    }
+
+    [Fact]
+    public void Output_policy_editor_builds_all_three_naming_contracts_and_updates_live_preview()
+    {
+        var editor = new OutputPolicyEditorViewModel(new TestPicker(DesktopSelectionResult.Canceled()));
+
+        Assert.True(editor.IsAppendSuffix);
+        editor.FileNameSuffix = "_export";
+        Assert.Equal("示例图片_export", editor.NamingPreview);
+        Assert.True(editor.TryBuild(out var suffixPolicy, out var suffixError));
+        Assert.Null(suffixError);
+        Assert.Equal(OutputNamingMode.AppendSuffix, suffixPolicy!.NamingPolicy.Mode);
+        Assert.Equal("_export", suffixPolicy.NamingPolicy.Suffix);
+
+        editor.SelectedNaming = editor.NamingModes.Single(option => option.Value == OutputNamingMode.KeepOriginalName);
+        Assert.True(editor.IsKeepOriginalName);
+        Assert.Equal("示例图片", editor.NamingPreview);
+        Assert.True(editor.TryBuild(out var originalPolicy, out _));
+        Assert.Equal(OutputNamingMode.KeepOriginalName, originalPolicy!.NamingPolicy.Mode);
+
+        editor.SelectedNaming = editor.NamingModes.Single(option => option.Value == OutputNamingMode.CustomPattern);
+        editor.CustomFileNamePattern = "{index}_{name}_done";
+        Assert.True(editor.IsCustomPattern);
+        Assert.Equal("001_示例图片_done", editor.NamingPreview);
+        Assert.False(editor.CanInsertIndexToken);
+        Assert.True(editor.TryBuild(out var customPolicy, out _));
+        Assert.Equal(OutputNamingMode.CustomPattern, customPolicy!.NamingPolicy.Mode);
+        Assert.Equal("{index}_{name}_done", customPolicy.NamingPolicy.Pattern);
+
+        editor.FileNamePattern = "legacy_{name}";
+        Assert.True(editor.IsCustomPattern);
+        Assert.Equal("legacy_{name}", editor.CustomFileNamePattern);
+    }
+
+    [Fact]
     public async Task Compression_editor_submits_visible_output_policy_instead_of_hidden_default()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "compress-output.jpg"));
@@ -515,7 +886,7 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Invalid_visible_output_policy_disables_single_editor_start()
+    public async Task Invalid_visible_output_policy_reports_top_level_feedback_on_submission()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "invalid-output.jpg"));
         var processor = new TestImageProcessor(path);
@@ -524,8 +895,16 @@ public sealed class DesktopInteractionTests
         viewModel.Output.FileNamePattern = string.Empty;
 
         Assert.False(viewModel.CanStart);
-        Assert.False(viewModel.StartCommand.CanExecute(null));
-        Assert.Contains("文件名格式", viewModel.DraftError);
+        Assert.True(viewModel.StartCommand.CanExecute(null));
+        Assert.Null(viewModel.DraftError);
+        Assert.Contains("文件名格式", viewModel.Output.ValidationError);
+
+        await viewModel.StartCommand.ExecuteAsync();
+
+        Assert.Null(processor.LastCompressRequest);
+        Assert.True(viewModel.ResultFeedback.IsVisible);
+        Assert.True(viewModel.ResultFeedback.IsWarning);
+        Assert.Contains("文件名格式", viewModel.ResultFeedback.Message);
     }
 
     [Fact]
@@ -612,7 +991,7 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Browser_thumbnail_is_not_loaded_until_realized_item_requests_it()
+    public async Task Browser_delegates_thumbnail_loading_to_image_gallery_sources()
     {
         var first = new LocalPath(Path.Combine(Path.GetTempPath(), "thumb-1.jpg"));
         var second = new LocalPath(Path.Combine(Path.GetTempPath(), "thumb-2.jpg"));
@@ -621,41 +1000,366 @@ public sealed class DesktopInteractionTests
         await browser.LoadAsync(new BrowserNavigationContext(
             null,
             [new BrowserImageCandidate(first, "thumb-1.jpg"), new BrowserImageCandidate(second, "thumb-2.jpg")]));
-        var secondItem = browser.Items[1];
-
-        Assert.Null(secondItem.ThumbnailBytes);
-        Assert.Equal(1, processor.PreviewCallCount);
-        await secondItem.EnsureThumbnailCommand.ExecuteAsync();
-
-        Assert.Equal(TestImageProcessor.PreviewPayload, secondItem.ThumbnailBytes);
-        Assert.Equal(2, processor.PreviewCallCount);
+        Assert.Equal(2, browser.GalleryItems.Count);
+        Assert.All(browser.GalleryItems, item => Assert.Null(item.ThumbnailImageSource));
+        Assert.Equal(0, processor.PreviewCallCount);
     }
 
     [Fact]
-    public async Task Browser_actual_size_requests_original_pixel_extent_only_on_demand()
+    public async Task Browser_add_images_appends_gallery_sources_without_decoding_or_losing_selection()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "browser-append-a.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "browser-append-b.jpg"));
+        var processor = new TestImageProcessor(first);
+        var picker = new TestPicker(DesktopSelectionResult.Selected(first.Value, second.Value));
+        using var browser = new ImageBrowserViewModel(
+            new OpenImageWorkflow(processor),
+            processor,
+            new DesktopNavigationCoordinator(),
+            new TestLauncher(),
+            new TestClipboard(),
+            picker: picker);
+        await browser.LoadAsync(new BrowserNavigationContext(
+            null,
+            [new BrowserImageCandidate(first, Path.GetFileName(first.Value))]));
+        var originalCurrent = browser.CurrentItem;
+
+        await browser.AddImagesCommand.ExecuteAsync();
+        await browser.AddImagesCommand.ExecuteAsync();
+
+        Assert.Equal(2, browser.Items.Count);
+        Assert.Same(originalCurrent, browser.CurrentItem);
+        Assert.Equal(0, processor.PreviewCallCount);
+        Assert.Equal(second, browser.Items[1].Path);
+        Assert.Equal(2, browser.GalleryItems.Count);
+    }
+
+    [Fact]
+    public async Task Tool_drawer_session_updates_batch_action_when_browser_collection_changes()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "tool-session.jpg"));
+        var processor = new TestImageProcessor(path);
+        var batch = CreateBatch(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            new TestFileSystem([path]));
+        var navigation = new DesktopNavigationCoordinator();
+        using var editor = CreateCompressionEditor(processor, new TestFileSystem([path]), navigation);
+        await editor.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        using var session = new ToolDrawerSessionViewModel(
+            editor,
+            batch,
+            1,
+            _ => Task.FromResult(true),
+            static () => { },
+            navigation);
+
+        Assert.False(session.HasBatchOption);
+        session.UpdateItemCount(3);
+
+        Assert.True(session.HasBatchOption);
+        Assert.Equal("批量处理", session.BatchActionLabel);
+        Assert.Equal("单张处理", session.SingleActionLabel);
+        Assert.True(session.StartBatchCommand.CanExecute(null));
+        Assert.Same(editor, session.SingleContent);
+        Assert.True(session.IsIdle);
+        Assert.Null(typeof(ToolDrawerSessionViewModel).GetProperty("ActiveContent"));
+        Assert.Null(typeof(ToolDrawerSessionViewModel).GetProperty("IsBatchMode"));
+    }
+
+    [Fact]
+    public async Task Tool_drawer_allows_batch_submission_attempt_so_shell_can_report_invalid_draft()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "invalid-session.jpg"));
+        var processor = new TestImageProcessor(path);
+        var navigation = new DesktopNavigationCoordinator();
+        using var editor = CreateCompressionEditor(processor, new TestFileSystem([path]), navigation);
+        await editor.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        editor.Output.SelectedLocation = editor.Output.Locations.Single(option => option.Value == OutputLocationMode.CustomDirectory);
+        editor.Output.CustomDirectory = string.Empty;
+        var batch = CreateBatch(new TestPicker(DesktopSelectionResult.Canceled()), processor, new TestFileSystem([path]));
+        var prepareCallCount = 0;
+        using var session = new ToolDrawerSessionViewModel(
+            editor,
+            batch,
+            2,
+            _ =>
+            {
+                prepareCallCount++;
+                return Task.FromResult(false);
+            },
+            static () => { },
+            navigation);
+
+        Assert.True(session.CanStartBatch);
+        Assert.True(session.StartBatchCommand.CanExecute(null));
+        Assert.False(ShellViewModel.TryCaptureBatchDraft(editor, batch, out var rejectedDraft));
+        Assert.Null(rejectedDraft);
+        await session.StartBatchCommand.ExecuteAsync();
+        Assert.Equal(1, prepareCallCount);
+    }
+
+    [Fact]
+    public async Task Tool_drawer_batch_command_prepares_and_awaits_the_real_batch_execution()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "session-batch-a.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "session-batch-b.jpg"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var navigation = new DesktopNavigationCoordinator();
+        using var editor = CreateCompressionEditor(processor, fileSystem, navigation);
+        await editor.LoadAsync(new SingleImageNavigationContext(first, processor.Probe));
+        var batch = CreateBatch(new TestPicker(DesktopSelectionResult.Canceled()), processor, fileSystem);
+        using var session = new ToolDrawerSessionViewModel(
+            editor,
+            batch,
+            2,
+            async cancellationToken =>
+            {
+                if (!ShellViewModel.TryCaptureBatchDraft(editor, batch, out var applyDraft)) return false;
+                await batch.PrepareAsync(BatchTaskKind.Compress, [first, second], cancellationToken);
+                applyDraft!();
+                return batch.DraftError is null && batch.CanAttemptStart;
+            },
+            static () => { },
+            navigation);
+
+        await session.StartBatchCommand.ExecuteAsync();
+
+        Assert.Equal(2, processor.CompressCallCount);
+        Assert.True(batch.HasResult);
+        Assert.False(session.IsBatchExecuting);
+    }
+
+    [Fact]
+    public async Task Tool_drawer_reenables_batch_immediately_after_single_execution_finishes()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "session-single-then-batch.jpg"));
+        var processor = new TestImageProcessor(path);
+        var fileSystem = new TestFileSystem([path]);
+        var navigation = new DesktopNavigationCoordinator();
+        using var editor = CreateCompressionEditor(processor, fileSystem, navigation);
+        await editor.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        var batch = CreateBatch(new TestPicker(DesktopSelectionResult.Canceled()), processor, fileSystem);
+        using var session = new ToolDrawerSessionViewModel(
+            editor,
+            batch,
+            2,
+            _ => Task.FromResult(true),
+            static () => { },
+            navigation);
+
+        Assert.True(session.CanStartBatch);
+        await editor.StartCommand.ExecuteAsync();
+
+        Assert.Equal(DesktopExecutionState.Success, editor.ExecutionState);
+        Assert.True(editor.StartCommand.CanExecute(null));
+        Assert.True(session.CanStartBatch);
+        Assert.True(session.StartBatchCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Resize_batch_draft_preserves_prevent_upscaling()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-no-upscale.jpg"));
+        var processor = new TestImageProcessor(path, width: 800, height: 600);
+        var fileSystem = new TestFileSystem([path]);
+        using var editor = CreateResizeEditor(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            fileSystem,
+            new DesktopNavigationCoordinator());
+        await editor.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        editor.PixelWidth = 1600;
+        editor.PixelHeight = 1200;
+        editor.PreventUpscaling = true;
+        var batch = CreateBatch(new TestPicker(DesktopSelectionResult.Canceled()), processor, fileSystem);
+
+        Assert.True(ShellViewModel.TryCaptureBatchDraft(editor, batch, out var applyDraft));
+        await batch.PrepareAsync(BatchTaskKind.Resize, [path]);
+        applyDraft!();
+
+        Assert.True(batch.PreventUpscaling);
+        Assert.Equal("800 × 600", batch.Items[0].EstimatedSize);
+    }
+
+    [Fact]
+    public async Task Shell_folder_to_compress_batch_path_captures_the_editor_instead_of_the_session_wrapper()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "shell-folder-a.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "shell-folder-b.jpg"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var navigation = new DesktopNavigationCoordinator();
+        var picker = new TestPicker(DesktopSelectionResult.Canceled());
+        var dialogs = new TestDialogs();
+        var clipboard = new TestClipboard();
+        var launcher = new TestLauncher();
+        var outputGuard = new ResultOutputGuard(fileSystem);
+        var settingsStore = new TestSettingsStore();
+        var services = CreateImageWorkflowServices(processor, fileSystem);
+        var browser = new ImageBrowserViewModel(
+            new OpenImageWorkflow(processor), processor, navigation, launcher, clipboard);
+        var compress = CreateCompressionEditor(processor, fileSystem, navigation);
+        var convert = CreateConversionEditor(processor, fileSystem, navigation);
+        var resize = CreateResizeEditor(picker, processor, fileSystem, navigation);
+        var crop = new CropEditorViewModel(
+            picker, launcher, dialogs, clipboard, outputGuard,
+            new OpenImageWorkflow(processor), new LoadSettingsWorkflow(settingsStore),
+            new CropImageWorkflow(services), navigation);
+        var batch = CreateBatch(picker, processor, fileSystem, dialogs, clipboard, navigation);
+        var settings = CreateSettings(settingsStore, dialogs);
+        var feedback = new TestFeedback();
+        using var shell = new ShellViewModel(
+            navigation,
+            CreateHome(picker, processor, navigation, fileSystem),
+            browser,
+            compress,
+            convert,
+            resize,
+            crop,
+            batch,
+            settings,
+            dialogs,
+            feedback);
+
+        navigation.Navigate(new DesktopNavigationRequest(
+            DesktopRoute.Browse,
+            new BrowserNavigationContext(
+                null,
+                [new BrowserImageCandidate(first, "shell-folder-a.jpg"), new BrowserImageCandidate(second, "shell-folder-b.jpg")],
+                first,
+                processor.Probe)));
+        await WaitUntilAsync(() => browser.Items.Count == 2 && browser.State == DesktopContentState.Ready);
+        navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Compress));
+        await WaitUntilAsync(() => shell.DrawerContent is ToolDrawerSessionViewModel session
+                                   && session.SingleContent is CompressionEditorViewModel editor
+                                   && editor.IsContentReady);
+        var drawer = Assert.IsType<ToolDrawerSessionViewModel>(shell.DrawerContent);
+
+        await drawer.StartBatchCommand.ExecuteAsync();
+
+        Assert.Equal(2, processor.CompressCallCount);
+        Assert.True(batch.HasResult);
+        Assert.DoesNotContain(feedback.Messages, message => message.Contains("当前批量处理配置无效", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Shell_gallery_selection_updates_resize_single_input_without_resetting_the_visible_draft()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "shell-resize-first.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "shell-resize-second.jpg"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var navigation = new DesktopNavigationCoordinator();
+        var picker = new TestPicker(DesktopSelectionResult.Canceled());
+        var dialogs = new TestDialogs();
+        var clipboard = new TestClipboard();
+        var launcher = new TestLauncher();
+        var outputGuard = new ResultOutputGuard(fileSystem);
+        var settingsStore = new TestSettingsStore();
+        var services = CreateImageWorkflowServices(processor, fileSystem);
+        var browser = new ImageBrowserViewModel(
+            new OpenImageWorkflow(processor), processor, navigation, launcher, clipboard);
+        var compress = CreateCompressionEditor(processor, fileSystem, navigation);
+        var convert = CreateConversionEditor(processor, fileSystem, navigation);
+        var resize = CreateResizeEditor(picker, processor, fileSystem, navigation);
+        var crop = new CropEditorViewModel(
+            picker, launcher, dialogs, clipboard, outputGuard,
+            new OpenImageWorkflow(processor), new LoadSettingsWorkflow(settingsStore),
+            new CropImageWorkflow(services), navigation);
+        var batch = CreateBatch(picker, processor, fileSystem, dialogs, clipboard, navigation);
+        var settings = CreateSettings(settingsStore, dialogs);
+        using var shell = new ShellViewModel(
+            navigation,
+            CreateHome(picker, processor, navigation, fileSystem),
+            browser,
+            compress,
+            convert,
+            resize,
+            crop,
+            batch,
+            settings,
+            dialogs,
+            new TestFeedback());
+
+        navigation.Navigate(new DesktopNavigationRequest(
+            DesktopRoute.Browse,
+            new BrowserNavigationContext(
+                null,
+                [new BrowserImageCandidate(first, "first.jpg"), new BrowserImageCandidate(second, "second.jpg")],
+                first,
+                processor.Probe)));
+        await WaitUntilAsync(() => browser.State == DesktopContentState.Ready);
+        navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize));
+        await WaitUntilAsync(() => resize.IsContentReady);
+        resize.SelectedMode = resize.ResizeModes.Single(option => option.Value == ResizeDraftMode.Percentage);
+        resize.Percentage = 75;
+
+        await browser.SelectItemCommand.ExecuteAsync(browser.Items[1]);
+        await WaitUntilAsync(() => string.Equals(resize.InputPath, second.Value, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(75, resize.Percentage);
+        await resize.StartCommand.ExecuteAsync();
+        Assert.Equal(second, processor.LastResizeRequest?.InputPath);
+        Assert.Equal(90, processor.LastResizeRequest?.EncodingPolicy.LossyQuality.Value);
+    }
+
+    [Fact]
+    public async Task Shell_batch_draft_capture_preserves_custom_directory_and_webp_format()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "batch-webp-source.png"));
+        var secondPath = new LocalPath(Path.Combine(Path.GetTempPath(), "batch-webp-second.png"));
+        var customDirectory = Path.Combine(Path.GetTempPath(), "AtomPix-WebP-Output");
+        var processor = new TestImageProcessor(path, ImageFormatKind.Png);
+        var fileSystem = new TestFileSystem([path, secondPath]);
+        var navigation = new DesktopNavigationCoordinator();
+        using var editor = CreateConversionEditor(processor, fileSystem, navigation);
+        await editor.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        editor.SelectedFormat = editor.Formats.Single(option => option.Value == OutputImageFormat.WebP);
+        editor.Output.SelectedLocation = editor.Output.Locations.Single(option => option.Value == OutputLocationMode.CustomDirectory);
+        editor.Output.CustomDirectory = customDirectory;
+        var batch = CreateBatch(new TestPicker(DesktopSelectionResult.Canceled()), processor, fileSystem);
+
+        var captured = ShellViewModel.TryCaptureBatchDraft(editor, batch, out var applyDraft);
+        await batch.PrepareAsync(BatchTaskKind.Convert, [path, secondPath]);
+        applyDraft?.Invoke();
+        await batch.StartCommand.ExecuteAsync();
+
+        Assert.True(captured);
+        Assert.Equal(OutputImageFormat.WebP, batch.SelectedFormat.Value);
+        Assert.True(batch.Output.TryBuild(out var output, out var error), error);
+        Assert.Equal(OutputLocationMode.CustomDirectory, output!.LocationPolicy.Mode);
+        Assert.Equal(customDirectory, output.LocationPolicy.CustomDirectory);
+        Assert.Equal(2, processor.ConvertCallCount);
+        Assert.Equal(OutputImageFormat.WebP, processor.LastConvertRequest!.Profile.OutputFormat);
+        Assert.All(batch.Items, item =>
+        {
+            Assert.StartsWith(customDirectory, item.OutputPath, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(".webp", item.OutputPath, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public async Task Browser_does_not_decode_large_images_or_own_image_gallery_zoom_policy()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "large-browser.jpg"));
         var processor = new TestImageProcessor(path, width: 4000, height: 3000);
         var browser = CreateBrowser(processor);
         await browser.LoadAsync(new BrowserNavigationContext(null, [new BrowserImageCandidate(path, "large-browser.jpg")]));
 
-        Assert.Equal(1600, processor.LastPreviewRequest!.MaxPixelSize);
-        await browser.ActualSizeCommand.ExecuteAsync();
-
-        Assert.Equal(2, processor.PreviewCallCount);
-        Assert.Equal(4000, processor.LastPreviewRequest!.MaxPixelSize);
-        Assert.False(browser.IsFitMode);
-        Assert.Equal(100, browser.ZoomPercent);
+        Assert.Null(processor.LastPreviewRequest);
+        Assert.Equal(0, processor.PreviewCallCount);
+        Assert.Equal("large-browser.jpg", Assert.Single(browser.GalleryItems).Title);
     }
 
     [Fact]
-    public async Task Browser_rapid_selection_is_latest_wins_and_canceled_preview_cannot_overwrite_current()
+    public async Task Browser_rapid_gallery_selection_is_latest_wins()
     {
         var first = new LocalPath(Path.Combine(Path.GetTempPath(), "latest-1.jpg"));
         var delayed = new LocalPath(Path.Combine(Path.GetTempPath(), "latest-2.jpg"));
         var latest = new LocalPath(Path.Combine(Path.GetTempPath(), "latest-3.jpg"));
         var processor = new TestImageProcessor(first);
-        processor.PreviewGates[delayed.Value] = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var browser = CreateBrowser(processor);
         await browser.LoadAsync(new BrowserNavigationContext(
             null,
@@ -666,11 +1370,9 @@ public sealed class DesktopInteractionTests
             ]));
 
         browser.CurrentItem = browser.Items[1];
-        await WaitUntilAsync(() => processor.PreviewCallCount >= 2);
         browser.CurrentItem = browser.Items[2];
         await WaitUntilAsync(() => browser.State == DesktopContentState.Ready && browser.CurrentItem?.Path == latest);
 
-        processor.PreviewGates[delayed.Value].TrySetResult();
         await Task.Yield();
         Assert.Equal(latest, browser.CurrentItem!.Path);
         Assert.Equal(DesktopContentState.Ready, browser.State);
@@ -710,7 +1412,7 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Batch_invalid_visible_output_location_disables_start_without_calling_workflow()
+    public async Task Batch_invalid_visible_output_location_rejects_submission_without_calling_workflow()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "batch-invalid.jpg"));
         var processor = new TestImageProcessor(path);
@@ -724,8 +1426,10 @@ public sealed class DesktopInteractionTests
         viewModel.Output.CustomDirectory = string.Empty;
 
         Assert.False(viewModel.CanStart);
-        Assert.False(viewModel.StartCommand.CanExecute(null));
+        Assert.True(viewModel.StartCommand.CanExecute(null));
         Assert.Contains("自定义输出目录", viewModel.DraftError);
+        await viewModel.StartCommand.ExecuteAsync();
+        Assert.Contains("自定义输出目录", viewModel.ErrorMessage);
         Assert.Equal(0, processor.CompressCallCount);
     }
 
@@ -749,7 +1453,7 @@ public sealed class DesktopInteractionTests
     public async Task Settings_save_failure_keeps_dirty_draft_and_exposes_recoverable_error()
     {
         var store = new FailingSaveSettingsStore(AppSettings.Default);
-        var viewModel = CreateSettings(store, new TestAppearance());
+        var viewModel = CreateSettings(store);
         await viewModel.LoadAsync();
         viewModel.RecentMaxCount = 7;
 
@@ -762,7 +1466,7 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Browser_reuses_probe_and_preview_cache_then_releases_the_whole_session_on_leave()
+    public async Task Browser_reuses_probe_cache_and_releases_the_whole_gallery_session_on_leave()
     {
         var first = new LocalPath(Path.Combine(Path.GetTempPath(), "cache-a.jpg"));
         var second = new LocalPath(Path.Combine(Path.GetTempPath(), "cache-b.jpg"));
@@ -776,11 +1480,10 @@ public sealed class DesktopInteractionTests
         await browser.PreviousCommand.ExecuteAsync();
 
         Assert.Equal(2, processor.ProbeCallCount);
-        Assert.Equal(2, processor.PreviewCallCount);
+        Assert.Equal(0, processor.PreviewCallCount);
         browser.BackCommand.Execute(null);
         Assert.Empty(browser.Items);
         Assert.Null(browser.CurrentItem);
-        Assert.Null(browser.PreviewBytes);
         Assert.Equal(DesktopContentState.Empty, browser.State);
     }
 
@@ -936,7 +1639,6 @@ public sealed class DesktopInteractionTests
 
     private static ImageBrowserViewModel CreateBrowser(IImageProcessor processor) => new(
         new OpenImageWorkflow(processor),
-        new CreatePreviewWorkflow(processor),
         processor,
         new DesktopNavigationCoordinator(),
         new TestLauncher(),
@@ -947,7 +1649,8 @@ public sealed class DesktopInteractionTests
         IImageProcessor processor,
         IFileSystemService fileSystem,
         TestDialogs? dialogs = null,
-        TestClipboard? clipboard = null)
+        TestClipboard? clipboard = null,
+        DesktopNavigationCoordinator? navigation = null)
     {
         var services = CreateImageWorkflowServices(processor, fileSystem);
         return new BatchTaskViewModel(
@@ -963,7 +1666,7 @@ public sealed class DesktopInteractionTests
             new BatchCompressWorkflow(services),
             new BatchConvertWorkflow(services),
             new BatchResizeWorkflow(services),
-            new DesktopNavigationCoordinator());
+            navigation ?? new DesktopNavigationCoordinator());
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
@@ -980,12 +1683,13 @@ public sealed class DesktopInteractionTests
         IDesktopPickerService picker,
         IImageProcessor processor,
         IFileSystemService fileSystem,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IAppSettingsStore? settingsStore = null)
     {
         var services = new ImageWorkflowServices(
             processor,
             fileSystem);
-        var settings = new TestSettingsStore();
+        var settings = settingsStore ?? new TestSettingsStore();
         return new ResizeEditorViewModel(
             picker,
             new TestLauncher(),
@@ -993,7 +1697,6 @@ public sealed class DesktopInteractionTests
             new TestClipboard(),
             new ResultOutputGuard(fileSystem),
             new OpenImageWorkflow(processor),
-            new CreatePreviewWorkflow(processor),
             new LoadSettingsWorkflow(settings),
             new ResizeImageWorkflow(services),
             processor,
@@ -1002,7 +1705,6 @@ public sealed class DesktopInteractionTests
 
     private static SettingsPageViewModel CreateSettings(
         IAppSettingsStore store,
-        IDesktopAppearanceService appearance,
         TestDialogs? dialogs = null) =>
         new(
             new LoadSettingsWorkflow(store),
@@ -1010,14 +1712,14 @@ public sealed class DesktopInteractionTests
             dialogs ?? new TestDialogs(),
             new TestPicker(DesktopSelectionResult.Canceled()),
             new TestLauncher(),
-            appearance,
             new TestPathProvider(),
             new TestClipboard());
 
     private static CompressionEditorViewModel CreateCompressionEditor(
         IImageProcessor processor,
         IFileSystemService fileSystem,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IAppSettingsStore? settingsStore = null)
     {
         var services = CreateImageWorkflowServices(processor, fileSystem);
         return new CompressionEditorViewModel(
@@ -1027,8 +1729,7 @@ public sealed class DesktopInteractionTests
             new TestClipboard(),
             new ResultOutputGuard(fileSystem),
             new OpenImageWorkflow(processor),
-            new CreatePreviewWorkflow(processor),
-            new LoadSettingsWorkflow(new TestSettingsStore()),
+            new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new CompressImageWorkflow(services),
             navigation);
     }
@@ -1036,7 +1737,8 @@ public sealed class DesktopInteractionTests
     private static ConversionEditorViewModel CreateConversionEditor(
         IImageProcessor processor,
         IFileSystemService fileSystem,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IAppSettingsStore? settingsStore = null)
     {
         var services = CreateImageWorkflowServices(processor, fileSystem);
         return new ConversionEditorViewModel(
@@ -1046,8 +1748,7 @@ public sealed class DesktopInteractionTests
             new TestClipboard(),
             new ResultOutputGuard(fileSystem),
             new OpenImageWorkflow(processor),
-            new CreatePreviewWorkflow(processor),
-            new LoadSettingsWorkflow(new TestSettingsStore()),
+            new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new ConvertImageWorkflow(services),
             navigation);
     }
@@ -1055,7 +1756,8 @@ public sealed class DesktopInteractionTests
     private static CropEditorViewModel CreateCropEditor(
         IImageProcessor processor,
         IFileSystemService fileSystem,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IAppSettingsStore? settingsStore = null)
     {
         var services = CreateImageWorkflowServices(processor, fileSystem);
         return new CropEditorViewModel(
@@ -1065,8 +1767,7 @@ public sealed class DesktopInteractionTests
             new TestClipboard(),
             new ResultOutputGuard(fileSystem),
             new OpenImageWorkflow(processor),
-            new CreatePreviewWorkflow(processor),
-            new LoadSettingsWorkflow(new TestSettingsStore()),
+            new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new CropImageWorkflow(services),
             navigation);
     }
@@ -1075,6 +1776,26 @@ public sealed class DesktopInteractionTests
         IImageProcessor processor,
         IFileSystemService fileSystem) =>
         new(processor, fileSystem);
+
+    private static AppSettings CreateUpdatedEditorDefaults()
+    {
+        const MetadataPolicy metadata = MetadataPolicy.Preserve;
+        return new AppSettings(
+            new CompressionProfile(CompressionMode.Custom, new ImageQuality(37), metadata),
+            new ConversionProfile(
+                OutputImageFormat.Jpeg,
+                new ImageQuality(41),
+                metadata,
+                new TransparencyPolicy(RgbColor.Parse("#22AA44"))),
+            new SameFormatEncodingPolicy(new ImageQuality(77), metadata),
+            new OutputPolicy(
+                new OutputLocationPolicy(OutputLocationMode.Subfolder, null, "NewDefaults"),
+                new OutputNamingPolicy(OutputNamingMode.CustomPattern, null, "{name}_new"),
+                OverwritePolicy.Skip),
+            AppSettings.Default.ThemeMode,
+            AppSettings.Default.Language,
+            AppSettings.Default.RecentItems);
+    }
 
     private sealed class TestPicker : IDesktopPickerService
     {
@@ -1101,7 +1822,6 @@ public sealed class DesktopInteractionTests
     private sealed class TestDialogs : IDesktopDialogService
     {
         public bool ConfirmResult { get; init; }
-        public UnsavedChangesChoice UnsavedChoice { get; init; } = UnsavedChangesChoice.Stay;
         public string? LastInformationTitle { get; private set; }
         public string? LastInformationMessage { get; private set; }
 
@@ -1117,14 +1837,6 @@ public sealed class DesktopInteractionTests
             return Task.CompletedTask;
         }
 
-        public Task<UnsavedChangesChoice> ChooseUnsavedChangesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(UnsavedChoice);
-    }
-
-    private sealed class TestAppearance : IDesktopAppearanceService
-    {
-        public ThemeMode? LastApplied { get; private set; }
-        public void Apply(ThemeMode themeMode) => LastApplied = themeMode;
     }
 
     private sealed class TestClipboard : IDesktopClipboardService
@@ -1149,6 +1861,18 @@ public sealed class DesktopInteractionTests
         public LocalPath TempDirectory { get; } = new(Path.GetTempPath());
     }
 
+    private sealed class TestFeedback : IDesktopFeedbackService
+    {
+        public List<string> Messages { get; } = [];
+
+        public void ShowMessage(
+            string message,
+            DesktopFeedbackSeverity severity = DesktopFeedbackSeverity.Information,
+            TimeSpan? expiration = null) => Messages.Add(message);
+
+        public void ShowNotification(DesktopNotificationRequest request) => Messages.Add(request.Content);
+    }
+
     private sealed class MutableSettingsStore : IAppSettingsStore
     {
         private AppSettings _settings;
@@ -1168,6 +1892,30 @@ public sealed class DesktopInteractionTests
             _settings = settings;
             return Task.FromResult(OperationResult.Success());
         }
+    }
+
+    private sealed class DelayedSettingsStore : IAppSettingsStore
+    {
+        private readonly TaskCompletionSource<OperationResult<AppSettings>> _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool> LoadStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int LoadCount { get; private set; }
+
+        public Task<OperationResult<AppSettings>> LoadAsync(CancellationToken cancellationToken)
+        {
+            LoadCount++;
+            LoadStarted.TrySetResult(true);
+            return _completion.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task<OperationResult> SaveAsync(AppSettings settings, CancellationToken cancellationToken) =>
+            Task.FromResult(OperationResult.Success());
+
+        public void Complete(AppSettings settings) =>
+            _completion.TrySetResult(OperationResult<AppSettings>.Success(settings));
     }
 
     private sealed class TestSettingsStore : IAppSettingsStore
@@ -1317,6 +2065,8 @@ public sealed class DesktopInteractionTests
 
         public ImageCropRequest? LastCropRequest { get; private set; }
 
+        public ImageResizeRequest? LastResizeRequest { get; private set; }
+
         public ImagePreviewRequest? LastPreviewRequest { get; private set; }
 
         public ImageProbeResult Probe => _probe with { };
@@ -1444,6 +2194,7 @@ public sealed class DesktopInteractionTests
             CancellationToken cancellationToken)
         {
             ResizeCallCount++;
+            LastResizeRequest = request;
             return Task.FromResult(OperationResult<ImageResizeResult>.Success(new ImageResizeResult(
                 request.InputPath,
                 request.OutputPath,

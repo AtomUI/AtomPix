@@ -1,119 +1,130 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:atom="https://atomui.net"
-             xmlns:antdicons="https://atomui.net/icons/antdesign"
+             xmlns:labs="https://atomui.net/labs"
              xmlns:controls="using:AtomPix.Desktop.Controls"
              xmlns:vm="using:AtomPix.Desktop.ViewModels"
              x:Class="AtomPix.Desktop.Views.ImageBrowserView"
              x:DataType="vm:ImageBrowserViewModel">
-    <Grid RowDefinitions="Auto,*" Margin="28,24">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,18">
-            <atom:Button Content="返回"
-                         Icon="{antdicons:AntDesignIconProvider Kind=ArrowLeftOutlined}"
-                         Command="{Binding BackCommand}" />
-            <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
-                <TextBlock Text="图片浏览" FontSize="22" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding CurrentPath}" Opacity="0.58" TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-            <atom:Button Grid.Column="2"
-                         Content="在文件夹中显示"
-                         Command="{Binding OpenDirectoryCommand}" />
-        </Grid>
+    <Grid x:Name="BrowserContentLayout"
+          AutomationProperties.Name="图片浏览器"
+          Background="White">
+        <Border IsVisible="{Binding IsCropMode}"
+                Background="{DynamicResource AtomPixWorkspaceSurfaceBrush}"
+                IsHitTestVisible="False" />
 
-        <Grid Grid.Row="1" ColumnDefinitions="260,*,272" ColumnSpacing="16">
-            <atom:Card Grid.Column="0" Header="图片" SizeType="Small">
-                <atom:ListView AutomationProperties.Name="图片列表" ItemsSource="{Binding Items}"
-                               SelectedItem="{Binding CurrentItem, Mode=TwoWay}">
-                    <atom:ListView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:BrowserItemViewModel">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="3,5">
-                                <controls:BrowserThumbnailView />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding DisplayName}"
-                                               TextTrimming="CharacterEllipsis"
-                                               atom:ToolTip.Tip="{Binding Path.Value}" />
-                                    <TextBlock Text="不可用"
-                                               Foreground="#D4380D"
-                                               FontSize="11"
-                                               IsVisible="{Binding IsUnavailable}" />
-                                </StackPanel>
-                                <atom:Button Grid.Column="2"
-                                             Content="移除"
-                                             SizeType="Small"
-                                             IsVisible="{Binding IsUnavailable}"
-                                             Command="{Binding RemoveCommand}" />
-                            </Grid>
-                        </DataTemplate>
-                    </atom:ListView.ItemTemplate>
-                </atom:ListView>
-            </atom:Card>
+        <controls:CropCanvas x:Name="BrowserCropCanvas"
+                             Margin="{DynamicResource AtomPixCropCanvasSafeMargin}"
+                             Background="{DynamicResource AtomPixWorkspaceSurfaceBrush}"
+                             ImageBorderBrush="{DynamicResource AtomPixCropImageBorderBrush}"
+                             IsVisible="{Binding IsCropMode}"
+                             ImagePixelWidth="{Binding CropEditor.ImagePixelWidth}"
+                             ImagePixelHeight="{Binding CropEditor.ImagePixelHeight}"
+                             CropX="{Binding CropEditor.CanvasX}"
+                             CropY="{Binding CropEditor.CanvasY}"
+                             CropWidth="{Binding CropEditor.CanvasWidth}"
+                             CropHeight="{Binding CropEditor.CanvasHeight}"
+                             LockedAspectRatio="{Binding CropEditor.LockedAspectRatio}"
+                             IsInteractionEnabled="{Binding !CropEditor.IsProcessing}" />
 
-            <Grid Grid.Column="1" RowDefinitions="*,Auto,Auto">
-                <atom:Card SizeType="Small" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                    <Grid>
-                        <controls:AtomPixImageViewport PreviewBytes="{Binding PreviewBytes}"
-                                                       FitToViewport="{Binding IsFitMode}"
-                                                       ZoomScale="{Binding ZoomScale}"
-                                                       Margin="16" />
-                        <atom:Spin IsVisible="{Binding IsLoading}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
-                        <atom:Empty IsVisible="{Binding IsEmpty}"
-                                    PresetImage="Default"
-                                    Description="这个文件夹中没有支持的图片" />
-                    </Grid>
-                </atom:Card>
-
-                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*" Margin="0,14,0,0">
-                    <atom:Button HorizontalAlignment="Right"
-                                 Content="上一张"
-                                 Command="{Binding PreviousCommand}" />
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="18,0">
-                        <atom:Button Content="−" Command="{Binding ZoomOutCommand}" />
-                        <TextBlock Text="{Binding ZoomDisplayText}" Width="74" TextAlignment="Center" VerticalAlignment="Center" />
-                        <atom:Button Content="+" Command="{Binding ZoomInCommand}" />
-                        <atom:Button Content="适应" Command="{Binding FitCommand}" />
-                        <atom:Button Content="1:1" Command="{Binding ActualSizeCommand}" />
-                    </StackPanel>
-                    <atom:Button Grid.Column="2"
-                                 HorizontalAlignment="Left"
-                                 Content="下一张"
-                                 Command="{Binding NextCommand}" />
-                </Grid>
-
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,12,0,0" HorizontalAlignment="Center">
-                    <atom:Button Content="压缩" Command="{Binding CompressCommand}" />
-                    <atom:Button Content="转换" Command="{Binding ConvertCommand}" />
-                    <atom:Button Content="调整尺寸" Command="{Binding ResizeCommand}" />
-                    <atom:Button Content="裁剪" Command="{Binding CropCommand}" />
-                </StackPanel>
-            </Grid>
-
-            <StackPanel Grid.Column="2" Spacing="14">
-                <atom:Alert Type="Error"
-                            IsShowIcon="True"
-                            Message="无法读取当前图片"
-                            Description="{Binding ErrorMessage}"
-                            IsVisible="{Binding HasError}" />
-                <controls:DiagnosticIdView DataContext="{Binding Diagnostic}" />
-                <atom:Card Header="图片信息" SizeType="Small">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="{Binding CurrentDisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <Grid ColumnDefinitions="92,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="9">
-                            <TextBlock Text="尺寸" Opacity="0.58" />
-                            <TextBlock Grid.Column="1" Text="{Binding CurrentDimensions}" />
-                            <TextBlock Grid.Row="1" Text="格式" Opacity="0.58" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CurrentFormat}" />
-                            <TextBlock Grid.Row="2" Text="文件大小" Opacity="0.58" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentFileSize}" />
-                            <TextBlock Grid.Row="3" Text="拍摄信息" Opacity="0.58" />
-                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CurrentMetadata}" TextWrapping="Wrap" />
-                            <TextBlock Grid.Row="4" Text="色彩配置" Opacity="0.58" />
-                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding CurrentColorProfile}" TextWrapping="Wrap" />
-                        </Grid>
-                    </StackPanel>
-                </atom:Card>
-            </StackPanel>
-        </Grid>
+        <labs:ImageGallery x:Name="ImageGalleryViewer"
+                           AutomationProperties.Name="图片集预览器"
+                           ItemsSource="{Binding GalleryItems}"
+                           SelectedItem="{Binding SelectedGalleryItem, Mode=OneWay}"
+                           MainImageMode="{Binding GalleryMainImageMode}"
+                           ZoomMode="Fit"
+                           ZoomStep="1.2"
+                           IsFitUpscalingEnabled="False"
+                           IsLoopNavigationEnabled="False"
+                           LoadLimits="{Binding GalleryLoadLimits}"
+                           MainImagePrefetchMode="Adjacent"
+                           MainImageCacheMemoryBudgetBytes="134217728"
+                           ThumbnailCacheMemoryBudgetBytes="33554432"
+                           IsViewportNavigationEnabled="False"
+                           IsFilmstripNavigationEnabled="{Binding CanUseGalleryFilmstripNavigation}"
+                           IsToolbarVisible="{Binding IsGalleryToolbarVisible}"
+                           IsToolbarTitleVisible="False"
+                           IsToolbarZoomControlsVisible="True"
+                           IsToolbarRotationVisible="False"
+                           ToolbarEdgeGap="14"
+                           ToolbarAlongEdgeInset="76"
+                           ThumbnailFilmstripPlacement="Bottom"
+                           ThumbnailFilmstripExtent="{DynamicResource AtomPixGalleryFilmstripExtent}"
+                           ThumbnailFilmstripEdgeGap="{DynamicResource AtomPixGalleryFilmstripEdgeGap}"
+                           ThumbnailFilmstripAlongEdgeInset="92"
+                           ThumbnailItemExtent="92"
+                           ThumbnailItemSpacing="4"
+                           IsThumbnailFilmstripVisible="{Binding HasItems}"
+                           IsAddImageButtonVisible="True"
+                           AddImageCommand="{Binding AddImagesCommand}">
+            <labs:ImageGallery.ViewportAppearance>
+                <labs:ImageGalleryViewportAppearance Background="White"
+                                                     BorderThickness="0"
+                                                     CornerRadius="0" />
+            </labs:ImageGallery.ViewportAppearance>
+            <labs:ImageGallery.ToolbarAppearance>
+                <labs:ImageGalleryToolbarAppearance Background="{DynamicResource AtomPixGalleryChromeBrush}"
+                                                    Foreground="White"
+                                                    BorderThickness="0"
+                                                    CornerRadius="10"
+                                                    Padding="10,7"
+                                                    ItemSpacing="6" />
+            </labs:ImageGallery.ToolbarAppearance>
+            <labs:ImageGallery.ToolbarButtonAppearance>
+                <labs:ImageGalleryButtonAppearance Background="Transparent"
+                                                   Foreground="White"
+                                                   BorderThickness="0"
+                                                   CornerRadius="6"
+                                                   Width="32"
+                                                   Height="32"
+                                                   IconSize="17"
+                                                   PointerOverBackground="#20FFFFFF"
+                                                   PointerOverForeground="White"
+                                                   PressedBackground="#32FFFFFF"
+                                                   PressedForeground="White" />
+            </labs:ImageGallery.ToolbarButtonAppearance>
+            <labs:ImageGallery.FilmstripAppearance>
+                <labs:ImageGalleryFilmstripAppearance Background="{DynamicResource AtomPixGalleryChromeBrush}"
+                                                      BorderBrush="{DynamicResource AtomPixGalleryChromeBorderBrush}"
+                                                      BorderThickness="1"
+                                                      CornerRadius="10"
+                                                      Padding="2" />
+            </labs:ImageGallery.FilmstripAppearance>
+            <labs:ImageGallery.FilmstripNavigationButtonAppearance>
+                <labs:ImageGalleryButtonAppearance Background="Transparent"
+                                                   Foreground="{DynamicResource AtomPixGalleryChromeForegroundBrush}"
+                                                   BorderThickness="0"
+                                                   CornerRadius="6"
+                                                   Width="32"
+                                                   Height="32"
+                                                   IconSize="17"
+                                                   PointerOverBackground="Transparent"
+                                                   PointerOverForeground="{DynamicResource AtomPixGalleryChromeForegroundBrush}"
+                                                   PressedBackground="#20FFFFFF"
+                                                   PressedForeground="White" />
+            </labs:ImageGallery.FilmstripNavigationButtonAppearance>
+            <labs:ImageGallery.AddImageButtonAppearance>
+                <labs:ImageGalleryButtonAppearance Background="Transparent"
+                                                   Foreground="{DynamicResource AtomPixGalleryChromeForegroundBrush}"
+                                                   BorderThickness="0"
+                                                   CornerRadius="6"
+                                                   Width="32"
+                                                   Height="32"
+                                                   IconSize="17"
+                                                   PointerOverBackground="Transparent"
+                                                   PointerOverForeground="{DynamicResource AtomPixGalleryChromeForegroundBrush}"
+                                                   PressedBackground="#20FFFFFF"
+                                                   PressedForeground="White" />
+            </labs:ImageGallery.AddImageButtonAppearance>
+            <labs:ImageGallery.ThumbnailItemAppearance>
+                <labs:ImageGalleryThumbnailItemAppearance Background="Transparent"
+                                                         PointerOverBackground="#18FFFFFF"
+                                                         SelectedBackground="#66FFFFFF"
+                                                         BorderThickness="0"
+                                                         CornerRadius="0"
+                                                         Padding="0"
+                                                         SelectionIndicatorBrush="#E6FFFFFF"
+                                                         SelectionIndicatorThickness="2" />
+            </labs:ImageGallery.ThumbnailItemAppearance>
+        </labs:ImageGallery>
     </Grid>
 </UserControl>

@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationIcon>Assets\Branding\AtomPix.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,6 +12,7 @@
     <PackageReference Include="AtomUI.Desktop.Controls.ColorPicker" />
     <PackageReference Include="AtomUI.Fonts.AlibabaSans" />
     <PackageReference Include="AtomUI.Icons.AntDesign" />
+    <PackageReference Include="AtomUI.Labs.Controls.ImageGallery" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
@@ -20,6 +22,12 @@
     <ProjectReference Include="..\AtomPix.Workflows\AtomPix.Workflows.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\Branding\*.png" />
+    <AvaloniaResource Include="Assets\Branding\*.ico" />
+    <AvaloniaResource Include="Assets\Themes\*.theme.xml" />
+  </ItemGroup>
+
   <Target Name="RejectForbiddenAtomUIDataGridPackage" BeforeTargets="PrepareForBuild">
     <ItemGroup>
       <_ForbiddenAtomUIDataGridPackage Include="@(PackageReference)"
@@ -27,6 +35,25 @@
     </ItemGroup>
     <Error Condition="'@(_ForbiddenAtomUIDataGridPackage)' != ''"
            Text="AtomPix Desktop forbids AtomUI.Desktop.Controls.DataGrid. Use AtomUI ListView composition instead." />
+  </Target>
+
+  <PropertyGroup>
+    <AtomPixImageGalleryPackage>$(MSBuildThisFileDirectory)..\..\eng\nuget-local\AtomUI.Labs.Controls.ImageGallery.6.0.8.nupkg</AtomPixImageGalleryPackage>
+    <AtomPixImageGalleryPackageSha256>86B4A7E63D290356B05A804B37D8808C797FF5FC7C036057302ED6A48C2BB35F</AtomPixImageGalleryPackageSha256>
+  </PropertyGroup>
+
+  <Target Name="VerifyAtomUIImageGalleryPackage" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(AtomPixImageGalleryPackage)')"
+           Text="Required local package is missing: $(AtomPixImageGalleryPackage)" />
+    <ItemGroup Condition="Exists('$(AtomPixImageGalleryPackage)')">
+      <_AtomPixImageGalleryPackage Include="$(AtomPixImageGalleryPackage)" />
+    </ItemGroup>
+    <GetFileHash Files="@(_AtomPixImageGalleryPackage)" Algorithm="SHA256"
+                 Condition="Exists('$(AtomPixImageGalleryPackage)')">
+      <Output TaskParameter="Items" ItemName="_AtomPixImageGalleryPackageWithHash" />
+    </GetFileHash>
+    <Error Condition="Exists('$(AtomPixImageGalleryPackage)') and '%(_AtomPixImageGalleryPackageWithHash.FileHash)' != '$(AtomPixImageGalleryPackageSha256)'"
+           Text="Local ImageGallery package hash mismatch. Expected $(AtomPixImageGalleryPackageSha256), actual %(_AtomPixImageGalleryPackageWithHash.FileHash)." />
   </Target>
 
 </Project>

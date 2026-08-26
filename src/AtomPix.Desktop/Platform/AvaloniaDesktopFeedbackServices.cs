@@ -1,12 +1,10 @@
 namespace AtomPix.Desktop.Platform;
 
-using AtomPix.Core.Settings;
 using AtomUI.Desktop.Controls;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
-using Avalonia.Styling;
 using Avalonia.Threading;
 
 public sealed class AvaloniaDesktopDialogService : IDesktopDialogService
@@ -24,19 +22,16 @@ public sealed class AvaloniaDesktopDialogService : IDesktopDialogService
             return false;
         }
 
-        var result = await MessageBox.ShowMessageBoxModalAsync(
-            BuildMessage(message),
+        var result = await MessageBox.ShowMessageBoxModalAsync<DesktopMessageTextView, string>(
+            message,
             options: new MessageBoxOptions
             {
                 Title = title,
                 Style = MessageBoxStyle.Confirm,
-                OkButtonText = confirmText,
-                CancelButtonText = cancelText,
                 MinWidth = 420,
                 MaxWidth = 560
             },
-            topLevel: topLevel,
-            cancellationToken: cancellationToken);
+            topLevel: topLevel);
         return Equals(result, DialogCode.Accepted);
     }
 
@@ -48,18 +43,16 @@ public sealed class AvaloniaDesktopDialogService : IDesktopDialogService
             return;
         }
 
-        await MessageBox.ShowMessageBoxModalAsync(
-            BuildMessage(message),
+        await MessageBox.ShowMessageBoxModalAsync<DesktopMessageTextView, string>(
+            message,
             options: new MessageBoxOptions
             {
                 Title = title,
                 Style = MessageBoxStyle.Error,
-                OkButtonText = "知道了",
                 MinWidth = 420,
                 MaxWidth = 560
             },
-            topLevel: topLevel,
-            cancellationToken: cancellationToken);
+            topLevel: topLevel);
     }
 
     public async Task ShowInformationAsync(string title, string message, CancellationToken cancellationToken)
@@ -67,50 +60,16 @@ public sealed class AvaloniaDesktopDialogService : IDesktopDialogService
         var topLevel = ResolveTopLevel();
         if (topLevel is null) return;
 
-        await MessageBox.ShowMessageBoxModalAsync(
-            BuildMessage(message),
+        await MessageBox.ShowMessageBoxModalAsync<DesktopMessageTextView, string>(
+            message,
             options: new MessageBoxOptions
             {
                 Title = title,
                 Style = MessageBoxStyle.Information,
-                OkButtonText = "知道了",
                 MinWidth = 420,
                 MaxWidth = 560
             },
-            topLevel: topLevel,
-            cancellationToken: cancellationToken);
-    }
-
-    public async Task<UnsavedChangesChoice> ChooseUnsavedChangesAsync(CancellationToken cancellationToken)
-    {
-        var topLevel = ResolveTopLevel();
-        if (topLevel is null) return UnsavedChangesChoice.Stay;
-
-        var choice = UnsavedChangesChoice.Stay;
-        var content = BuildMessage("设置包含尚未保存的修改。可以先保存、放弃本次修改，或留在设置页继续编辑。");
-        await Dialog.ShowDialogModalAsync(
-            content,
-            options: new DialogOptions
-            {
-                Title = "保存设置修改？",
-                StandardButtons = DialogStandardButton.Save | DialogStandardButton.No | DialogStandardButton.Cancel,
-                DefaultStandardButton = DialogStandardButton.Save,
-                HostMinWidth = 460,
-                HostMaxWidth = 560,
-                BeforeCloseAsync = context =>
-                {
-                    choice = context.SourceButton?.StandardButtonType switch
-                    {
-                        DialogStandardButton.Save => UnsavedChangesChoice.Save,
-                        DialogStandardButton.No => UnsavedChangesChoice.Discard,
-                        _ => UnsavedChangesChoice.Stay
-                    };
-                    return ValueTask.FromResult(true);
-                }
-            },
-            topLevel: topLevel,
-            cancellationToken: cancellationToken);
-        return choice;
+            topLevel: topLevel);
     }
 
     private static Avalonia.Controls.SelectableTextBlock BuildMessage(string message) => new()
@@ -122,6 +81,24 @@ public sealed class AvaloniaDesktopDialogService : IDesktopDialogService
 
     private static TopLevel? ResolveTopLevel() =>
         (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+}
+
+public sealed class DesktopMessageTextView : Avalonia.Controls.SelectableTextBlock
+{
+    public DesktopMessageTextView()
+    {
+        TextWrapping = Avalonia.Media.TextWrapping.Wrap;
+        MaxWidth = 480;
+        DataContextChanged += (_, _) =>
+        {
+            // AtomUI's overlay may later inherit the host Window DataContext.
+            // Only the explicit message payload is allowed to replace the text.
+            if (DataContext is string message)
+            {
+                Text = message;
+            }
+        };
+    }
 }
 
 public sealed class AvaloniaDesktopClipboardService : IDesktopClipboardService
@@ -156,24 +133,6 @@ public sealed class AvaloniaDesktopClipboardService : IDesktopClipboardService
     }
 }
 
-public sealed class AvaloniaDesktopAppearanceService : IDesktopAppearanceService
-{
-    public void Apply(ThemeMode themeMode)
-    {
-        if (Application.Current is null)
-        {
-            return;
-        }
-
-        Application.Current.RequestedThemeVariant = themeMode switch
-        {
-            ThemeMode.Light => ThemeVariant.Light,
-            ThemeMode.Dark => ThemeVariant.Dark,
-            _ => ThemeVariant.Default
-        };
-    }
-}
-
 public sealed class AvaloniaDesktopDispatcher : IDesktopDispatcher
 {
     public void Post(Action action)
@@ -181,5 +140,73 @@ public sealed class AvaloniaDesktopDispatcher : IDesktopDispatcher
         ArgumentNullException.ThrowIfNull(action);
         if (Dispatcher.UIThread.CheckAccess()) action();
         else Dispatcher.UIThread.Post(action);
+    }
+}
+
+public sealed class AvaloniaDesktopFeedbackService : IDesktopFeedbackService, IDisposable
+{
+    private WindowMessageManager? _messages;
+    private WindowNotificationManager? _notifications;
+
+    public void Attach(TopLevel host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        DisposeManagers();
+        _messages = new WindowMessageManager(host)
+        {
+            Position = NotificationPosition.TopCenter,
+            MaxItems = 3
+        };
+        _notifications = new WindowNotificationManager(host)
+        {
+            Position = NotificationPosition.TopRight,
+            MaxItems = 3
+        };
+    }
+
+    public void ShowMessage(
+        string message,
+        DesktopFeedbackSeverity severity = DesktopFeedbackSeverity.Information,
+        TimeSpan? expiration = null)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        Dispatcher.UIThread.Post(() => _messages?.Show(new AtomUI.Desktop.Controls.Message(
+            message,
+            severity switch
+            {
+                DesktopFeedbackSeverity.Success => MessageType.Success,
+                DesktopFeedbackSeverity.Warning => MessageType.Warning,
+                DesktopFeedbackSeverity.Error => MessageType.Error,
+                _ => MessageType.Information
+            },
+            expiration: expiration ?? TimeSpan.FromSeconds(5))));
+    }
+
+    public void ShowNotification(DesktopNotificationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Dispatcher.UIThread.Post(() => _notifications?.Show(new Notification(
+            request.Title,
+            request.Content,
+            request.Severity switch
+            {
+                DesktopFeedbackSeverity.Success => NotificationType.Success,
+                DesktopFeedbackSeverity.Warning => NotificationType.Warning,
+                DesktopFeedbackSeverity.Error => NotificationType.Error,
+                DesktopFeedbackSeverity.Information => NotificationType.Information,
+                _ => NotificationType.Information
+            },
+            expiration: request.Expiration,
+            onClick: request.OnClick)));
+    }
+
+    public void Dispose() => DisposeManagers();
+
+    private void DisposeManagers()
+    {
+        _messages?.Dispose();
+        _messages = null;
+        _notifications?.Dispose();
+        _notifications = null;
     }
 }

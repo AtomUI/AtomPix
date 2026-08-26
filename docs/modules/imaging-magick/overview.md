@@ -481,7 +481,7 @@ Pixel cache directory = IAppPathProvider.TempDirectory 下的 AtomPix 私有目�
 - 输出卷或私有像素缓存目录空间不足返回 `InsufficientDiskSpace`。
 - 所有失败必须释放图片对象并清理未提交候选、输出临时文件和私有像素缓存；清理失败不能覆盖原始资源错误。
 
-ImageMagick 的 `area` 限制用于决定像素缓存是否转移到磁盘，不代替 AtomPix 的硬像素数拒绝。资源配置属于 `Imaging.Magick` 运行参数，不进入 `AppSettings`，也不在第一阶段设置页开放。
+ImageMagick 的 `area` 限制用于决定像素缓存是否转移到磁盘，不代替 AtomPix 的硬像素数拒绝。资源配置属于 `Imaging.Magick` 运行参数，不进入 `AppSettings`，也不在第一阶段设置页面开放。
 
 实现时以 ImageMagick 官方 [Resources](https://imagemagick.org/resources/) 和 [Security Policy](https://imagemagick.org/security-policy/) 的最大资源限制语义为依据。AtomPix 将这些限制解释为运行上限而非资源预留；硬文件/像素拒绝仍由自己的能力契约保证。
 
@@ -630,6 +630,8 @@ Magick 实现接收的 `OutputPath` 已经是 Workflows 决策后的最终路径
 
 取消边界：
 
+- Magick.NET 的读取、解码、缩放和编码 API 是同步、CPU/IO 密集调用。`MagickImageProcessor` 的全部公开异步入口必须把实际 Magick 操作调度到默认后台调度器，不能在调用线程中先执行再用 `Task.FromResult` 包装；否则 Desktop 的 Loading 状态没有机会渲染，窗口会在 Probe、Preview 或正式处理期间冻结。
+- 后台调度属于 Imaging.Magick 对其 `IImageProcessor` 异步契约的实现细节；Workflow 和 Desktop 不再额外嵌套 `Task.Run`，Core 也不感知线程模型。
 - Magick 实现会在入口检查 `CancellationToken`，并返回 `OperationCanceled`。
 - 第一阶段不承诺中途强行终止 Magick.NET 同步读写或编码过程。
 - Workflows 负责在批量项之间检查取消，并停止后续未开始项。

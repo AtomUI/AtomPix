@@ -17,7 +17,7 @@ public enum ResizeDraftMode
     Percentage
 }
 
-public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -25,24 +25,24 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
     private readonly IDesktopClipboardService _clipboard;
     private readonly ResultOutputGuard _outputGuard;
     private readonly OpenImageWorkflow _openImage;
-    private readonly CreatePreviewWorkflow _createPreview;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly ResizeImageWorkflow _resize;
     private readonly IImageProcessor _imageProcessor;
     private readonly DesktopNavigationCoordinator _taskGate;
-    private CancellationTokenSource? _previewCancellation;
+    private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
-    private int _previewGeneration;
+    private int _loadGeneration;
     private DesktopContentState _contentState = DesktopContentState.Empty;
     private DesktopExecutionState _executionState = DesktopExecutionState.Draft;
     private LocalPath? _inputPath;
     private ImageProbeResult? _probe;
-    private byte[]? _previewBytes;
     private DesktopChoiceOption<ResizeDraftMode> _selectedMode;
     private decimal? _pixelWidth;
     private decimal? _pixelHeight;
     private bool _maintainAspectRatio = true;
+    private bool _preventUpscaling;
     private decimal _percentage = 50;
+    private bool _isSynchronizingPixelDimensions;
     private SameFormatEncodingPolicy _encodingPolicy = SameFormatEncodingPolicy.Default;
     private string? _errorMessage;
     private string? _diagnosticId;
@@ -56,7 +56,6 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         IDesktopClipboardService clipboard,
         ResultOutputGuard outputGuard,
         OpenImageWorkflow openImage,
-        CreatePreviewWorkflow createPreview,
         LoadSettingsWorkflow loadSettings,
         ResizeImageWorkflow resize,
         IImageProcessor imageProcessor,
@@ -68,12 +67,11 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         _clipboard = clipboard ?? throw new ArgumentNullException(nameof(clipboard));
         _outputGuard = outputGuard ?? throw new ArgumentNullException(nameof(outputGuard));
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
-        _createPreview = createPreview ?? throw new ArgumentNullException(nameof(createPreview));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _resize = resize ?? throw new ArgumentNullException(nameof(resize));
         _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
         _taskGate = taskGate ?? throw new ArgumentNullException(nameof(taskGate));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged);
+        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
 
         ResizeModes =
         [
@@ -83,17 +81,15 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         _selectedMode = ResizeModes[0];
 
         SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => CanStart);
+        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
         CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
-        Use25PercentCommand = new RelayCommand<object?>(_ => Percentage = 25, _ => !IsProcessing);
-        Use50PercentCommand = new RelayCommand<object?>(_ => Percentage = 50, _ => !IsProcessing);
-        Use75PercentCommand = new RelayCommand<object?>(_ => Percentage = 75, _ => !IsProcessing);
         OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
         CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
     }
 
     public IReadOnlyList<DesktopChoiceOption<ResizeDraftMode>> ResizeModes { get; }
     public OutputPolicyEditorViewModel Output { get; }
+    public OperationResultFeedback ResultFeedback { get; } = new();
 
     public DesktopContentState ContentState
     {
@@ -139,6 +135,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         {
             if (SetProperty(ref _pixelWidth, value))
             {
+                SynchronizeHeightFromWidth();
                 MarkDraftChanged();
                 NotifyDraft();
             }
@@ -152,6 +149,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         {
             if (SetProperty(ref _pixelHeight, value))
             {
+                SynchronizeWidthFromHeight();
                 MarkDraftChanged();
                 NotifyDraft();
             }
@@ -164,6 +162,23 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         set
         {
             if (SetProperty(ref _maintainAspectRatio, value))
+            {
+                if (value)
+                {
+                    SynchronizeHeightFromWidth();
+                }
+                MarkDraftChanged();
+                NotifyDraft();
+            }
+        }
+    }
+
+    public bool PreventUpscaling
+    {
+        get => _preventUpscaling;
+        set
+        {
+            if (SetProperty(ref _preventUpscaling, value))
             {
                 MarkDraftChanged();
                 NotifyDraft();
@@ -191,6 +206,12 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
     public bool IsContentReady => ContentState == DesktopContentState.Ready;
 
     public bool IsProcessing => ExecutionState == DesktopExecutionState.Processing;
+
+    public string StartActionLabel => "单张处理";
+
+    System.Windows.Input.ICommand IToolEditorActions.StartActionCommand => StartCommand;
+
+    System.Windows.Input.ICommand IToolEditorActions.CancelActionCommand => CancelCommand;
 
     public bool IsPixelMode => SelectedMode.Value == ResizeDraftMode.Pixel;
 
@@ -222,12 +243,6 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         ? string.Empty
         : $"{_probe.Width} × {_probe.Height}  ·  {_probe.Format.ToString().ToUpperInvariant()}";
 
-    public byte[]? PreviewBytes
-    {
-        get => _previewBytes;
-        private set => SetProperty(ref _previewBytes, value);
-    }
-
     public string EstimatedSize
     {
         get
@@ -242,10 +257,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
     {
         get
         {
-            if (TryBuildPolicy(out _, out _, out var error))
-            {
-                Output.TryBuild(out _, out error);
-            }
+            TryBuildPolicy(out _, out _, out var error);
             return error;
         }
     }
@@ -280,6 +292,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
     public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult);
 
     public string EncodingSummary => $"保留原格式 · 有损质量 {_encodingPolicy.LossyQuality.Value} · {(_encodingPolicy.MetadataPolicy == AtomPix.Core.Compression.MetadataPolicy.Remove ? "移除拍摄信息与位置数据" : "保留拍摄信息与位置数据")} · ICC 保留";
+    public SameFormatEncodingPolicy EncodingPolicy => _encodingPolicy;
 
     public string? DiagnosticId
     {
@@ -306,12 +319,6 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
 
     public RelayCommand<object?> CancelCommand { get; }
 
-    public RelayCommand<object?> Use25PercentCommand { get; }
-
-    public RelayCommand<object?> Use50PercentCommand { get; }
-
-    public RelayCommand<object?> Use75PercentCommand { get; }
-
     public AsyncCommand OpenOutputCommand { get; }
 
     public AsyncCommand CopyDiagnosticIdCommand { get; }
@@ -322,32 +329,48 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
 
     public async Task LoadAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default)
     {
+        await LoadCoreAsync(context, preserveDraft: false, cancellationToken);
+    }
+
+    public async Task SynchronizeInputAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default)
+    {
+        await LoadCoreAsync(context, preserveDraft: true, cancellationToken);
+    }
+
+    private async Task LoadCoreAsync(
+        SingleImageNavigationContext context,
+        bool preserveDraft,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(context);
-        var initializeDraft = _inputPath is null;
-        CancelPreview();
-        var generation = ++_previewGeneration;
-        var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _previewCancellation = previewCancellation;
+        var initializeDraft = !preserveDraft;
+        CancelLoad();
+        var generation = ++_loadGeneration;
+        var loadCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _loadCancellation = loadCancellation;
 
         _inputPath = context.InputPath;
         _probe = context.Probe;
-        PixelWidth = context.Probe.Width;
-        PixelHeight = context.Probe.Height;
-        Percentage = 50;
+        if (!preserveDraft)
+        {
+            PixelWidth = context.Probe.Width;
+            PixelHeight = context.Probe.Height;
+            Percentage = 50;
+        }
         _lastResult = null;
+        ResultFeedback.Dismiss();
         ResultDetails = null;
         ErrorMessage = null;
         DiagnosticId = null;
         ExecutionState = DesktopExecutionState.Draft;
         ContentState = DesktopContentState.Loading;
-        PreviewBytes = null;
         NotifyInput();
         NotifyResult();
 
         if (initializeDraft)
         {
-            var settings = await _loadSettings.ExecuteAsync(new LoadSettingsRequest(), previewCancellation.Token);
-            if (generation != _previewGeneration || previewCancellation.IsCancellationRequested) return;
+            var settings = await _loadSettings.ExecuteAsync(new LoadSettingsRequest(), loadCancellation.Token);
+            if (generation != _loadGeneration || loadCancellation.IsCancellationRequested) return;
             if (!settings.Succeeded)
             {
                 SetError(settings.Error);
@@ -360,32 +383,16 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
             OnPropertyChanged(nameof(EncodingSummary));
         }
 
-        var preview = await _createPreview.ExecuteAsync(
-            new CreatePreviewRequest(context.InputPath, 1600),
-            previewCancellation.Token);
-        if (generation != _previewGeneration || previewCancellation.IsCancellationRequested)
-        {
-            return;
-        }
-
-        if (!preview.Succeeded)
-        {
-            SetError(preview.Error);
-            ContentState = DesktopContentState.Ready;
-            return;
-        }
-
-        PreviewBytes = preview.Value!.Preview.EncodedBytes;
         ContentState = DesktopContentState.Ready;
     }
 
     public void Clear()
     {
-        CancelPreview();
+        CancelLoad();
         _inputPath = null;
         _probe = null;
         _lastResult = null;
-        PreviewBytes = null;
+        ResultFeedback.Dismiss();
         ErrorMessage = null;
         DiagnosticId = null;
         ResultDetails = null;
@@ -397,7 +404,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
 
     public void Dispose()
     {
-        CancelPreview();
+        CancelLoad();
         _executionCancellation?.Cancel();
         _executionCancellation?.Dispose();
     }
@@ -429,10 +436,15 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_inputPath is null
-            || !TryBuildPolicy(out var policy, out _)
-            || !Output.TryBuild(out var outputPolicy, out _))
+        if (_inputPath is null) return;
+        if (!TryBuildPolicy(out var policy, out _, out var policyError))
         {
+            ResultFeedback.ShowWarning(policyError ?? "当前尺寸配置无效。");
+            return;
+        }
+        if (!Output.TryBuild(out var outputPolicy, out var outputError))
+        {
+            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
             return;
         }
 
@@ -445,6 +457,8 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
+        DiagnosticId = null;
+        ResultFeedback.Dismiss();
         ExecutionState = DesktopExecutionState.Processing;
         try
         {
@@ -460,6 +474,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
                 ExecutionState = result.Error?.Code == AtomPix.Core.Errors.AtomPixErrorCode.OperationCanceled
                     ? DesktopExecutionState.Canceled
                     : DesktopExecutionState.Failure;
+                if (ExecutionState == DesktopExecutionState.Canceled) ResultFeedback.ShowCanceled();
                 return;
             }
 
@@ -476,6 +491,10 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
             if (value.JobResult.Status == ImageJobStatus.Failed)
             {
                 SetError(value.JobResult.Error);
+            }
+            else
+            {
+                ResultFeedback.Show(value.JobResult, value.OutputDisposition, "调整尺寸完成", ResultDetails);
             }
 
             NotifyResult();
@@ -558,7 +577,8 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
                 ResizeDraftMode.Pixel => new PixelResizePolicy(
                     ToPositiveInteger(PixelWidth),
                     ToPositiveInteger(PixelHeight),
-                    MaintainAspectRatio),
+                    MaintainAspectRatio,
+                    PreventUpscaling),
                 ResizeDraftMode.Percentage => new PercentageResizePolicy(Percentage),
                 _ => throw new ArgumentOutOfRangeException()
             };
@@ -599,6 +619,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
 
     private void MarkDraftChanged()
     {
+        ResultFeedback.Dismiss();
         if (ExecutionState is DesktopExecutionState.Success or DesktopExecutionState.Failure or DesktopExecutionState.Canceled or DesktopExecutionState.Skipped)
         {
             ExecutionState = DesktopExecutionState.Draft;
@@ -652,9 +673,66 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         StartCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
         SelectImageCommand.NotifyCanExecuteChanged();
-        Use25PercentCommand.NotifyCanExecuteChanged();
-        Use50PercentCommand.NotifyCanExecuteChanged();
-        Use75PercentCommand.NotifyCanExecuteChanged();
+    }
+
+    private void SynchronizeHeightFromWidth()
+    {
+        if (_isSynchronizingPixelDimensions || !MaintainAspectRatio || _probe is null
+            || !TryCalculateLinkedDimension(PixelWidth, _probe.Height, _probe.Width, out var height))
+        {
+            return;
+        }
+
+        _isSynchronizingPixelDimensions = true;
+        try
+        {
+            SetProperty(ref _pixelHeight, height, nameof(PixelHeight));
+        }
+        finally
+        {
+            _isSynchronizingPixelDimensions = false;
+        }
+    }
+
+    private void SynchronizeWidthFromHeight()
+    {
+        if (_isSynchronizingPixelDimensions || !MaintainAspectRatio || _probe is null
+            || !TryCalculateLinkedDimension(PixelHeight, _probe.Width, _probe.Height, out var width))
+        {
+            return;
+        }
+
+        _isSynchronizingPixelDimensions = true;
+        try
+        {
+            SetProperty(ref _pixelWidth, width, nameof(PixelWidth));
+        }
+        finally
+        {
+            _isSynchronizingPixelDimensions = false;
+        }
+    }
+
+    private static bool TryCalculateLinkedDimension(decimal? editedValue, int dependentOriginal, int editedOriginal, out decimal result)
+    {
+        result = 0;
+        if (editedValue is null || editedValue <= 0 || editedValue > int.MaxValue)
+        {
+            return false;
+        }
+
+        try
+        {
+            result = Math.Max(1, decimal.Round(
+                editedValue.Value * dependentOriginal / editedOriginal,
+                0,
+                MidpointRounding.AwayFromZero));
+            return result <= int.MaxValue;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
     }
 
     private void NotifyResult()
@@ -668,10 +746,10 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IDesk
         OpenOutputCommand.NotifyCanExecuteChanged();
     }
 
-    private void CancelPreview()
+    private void CancelLoad()
     {
-        _previewCancellation?.Cancel();
-        _previewCancellation?.Dispose();
-        _previewCancellation = null;
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+        _loadCancellation = null;
     }
 }

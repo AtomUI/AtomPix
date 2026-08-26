@@ -69,6 +69,12 @@ public sealed class MagickImageProcessor : IImageProcessor
     public Task<OperationResult<ImageProbeResult>> ProbeAsync(ImageProbeRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return RunOnWorkerAsync(() => ProbeOnWorkerAsync(request, cancellationToken));
+    }
+
+    private Task<OperationResult<ImageProbeResult>> ProbeOnWorkerAsync(ImageProbeRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
 
         try
         {
@@ -121,6 +127,12 @@ public sealed class MagickImageProcessor : IImageProcessor
     public Task<OperationResult<ImagePreviewResult>> CreatePreviewAsync(ImagePreviewRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return RunOnWorkerAsync(() => CreatePreviewOnWorkerAsync(request, cancellationToken));
+    }
+
+    private Task<OperationResult<ImagePreviewResult>> CreatePreviewOnWorkerAsync(ImagePreviewRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
 
         try
         {
@@ -163,6 +175,12 @@ public sealed class MagickImageProcessor : IImageProcessor
     }
 
     public Task<OperationResult<ImageCompressResult>> CompressAsync(ImageCompressRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return RunOnWorkerAsync(() => CompressOnWorkerAsync(request, cancellationToken));
+    }
+
+    private Task<OperationResult<ImageCompressResult>> CompressOnWorkerAsync(ImageCompressRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -249,6 +267,12 @@ public sealed class MagickImageProcessor : IImageProcessor
     }
 
     public Task<OperationResult<ImageConvertResult>> ConvertAsync(ImageConvertRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return RunOnWorkerAsync(() => ConvertOnWorkerAsync(request, cancellationToken));
+    }
+
+    private Task<OperationResult<ImageConvertResult>> ConvertOnWorkerAsync(ImageConvertRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -342,6 +366,12 @@ public sealed class MagickImageProcessor : IImageProcessor
     public Task<OperationResult<ImageResizeResult>> ResizeAsync(ImageResizeRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return RunOnWorkerAsync(() => ResizeOnWorkerAsync(request, cancellationToken));
+    }
+
+    private Task<OperationResult<ImageResizeResult>> ResizeOnWorkerAsync(ImageResizeRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
 
         try
         {
@@ -427,6 +457,12 @@ public sealed class MagickImageProcessor : IImageProcessor
     }
 
     public Task<OperationResult<ImageCropResult>> CropAsync(ImageCropRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return RunOnWorkerAsync(() => CropOnWorkerAsync(request, cancellationToken));
+    }
+
+    private Task<OperationResult<ImageCropResult>> CropOnWorkerAsync(ImageCropRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -518,6 +554,9 @@ public sealed class MagickImageProcessor : IImageProcessor
             return Task.FromResult(Failure<ImageCropResult>(AtomPixErrorCode.ImageCropFailed, AtomPixErrorCategory.ImageProcessing, "Failed to crop image.", ex));
         }
     }
+
+    private static Task<T> RunOnWorkerAsync<T>(Func<Task<T>> operation) =>
+        Task.Run(operation, CancellationToken.None);
 
     private static AtomPixError? ValidateOutputDirectory(LocalPath outputPath)
     {

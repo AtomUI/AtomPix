@@ -27,6 +27,9 @@ public sealed record SingleImageNavigationContext(
     LocalPath InputPath,
     ImageProbeResult Probe) : DesktopNavigationContext;
 
+public sealed record BrowserToolNavigationContext(
+    BrowserNavigationContext Browser) : DesktopNavigationContext;
+
 public sealed record DesktopNavigationRequest(
     DesktopRoute Route,
     DesktopNavigationContext? Context = null);

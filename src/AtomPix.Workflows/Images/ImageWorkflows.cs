@@ -77,7 +77,7 @@ public sealed class CreatePreviewWorkflow
 }
 
 public sealed record CompressImageRequest(LocalPath InputPath, CompressionProfile Profile, OutputPolicy OutputPolicy);
-public sealed record CompressImageResult(ImageJobResult JobResult, ImageQuality? AppliedQuality);
+public sealed record CompressImageResult(ImageJobResult JobResult, ImageQuality? AppliedQuality, OutputWriteDisposition OutputDisposition);
 
 public sealed class CompressImageWorkflow
 {
@@ -126,7 +126,7 @@ public sealed class CompressImageWorkflow
             var error = WorkflowHelpers.OutputExistsError(output.Value.Path.GetValueOrDefault());
             job.MarkSkipped(output.Value.Path.GetValueOrDefault(), error, DateTimeOffset.UtcNow);
             var skipped = WorkflowHelpers.ToResult(job, output.Value.Path, inputSize, null);
-            return OperationResult<CompressImageResult>.Success(new CompressImageResult(skipped, null));
+            return OperationResult<CompressImageResult>.Success(new CompressImageResult(skipped, null, output.Value.Disposition));
         }
 
         job.MarkRunning(DateTimeOffset.UtcNow);
@@ -149,7 +149,7 @@ public sealed class CompressImageWorkflow
             compress.Succeeded ? compress.Value!.OutputPath : output.Value.Path,
             compress.Succeeded ? compress.Value!.InputSizeBytes : inputSize,
             compress.Succeeded ? compress.Value!.OutputSizeBytes : null);
-        return OperationResult<CompressImageResult>.Success(new CompressImageResult(jobResult, compress.Succeeded ? compress.Value!.AppliedQuality : null));
+        return OperationResult<CompressImageResult>.Success(new CompressImageResult(jobResult, compress.Succeeded ? compress.Value!.AppliedQuality : null, output.Value.Disposition));
     }
 
     private static string GetCompressionExtension(LocalPath inputPath) => Path.GetExtension(inputPath.Value);
@@ -168,7 +168,7 @@ public sealed class CompressImageWorkflow
 }
 
 public sealed record ConvertImageRequest(LocalPath InputPath, ConversionProfile Profile, OutputPolicy OutputPolicy);
-public sealed record ConvertImageResult(ImageJobResult JobResult, TransparencyProcessingResult? Transparency);
+public sealed record ConvertImageResult(ImageJobResult JobResult, TransparencyProcessingResult? Transparency, OutputWriteDisposition OutputDisposition);
 
 public sealed class ConvertImageWorkflow
 {
@@ -216,7 +216,7 @@ public sealed class ConvertImageWorkflow
             var error = WorkflowHelpers.OutputExistsError(output.Value.Path.GetValueOrDefault());
             job.MarkSkipped(output.Value.Path.GetValueOrDefault(), error, DateTimeOffset.UtcNow);
             var skipped = WorkflowHelpers.ToResult(job, output.Value.Path, inputSize, null);
-            return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(skipped, null));
+            return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(skipped, null, output.Value.Disposition));
         }
 
         job.MarkRunning(DateTimeOffset.UtcNow);
@@ -239,7 +239,7 @@ public sealed class ConvertImageWorkflow
             convert.Succeeded ? convert.Value!.OutputPath : output.Value.Path,
             convert.Succeeded ? convert.Value!.InputSizeBytes : inputSize,
             convert.Succeeded ? convert.Value!.OutputSizeBytes : null);
-        return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(jobResult, convert.Succeeded ? convert.Value!.Transparency : null));
+        return OperationResult<ConvertImageResult>.Success(new ConvertImageResult(jobResult, convert.Succeeded ? convert.Value!.Transparency : null, output.Value.Disposition));
     }
 
     internal static string OutputExtension(OutputImageFormat format) => TryGetOutputExtension(format, out var extension)
@@ -270,7 +270,8 @@ public sealed record ResizeImageResult(
     ImageFormatKind Format,
     ImageSize InputSize,
     ResolvedResizeSize TargetSize,
-    ImageSize? ActualOutputSize);
+    ImageSize? ActualOutputSize,
+    OutputWriteDisposition OutputDisposition);
 
 public sealed class ResizeImageWorkflow
 {
@@ -334,7 +335,8 @@ public sealed class ResizeImageWorkflow
                 probe.Value.Format,
                 inputSize,
                 targetSize,
-                null));
+                null,
+                output.Value.Disposition));
         }
 
         job.MarkRunning(DateTimeOffset.UtcNow);
@@ -377,7 +379,8 @@ public sealed class ResizeImageWorkflow
             probe.Value.Format,
             inputSize,
             targetSize,
-            actualOutputSize));
+            actualOutputSize,
+            output.Value.Disposition));
     }
 
     internal static AtomPixError? ValidateResizeCapabilities(
@@ -430,7 +433,8 @@ public sealed record CropImageResult(
     ImageFormatKind Format,
     ImageSize InputSize,
     CropRectangle CropArea,
-    ImageSize? ActualOutputSize);
+    ImageSize? ActualOutputSize,
+    OutputWriteDisposition OutputDisposition);
 
 public sealed class CropImageWorkflow
 {
@@ -484,7 +488,8 @@ public sealed class CropImageWorkflow
                 probe.Value.Format,
                 inputSize,
                 request.CropArea,
-                null));
+                null,
+                output.Value.Disposition));
         }
 
         job.MarkRunning(DateTimeOffset.UtcNow);
@@ -527,7 +532,8 @@ public sealed class CropImageWorkflow
             probe.Value.Format,
             inputSize,
             request.CropArea,
-            actualOutputSize));
+            actualOutputSize,
+            output.Value.Disposition));
     }
 
     private static AtomPixError? ValidateCropCapabilities(ImageProcessorCapabilities capabilities, ImageProbeResult probe)
@@ -684,15 +690,15 @@ public sealed class ImageWorkflowServices
         var desiredExistsOrIsInput = _fileSystem.FileExists(desired) || _fileSystem.PathsEqual(inputPath, desired);
         if (!desiredExistsOrIsInput)
         {
-            resolved = new ResolvedOutputPath(desired, false);
+            resolved = new ResolvedOutputPath(desired, false, OutputWriteDisposition.Created);
         }
         else
         {
             resolved = policy.OverwritePolicy switch
             {
-                OverwritePolicy.Skip => new ResolvedOutputPath(desired, true),
-                OverwritePolicy.Overwrite => new ResolvedOutputPath(desired, false),
-                OverwritePolicy.AutoRename => new ResolvedOutputPath(FindAvailablePath(desired), false),
+                OverwritePolicy.Skip => new ResolvedOutputPath(desired, true, OutputWriteDisposition.SkippedExisting),
+                OverwritePolicy.Overwrite => new ResolvedOutputPath(desired, false, OutputWriteDisposition.Overwritten),
+                OverwritePolicy.AutoRename => new ResolvedOutputPath(FindAvailablePath(desired), false, OutputWriteDisposition.AutoRenamed),
                 _ => throw new InvalidOperationException("Unsupported overwrite policy passed Core validation.")
             };
         }
@@ -739,7 +745,7 @@ public sealed class ImageWorkflowServices
             });
 }
 
-public sealed record ResolvedOutputPath(LocalPath? Path, bool Skipped);
+public sealed record ResolvedOutputPath(LocalPath? Path, bool Skipped, OutputWriteDisposition Disposition);
 
 internal static class WorkflowHelpers
 {

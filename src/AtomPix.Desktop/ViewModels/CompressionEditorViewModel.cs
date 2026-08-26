@@ -12,7 +12,7 @@ using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
 
-public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -20,7 +20,6 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     private readonly IDesktopClipboardService _clipboard;
     private readonly ResultOutputGuard _outputGuard;
     private readonly OpenImageWorkflow _openImage;
-    private readonly CreatePreviewWorkflow _createPreview;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly CompressImageWorkflow _compress;
     private readonly DesktopNavigationCoordinator _navigation;
@@ -31,7 +30,6 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     private DesktopExecutionState _executionState = DesktopExecutionState.Draft;
     private LocalPath? _inputPath;
     private ImageProbeResult? _probe;
-    private byte[]? _previewBytes;
     private DesktopChoiceOption<CompressionMode> _selectedMode;
     private decimal _customQuality = 80;
     private bool _removeMetadata = true;
@@ -47,7 +45,6 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         IDesktopClipboardService clipboard,
         ResultOutputGuard outputGuard,
         OpenImageWorkflow openImage,
-        CreatePreviewWorkflow createPreview,
         LoadSettingsWorkflow loadSettings,
         CompressImageWorkflow compress,
         DesktopNavigationCoordinator navigation)
@@ -58,11 +55,10 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         _clipboard = clipboard ?? throw new ArgumentNullException(nameof(clipboard));
         _outputGuard = outputGuard ?? throw new ArgumentNullException(nameof(outputGuard));
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
-        _createPreview = createPreview ?? throw new ArgumentNullException(nameof(createPreview));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _compress = compress ?? throw new ArgumentNullException(nameof(compress));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged);
+        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
 
         Modes =
         [
@@ -75,7 +71,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         _selectedMode = Modes[0];
 
         SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => CanStart);
+        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
         CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
         OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
         ContinueResizeCommand = new RelayCommand<object?>(_ => ContinueResize(), _ => IsSuccess);
@@ -84,6 +80,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
 
     public IReadOnlyList<DesktopChoiceOption<CompressionMode>> Modes { get; }
     public OutputPolicyEditorViewModel Output { get; }
+    public OperationResultFeedback ResultFeedback { get; } = new();
 
     public DesktopContentState ContentState
     {
@@ -127,8 +124,17 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     public double CustomQualitySlider
     {
         get => decimal.ToDouble(CustomQuality);
-        set => CustomQuality = Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
+        set => CustomQuality = decimal.Round(
+            Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture),
+            0,
+            MidpointRounding.AwayFromZero);
     }
+
+    public string StartActionLabel => "单张处理";
+
+    System.Windows.Input.ICommand IToolEditorActions.StartActionCommand => StartCommand;
+
+    System.Windows.Input.ICommand IToolEditorActions.CancelActionCommand => CancelCommand;
 
     public bool RemoveMetadata
     {
@@ -160,13 +166,11 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     public string InputName => _inputPath is null ? string.Empty : Path.GetFileName(_inputPath.Value.Value);
     public string InputPath => _inputPath?.Value ?? string.Empty;
     public string InputSummary => _probe is null ? string.Empty : $"{_probe.Width} × {_probe.Height}  ·  {_probe.Format.ToString().ToUpperInvariant()}";
-    public byte[]? PreviewBytes { get => _previewBytes; private set => SetProperty(ref _previewBytes, value); }
     public string? DraftError
     {
         get
         {
-            if (!TryBuildProfile(out _, out var error)) return error;
-            Output.TryBuild(out _, out error);
+            TryBuildProfile(out _, out var error);
             return error;
         }
     }
@@ -199,17 +203,25 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
 
     public void RefreshResultAvailability() => NotifyResult();
 
-    public async Task LoadAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default)
+    public Task LoadAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(context, initializeDraft: true, cancellationToken);
+
+    public Task SynchronizeInputAsync(SingleImageNavigationContext context, CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(context, initializeDraft: false, cancellationToken);
+
+    private async Task LoadCoreAsync(
+        SingleImageNavigationContext context,
+        bool initializeDraft,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var initializeDraft = _inputPath is null;
         var generation = BeginLoad(cancellationToken, out var loadCancellation);
         _inputPath = context.InputPath;
         _probe = context.Probe;
-        PreviewBytes = null;
         ErrorMessage = null;
         DiagnosticId = null;
         _lastResult = null;
+        ResultFeedback.Dismiss();
         _appliedQuality = null;
         ExecutionState = DesktopExecutionState.Draft;
         ContentState = DesktopContentState.Loading;
@@ -231,16 +243,6 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         }
 
         ContentState = DesktopContentState.Ready;
-        var preview = await _createPreview.ExecuteAsync(new CreatePreviewRequest(context.InputPath, 1600), loadCancellation.Token);
-        if (!IsCurrentLoad(generation, loadCancellation)) return;
-        if (preview.Succeeded)
-        {
-            PreviewBytes = preview.Value!.Preview.EncodedBytes;
-        }
-        else
-        {
-            SetError(preview.Error);
-        }
     }
 
     public void Clear()
@@ -249,8 +251,8 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         _inputPath = null;
         _probe = null;
         _lastResult = null;
+        ResultFeedback.Dismiss();
         _appliedQuality = null;
-        PreviewBytes = null;
         ErrorMessage = null;
         DiagnosticId = null;
         ExecutionState = DesktopExecutionState.Draft;
@@ -284,15 +286,24 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
 
     private async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (_inputPath is null
-            || !TryBuildProfile(out var profile, out _)
-            || !Output.TryBuild(out var outputPolicy, out _)) return;
+        if (_inputPath is null) return;
+        if (!TryBuildProfile(out var profile, out var profileError))
+        {
+            ResultFeedback.ShowWarning(profileError ?? "当前压缩配置无效。");
+            return;
+        }
+        if (!Output.TryBuild(out var outputPolicy, out var outputError))
+        {
+            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
+            return;
+        }
         if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
 
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
         DiagnosticId = null;
+        ResultFeedback.Dismiss();
         ExecutionState = DesktopExecutionState.Processing;
         try
         {
@@ -310,6 +321,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
                     SetError(result.Error);
                 }
                 ExecutionState = result.Error?.Code == AtomPixErrorCode.OperationCanceled ? DesktopExecutionState.Canceled : DesktopExecutionState.Failure;
+                if (ExecutionState == DesktopExecutionState.Canceled) ResultFeedback.ShowCanceled();
                 return;
             }
 
@@ -317,6 +329,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
             _appliedQuality = result.Value.AppliedQuality;
             ExecutionState = ToExecutionState(_lastResult.Status);
             if (_lastResult.Status == ImageJobStatus.Failed) SetError(_lastResult.Error);
+            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, "压缩完成", ResultSizeChange);
             NotifyResult();
         }
         finally
@@ -444,6 +457,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
 
     private void MarkDraftChanged()
     {
+        ResultFeedback.Dismiss();
         if (ExecutionState is DesktopExecutionState.Success or DesktopExecutionState.Failure or DesktopExecutionState.Canceled or DesktopExecutionState.Skipped)
         {
             ExecutionState = DesktopExecutionState.Draft;

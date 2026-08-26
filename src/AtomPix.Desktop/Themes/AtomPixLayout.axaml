@@ -1,0 +1,203 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:atom="https://atomui.net">
+    <Styles.Resources>
+        <SolidColorBrush x:Key="AtomPixChromeSurfaceBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="AtomPixFloatingSurfaceBrush" Color="#F0FFFFFF" />
+        <SolidColorBrush x:Key="AtomPixWorkspaceSurfaceBrush" Color="#F5F7FA" />
+        <SolidColorBrush x:Key="AtomPixCropImageBorderBrush" Color="#D7DDE6" />
+        <SolidColorBrush x:Key="AtomPixInspectorSurfaceBrush" Color="#FBFCFE" />
+        <SolidColorBrush x:Key="AtomPixInspectorDividerBrush" Color="#E5E9EF" />
+        <SolidColorBrush x:Key="AtomPixInspectorInfoSurfaceBrush" Color="#F1F7FF" />
+        <SolidColorBrush x:Key="AtomPixSettingsSidebarBrush" Color="#F7F9FB" />
+        <SolidColorBrush x:Key="AtomPixSettingsSelectionBrush" Color="#EAF3FF" />
+        <SolidColorBrush x:Key="AtomPixSettingsContextBrush" Color="#F5F7FA" />
+        <SolidColorBrush x:Key="AtomPixHomeDropSurfaceBrush" Color="#F9FBFE" />
+        <SolidColorBrush x:Key="AtomPixHomeBrandDiscBrush" Color="#FFF2F6FC" />
+        <SolidColorBrush x:Key="AtomPixGalleryChromeBrush" Color="#B820242C" />
+        <SolidColorBrush x:Key="AtomPixGalleryChromeBorderBrush" Color="#26FFFFFF" />
+        <SolidColorBrush x:Key="AtomPixGalleryChromeForegroundBrush" Color="#F2FFFFFF" />
+        <SolidColorBrush x:Key="AtomPixTaskPendingBrush" Color="#AEB7C2" />
+        <SolidColorBrush x:Key="AtomPixTaskRunningBrush" Color="#1677FF" />
+        <SolidColorBrush x:Key="AtomPixTaskSucceededBrush" Color="#52C41A" />
+        <SolidColorBrush x:Key="AtomPixTaskFailedBrush" Color="#FF4D4F" />
+        <SolidColorBrush x:Key="AtomPixTaskSkippedBrush" Color="#FAAD14" />
+        <SolidColorBrush x:Key="AtomPixTaskCanceledBrush" Color="#8C8C8C" />
+        <LinearGradientBrush x:Key="AtomPixImmersiveTitleBarScrimBrush"
+                             StartPoint="0%,0%"
+                             EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#B0000000" />
+            <GradientStop Offset="0.5" Color="#70000000" />
+            <GradientStop Offset="1" Color="#00000000" />
+        </LinearGradientBrush>
+        <BoxShadows x:Key="AtomPixNavigationRailShadow">0 10 30 0 #260F172A</BoxShadows>
+        <CornerRadius x:Key="AtomPixSurfaceCornerRadius">18</CornerRadius>
+        <CornerRadius x:Key="AtomPixFloatingSurfaceCornerRadius">12</CornerRadius>
+        <CornerRadius x:Key="AtomPixNavigationRailCornerRadius">0,12,12,0</CornerRadius>
+        <CornerRadius x:Key="AtomPixRightDrawerCornerRadius">12,0,0,12</CornerRadius>
+        <Thickness x:Key="AtomPixPageContentMargin">34,28</Thickness>
+        <Thickness x:Key="AtomPixPageHeaderMargin">0,0,0,20</Thickness>
+        <Thickness x:Key="AtomPixSliderTrackEdgeCompensation">-16,0,0,0</Thickness>
+        <!-- Crop uses the same rail/filmstrip geometry as the visible controls.
+             Avalonia applies this safe margin during every Measure/Arrange pass. -->
+        <Thickness x:Key="AtomPixCropCanvasSafeMargin">72,18,18,94</Thickness>
+        <x:Double x:Key="AtomPixNavigationRailWidth">54</x:Double>
+        <x:Double x:Key="AtomPixGalleryFilmstripExtent">68</x:Double>
+        <x:Double x:Key="AtomPixGalleryFilmstripEdgeGap">8</x:Double>
+        <x:Double x:Key="AtomPixPageHeaderSpacing">6</x:Double>
+        <x:Double x:Key="AtomPixPageTitleFontSize">26</x:Double>
+        <x:Double x:Key="AtomPixPageDescriptionFontSize">14</x:Double>
+    </Styles.Resources>
+
+    <Style Selector="atom|Button.AtomPixFloatingIconButton">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{atom:SharedTokenResource ColorText}" />
+    </Style>
+    <Style Selector="atom|Button.AtomPixFloatingIconButton:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{atom:SharedTokenResource ColorText}" />
+    </Style>
+    <Style Selector="atom|Button.AtomPixFloatingIconButton:pressed">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{atom:SharedTokenResource ColorText}" />
+    </Style>
+
+    <Style Selector="TextBlock.AtomPixInspectorContextName">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style Selector="TextBlock.AtomPixInspectorCaption">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Opacity" Value="0.58" />
+    </Style>
+
+    <Style Selector="TextBlock.AtomPixInspectorSectionTitle">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="Border.AtomPixInspectorDivider">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource AtomPixInspectorDividerBrush}" />
+        <Setter Property="Margin" Value="0,2" />
+    </Style>
+
+    <Style Selector="atom|Button.AtomPixInspectorPrimaryAction">
+        <Setter Property="Height" Value="44" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Border.AtomPixOutputContextSurface">
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="Background" Value="{atom:SharedTokenResource ColorBgLayout}" />
+        <Setter Property="BorderBrush" Value="{atom:SharedTokenResource ColorBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="atom|TextBox.AtomPixOutputInput">
+        <Setter Property="SizeType" Value="Middle" />
+        <Setter Property="Height" Value="{atom:SharedTokenResource ControlHeight}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Background" Value="{atom:SharedTokenResource ColorBgLayout}" />
+        <Setter Property="BorderBrush" Value="{atom:SharedTokenResource ColorBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="atom|Slider.AtomPixInspectorAlignedSlider">
+        <!-- AtomUI reserves half a thumb on both track edges. Pull the control into the
+             panel gutter so the visible rail, rather than its hit-test box, aligns. -->
+        <Setter Property="Margin" Value="{DynamicResource AtomPixSliderTrackEdgeCompensation}" />
+    </Style>
+
+    <Style Selector="TextBlock.AtomPixSettingsPageTitle">
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="TextBlock.AtomPixSettingsSectionTitle">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="TextBlock.AtomPixSettingsRowTitle">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style Selector="TextBlock.AtomPixSettingsDescription">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Opacity" Value="0.58" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style Selector="Border.AtomPixSettingsDivider">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource AtomPixInspectorDividerBrush}" />
+    </Style>
+
+    <Style Selector="Border.AtomPixSettingsContextSurface">
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="Background" Value="{DynamicResource AtomPixSettingsContextBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="Border.AtomPixSettingsAboutHero">
+        <Setter Property="Padding" Value="26" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="BorderBrush" Value="#20FF4D4F" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BoxShadow" Value="0 12 28 0 #101F2937" />
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#FFFFFDFD" />
+                <GradientStop Offset="0.58" Color="#FFFFF7F7" />
+                <GradientStop Offset="1" Color="#FFF7F9FC" />
+            </LinearGradientBrush>
+        </Setter>
+    </Style>
+
+    <Style Selector="Border.AtomPixSettingsRuntimeSurface">
+        <Setter Property="Background" Value="White" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AtomPixInspectorDividerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
+    <Style Selector="Grid.AtomPixSettingsRuntimeRow">
+        <Setter Property="MinHeight" Value="58" />
+        <Setter Property="Margin" Value="18,0" />
+    </Style>
+
+    <Style Selector="atom|Button.AtomPixSettingsNavigation">
+        <Setter Property="ButtonType" Value="Text" />
+        <Setter Property="Height" Value="42" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <Style Selector="atom|Button.AtomPixSettingsNavigation:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <Style Selector="atom|Button.AtomPixSettingsNavigation:pressed">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+</Styles>

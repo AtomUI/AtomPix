@@ -1,5 +1,6 @@
 namespace AtomPix.Desktop.ViewModels;
 
+using System.Runtime.InteropServices;
 using System.Reflection;
 using AtomPix.Core.Compression;
 using AtomPix.Core.Conversion;
@@ -12,9 +13,9 @@ using AtomPix.Workflows.Settings;
 
 public enum SettingsSection
 {
-    Processing,
-    Appearance,
-    Recent,
+    Compression,
+    Conversion,
+    Output,
     About
 }
 
@@ -25,8 +26,8 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     private readonly IDesktopDialogService _dialogs;
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
-    private readonly IDesktopAppearanceService _appearance;
     private readonly IAppPathProvider _paths;
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
     private CancellationTokenSource? _loadCancellation;
     private AppSettings? _originalSettings;
     private bool _isApplying;
@@ -60,7 +61,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         IDesktopDialogService dialogs,
         IDesktopPickerService picker,
         IDesktopLauncherService launcher,
-        IDesktopAppearanceService appearance,
         IAppPathProvider paths,
         IDesktopClipboardService clipboard)
     {
@@ -69,7 +69,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
-        _appearance = appearance ?? throw new ArgumentNullException(nameof(appearance));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         Diagnostic = new DiagnosticErrorViewModel(clipboard);
 
@@ -118,12 +117,16 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         _selectedTheme = Themes[0];
         _selectedLanguage = Languages[0];
 
-        SelectSectionCommand = new RelayCommand<SettingsSection>(section => SelectedSection = section, _ => !IsSaving);
+        SelectSectionCommand = new RelayCommand<SettingsSection>(section =>
+        {
+            SelectedSection = section;
+            SectionNavigationRequested?.Invoke(section);
+        }, _ => !IsSaving);
+        CloseCommand = new RelayCommand<object?>(_ => CloseRequested?.Invoke(this, EventArgs.Empty), _ => !IsSaving);
         SaveCommand = new AsyncCommand(SaveAsync, () => CanSave);
         RestoreDefaultsCommand = new AsyncCommand(RestoreDefaultsAsync, () => !IsSaving);
         ChooseOutputDirectoryCommand = new AsyncCommand(ChooseOutputDirectoryAsync, () => IsReady && !IsSaving);
         OpenSettingsDirectoryCommand = new AsyncCommand(OpenSettingsDirectoryAsync, () => !IsSaving);
-        ShowPrivacyCommand = new AsyncCommand(ShowPrivacyAsync, () => !IsSaving);
     }
 
     public IReadOnlyList<DesktopChoiceOption<CompressionMode>> CompressionModes { get; }
@@ -140,10 +143,11 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _selectedSection, value))
             {
-                OnPropertyChanged(nameof(IsProcessingSection));
-                OnPropertyChanged(nameof(IsAppearanceSection));
-                OnPropertyChanged(nameof(IsRecentSection));
+                OnPropertyChanged(nameof(IsCompressionSection));
+                OnPropertyChanged(nameof(IsConversionSection));
+                OnPropertyChanged(nameof(IsOutputSection));
                 OnPropertyChanged(nameof(IsAboutSection));
+                OnPropertyChanged(nameof(IsDefaultsSection));
                 OnPropertyChanged(nameof(SectionTitle));
             }
         }
@@ -164,7 +168,10 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     public double CustomCompressionQualitySlider
     {
         get => decimal.ToDouble(CustomCompressionQuality);
-        set => CustomCompressionQuality = Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
+        set => CustomCompressionQuality = decimal.Round(
+            Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture),
+            0,
+            MidpointRounding.AwayFromZero);
     }
 
     public DesktopChoiceOption<OutputImageFormat> SelectedConversionFormat
@@ -182,7 +189,10 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     public double ConversionQualitySlider
     {
         get => decimal.ToDouble(ConversionQuality);
-        set => ConversionQuality = Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
+        set => ConversionQuality = decimal.Round(
+            Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture),
+            0,
+            MidpointRounding.AwayFromZero);
     }
 
     public string BackgroundHex
@@ -206,7 +216,14 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     public string SubfolderName
     {
         get => _subfolderName;
-        set { if (SetProperty(ref _subfolderName, value ?? string.Empty)) DraftChanged(); }
+        set
+        {
+            if (SetProperty(ref _subfolderName, value ?? string.Empty))
+            {
+                OnPropertyChanged(nameof(SubfolderDestinationHint));
+                DraftChanged();
+            }
+        }
     }
 
     public string CustomOutputDirectory
@@ -257,87 +274,108 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     public bool IsDirty { get => _isDirty; private set { if (SetProperty(ref _isDirty, value)) NotifyState(); } }
     public bool IsReady => IsLoaded && !IsLoading;
     public bool IsLoadFailure => !IsLoading && !IsLoaded && HasError;
-    public bool IsProcessingSection => SelectedSection == SettingsSection.Processing;
-    public bool IsAppearanceSection => SelectedSection == SettingsSection.Appearance;
-    public bool IsRecentSection => SelectedSection == SettingsSection.Recent;
+    public bool IsCompressionSection => SelectedSection == SettingsSection.Compression;
+    public bool IsConversionSection => SelectedSection == SettingsSection.Conversion;
+    public bool IsOutputSection => SelectedSection == SettingsSection.Output;
     public bool IsAboutSection => SelectedSection == SettingsSection.About;
+    public bool IsDefaultsSection => SelectedSection != SettingsSection.About;
     public bool IsCustomCompression => SelectedCompressionMode.Value == CompressionMode.Custom;
     public bool ConversionUsesQuality => SelectedConversionFormat.Value is OutputImageFormat.Jpeg or OutputImageFormat.WebP;
     public bool IsSubfolderOutput => SelectedOutputLocation.Value == OutputLocationMode.Subfolder;
+    public bool IsSameAsInputOutput => SelectedOutputLocation.Value == OutputLocationMode.SameAsInput;
     public bool IsCustomDirectoryOutput => SelectedOutputLocation.Value == OutputLocationMode.CustomDirectory;
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool HasSaveMessage => !string.IsNullOrWhiteSpace(SaveMessage);
     public bool IsDraftValid => TryBuildSettings(out _, out _);
     public bool HasDraftError => !string.IsNullOrWhiteSpace(DraftError);
-    public bool CanSave => IsReady && IsDirty && IsDraftValid && !IsSaving;
+    // Keep the explicit submit action available while a dirty draft is ready.
+    // Validation belongs to the submit boundary so the user receives a concrete
+    // window-level message instead of a button that silently remains disabled.
+    public bool CanSave => IsReady && IsDirty && !IsSaving;
     public string? DraftError { get { TryBuildSettings(out _, out var error); return error; } }
     public string? ErrorMessage { get => _errorMessage; private set { if (SetProperty(ref _errorMessage, value)) NotifyState(); } }
     public string? SaveMessage { get => _saveMessage; private set { if (SetProperty(ref _saveMessage, value)) OnPropertyChanged(nameof(HasSaveMessage)); } }
     public string SectionTitle => SelectedSection switch
     {
-        SettingsSection.Processing => "处理默认值",
-        SettingsSection.Appearance => "外观与语言",
-        SettingsSection.Recent => "最近记录",
+        SettingsSection.Compression => "压缩配置",
+        SettingsSection.Conversion => "转换配置",
+        SettingsSection.Output => "输出配置",
         SettingsSection.About => "关于 AtomPix",
         _ => string.Empty
     };
     public string SameFormatSummary => $"Resize/Crop：有损质量 {_sameFormatQuality.Value} · 元数据跟随公共开关 · ICC 保留";
+    public string SubfolderDestinationHint =>
+        $"图片将保存到：每张原图所在目录 / {(string.IsNullOrWhiteSpace(SubfolderName) ? "AtomPix_Output" : SubfolderName.Trim())}";
     public string VersionText => $"AtomPix {Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "开发版本"}";
-    public string SchemaText => $"设置 Schema v{AppSettings.CurrentSchemaVersion}";
+    public string RuntimeText => $".NET {Environment.Version.ToString(3)} · Avalonia {typeof(Avalonia.Application).Assembly.GetName().Version?.ToString(3)} · AtomUI {typeof(AtomUI.Desktop.Controls.Button).Assembly.GetName().Version?.ToString(3)}";
+    public string PlatformText => $"{RuntimeInformation.OSDescription} · {RuntimeInformation.ProcessArchitecture}";
+    public string ImageEngineText => "图像引擎：ImageMagick（Magick.NET）";
 
     public RelayCommand<SettingsSection> SelectSectionCommand { get; }
+    public RelayCommand<object?> CloseCommand { get; }
     public AsyncCommand SaveCommand { get; }
     public AsyncCommand RestoreDefaultsCommand { get; }
     public AsyncCommand ChooseOutputDirectoryCommand { get; }
     public AsyncCommand OpenSettingsDirectoryCommand { get; }
-    public AsyncCommand ShowPrivacyCommand { get; }
     public DiagnosticErrorViewModel Diagnostic { get; }
+
+    public event Action<SettingsSection>? SectionNavigationRequested;
+    public event EventHandler? CloseRequested;
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
-        if (IsLoaded || IsLoading) return;
+        if (IsLoaded) return;
 
-        _loadCancellation?.Cancel();
-        _loadCancellation?.Dispose();
-        _loadCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        IsLoading = true;
-        ErrorMessage = null;
-        Diagnostic.Clear();
-        SaveMessage = null;
-
-        var result = await _loadSettings.ExecuteAsync(new LoadSettingsRequest(), _loadCancellation.Token);
-        if (_loadCancellation.IsCancellationRequested) return;
-
-        IsLoading = false;
-        if (!result.Succeeded)
+        await _loadGate.WaitAsync(cancellationToken);
+        try
         {
-            ErrorMessage = DesktopErrorText.FromWorkflow(result.Error);
-            Diagnostic.Set(result.Error);
-            return;
-        }
+            // Startup preloading and an early settings click can overlap. The second
+            // caller must await the in-flight load instead of returning while the
+            // dialog is still showing its lightweight loading state.
+            if (IsLoaded) return;
 
-        _originalSettings = result.Value!.Settings;
-        ApplySettings(_originalSettings, dirty: false);
-        _appearance.Apply(_originalSettings.ThemeMode);
-        IsLoaded = true;
+            var loadCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _loadCancellation = loadCancellation;
+            IsLoading = true;
+            ErrorMessage = null;
+            Diagnostic.Clear();
+            SaveMessage = null;
+
+            var result = await _loadSettings.ExecuteAsync(new LoadSettingsRequest(), loadCancellation.Token);
+            if (loadCancellation.IsCancellationRequested) return;
+
+            if (!result.Succeeded)
+            {
+                ErrorMessage = DesktopErrorText.FromWorkflow(result.Error);
+                Diagnostic.Set(result.Error);
+                return;
+            }
+
+            _originalSettings = result.Value!.Settings;
+            ApplySettings(_originalSettings, dirty: false);
+            IsLoaded = true;
+        }
+        finally
+        {
+            IsLoading = false;
+            var loadCancellation = Interlocked.Exchange(ref _loadCancellation, null);
+            loadCancellation?.Dispose();
+            _loadGate.Release();
+        }
     }
 
-    public async Task<bool> TryLeaveAsync(CancellationToken cancellationToken = default)
+    public Task<bool> TryLeaveAsync(CancellationToken cancellationToken = default)
     {
-        if (!IsDirty) return true;
-
-        return await _dialogs.ChooseUnsavedChangesAsync(cancellationToken) switch
-        {
-            UnsavedChangesChoice.Save => await SaveAsync(cancellationToken),
-            UnsavedChangesChoice.Discard => DiscardAndLeave(),
-            _ => false
-        };
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(!IsDirty || DiscardAndLeave());
     }
 
     public void Dispose()
     {
-        _loadCancellation?.Cancel();
-        _loadCancellation?.Dispose();
+        var cancellation = Interlocked.Exchange(ref _loadCancellation, null);
+        if (cancellation is null) return;
+        cancellation.Cancel();
+        cancellation.Dispose();
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken)
@@ -365,7 +403,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             _originalSettings = draft;
             IsDirty = false;
             SaveMessage = $"设置已保存 · {DateTime.Now:HH:mm}";
-            _appearance.Apply(draft!.ThemeMode);
             return true;
         }
         finally
@@ -413,12 +450,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             Diagnostic.Clear();
         }
     }
-
-    private Task ShowPrivacyAsync(CancellationToken cancellationToken) =>
-        _dialogs.ShowInformationAsync(
-            "AtomPix 隐私说明",
-            "AtomPix 在本机读取、处理并保存你明确选择的图片。第一阶段不上传图片、不包含遥测，也不要求联网；诊断日志仅保存在本机，并对文件路径使用不可逆令牌。",
-            cancellationToken);
 
     private bool DiscardAndLeave()
     {
@@ -544,6 +575,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsCustomCompression));
         OnPropertyChanged(nameof(ConversionUsesQuality));
         OnPropertyChanged(nameof(IsSubfolderOutput));
+        OnPropertyChanged(nameof(IsSameAsInputOutput));
         OnPropertyChanged(nameof(IsCustomDirectoryOutput));
         OnPropertyChanged(nameof(IsDraftValid));
         OnPropertyChanged(nameof(DraftError));
@@ -562,7 +594,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         RestoreDefaultsCommand.NotifyCanExecuteChanged();
         ChooseOutputDirectoryCommand.NotifyCanExecuteChanged();
         OpenSettingsDirectoryCommand.NotifyCanExecuteChanged();
-        ShowPrivacyCommand.NotifyCanExecuteChanged();
         SelectSectionCommand.NotifyCanExecuteChanged();
+        CloseCommand.NotifyCanExecuteChanged();
     }
 }

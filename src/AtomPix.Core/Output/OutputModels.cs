@@ -200,3 +200,15 @@ public enum OverwritePolicy
     Overwrite,
     AutoRename
 }
+
+/// <summary>
+/// Describes what the output planner actually decided for a single image.
+/// This is an execution result, not merely the overwrite policy requested by the user.
+/// </summary>
+public enum OutputWriteDisposition
+{
+    Created,
+    AutoRenamed,
+    Overwritten,
+    SkippedExisting
+}

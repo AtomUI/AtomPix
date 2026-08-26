@@ -23,23 +23,27 @@ if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
 
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
-public static class AtomPixNativeUiInput
+public static class AtomPixUiAutomationCapture
 {
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr window, int command);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 
     [DllImport("user32.dll")]
-    public static extern bool SetForegroundWindow(IntPtr window);
+    public static extern bool GetWindowRect(IntPtr window, out RECT rect);
 
     [DllImport("user32.dll")]
-    public static extern bool SetCursorPos(int x, int y);
-
-    [DllImport("user32.dll")]
-    public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+    public static extern bool PrintWindow(IntPtr window, IntPtr deviceContext, uint flags);
 }
 "@
 
@@ -66,6 +70,48 @@ function Wait-NamedElement(
     throw "Timed out waiting for automation element '$Name'."
 }
 
+function Assert-No-BrandLogoTakeover([IntPtr] $WindowHandle) {
+    $rect = [AtomPixUiAutomationCapture+RECT]::new()
+    if (-not [AtomPixUiAutomationCapture]::GetWindowRect($WindowHandle, [ref]$rect)) {
+        throw "Unable to read the AtomPix window bounds after opening settings."
+    }
+
+    $bitmap = [System.Drawing.Bitmap]::new($rect.Right - $rect.Left, $rect.Bottom - $rect.Top)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $deviceContext = $graphics.GetHdc()
+    try {
+        if (-not [AtomPixUiAutomationCapture]::PrintWindow($WindowHandle, $deviceContext, 2)) {
+            throw "Unable to capture the AtomPix window after opening settings."
+        }
+    } finally {
+        $graphics.ReleaseHdc($deviceContext)
+        $graphics.Dispose()
+    }
+
+    try {
+        $samples = 0
+        $brandRedSamples = 0
+        for ($y = 0; $y -lt $bitmap.Height; $y += 8) {
+            for ($x = 0; $x -lt $bitmap.Width; $x += 8) {
+                $color = $bitmap.GetPixel($x, $y)
+                $samples++
+                if ($color.R -ge 180 -and $color.R -ge ($color.G * 1.35) -and $color.R -ge ($color.B * 1.35)) {
+                    $brandRedSamples++
+                }
+            }
+        }
+
+        if ($samples -gt 0 -and ($brandRedSamples / $samples) -gt 0.10) {
+            throw "Opening settings caused the AtomPix brand logo to take over the window."
+        }
+    } finally {
+        $bitmap.Dispose()
+    }
+}
+
+# This gate verifies the published Win32 process and its UI Automation surface.
+# The settings action is invoked through UI Automation so the real AtomUI overlay
+# composition is covered in addition to deterministic Headless pointer tests.
 $process = Start-Process -FilePath $executable -WorkingDirectory $directory -WindowStyle Hidden -PassThru
 try {
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -87,42 +133,32 @@ try {
         throw "Unexpected main window automation name '$($root.Current.Name)'."
     }
 
-    $navigationNames = @("浏览", "压缩", "转换", "调整尺寸", "裁剪", "批量任务", "设置")
+    $navigationNames = @("返回首页", "压缩体积", "转换格式", "调整尺寸", "剪裁尺寸", "设置")
     foreach ($name in $navigationNames) {
+        $element = Wait-NamedElement -Root $root -Name $name -Deadline $deadline
+        if ($element.Current.ControlType -ne [System.Windows.Automation.ControlType]::Button) {
+            throw "Navigation element '$name' is not exposed as a UI Automation button."
+        }
+        if (-not $element.Current.IsEnabled) {
+            throw "Navigation element '$name' is unexpectedly disabled at startup."
+        }
+    }
+
+    $settingsButton = Find-NamedElement -Root $root -Name "设置"
+    $invokePattern = $settingsButton.GetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern)
+    if ($null -eq $invokePattern) {
+        throw "The settings navigation button does not expose InvokePattern."
+    }
+    $invokePattern.Invoke()
+    Start-Sleep -Milliseconds 350
+    if ($process.HasExited) { throw "AtomPix exited while opening settings." }
+    foreach ($name in @("默认配置项", "关于 AtomPix", "保存设置")) {
         $null = Wait-NamedElement -Root $root -Name $name -Deadline $deadline
     }
+    Assert-No-BrandLogoTakeover -WindowHandle $handle
 
-    $settings = Find-NamedElement -Root $root -Name "设置"
-    $supportedPatternIds = @($settings.GetSupportedPatterns() | ForEach-Object { $_.Id })
-    if ($supportedPatternIds -contains [System.Windows.Automation.InvokePattern]::Pattern.Id) {
-        $invoke = [System.Windows.Automation.InvokePattern]$settings.GetCurrentPattern(
-            [System.Windows.Automation.InvokePattern]::Pattern)
-        $invoke.Invoke()
-    } elseif ($supportedPatternIds -contains [System.Windows.Automation.SelectionItemPattern]::Pattern.Id) {
-        $selection = [System.Windows.Automation.SelectionItemPattern]$settings.GetCurrentPattern(
-            [System.Windows.Automation.SelectionItemPattern]::Pattern)
-        $selection.Select()
-    } else {
-        # AtomUI NavMenuNode currently exposes a readable UIA node but no action pattern.
-        # Keep UIA as the locator and use a native pointer click only for that framework gap.
-        [void][AtomPixNativeUiInput]::ShowWindow($handle, 5)
-        [void][AtomPixNativeUiInput]::SetForegroundWindow($handle)
-        Start-Sleep -Milliseconds 250
-        $rectangle = $settings.Current.BoundingRectangle
-        if ($rectangle.IsEmpty -or $rectangle.Width -le 0 -or $rectangle.Height -le 0) {
-            throw "The settings navigation element has no clickable UI Automation bounds."
-        }
-        $x = [int][Math]::Round($rectangle.Left + ($rectangle.Width / 2))
-        $y = [int][Math]::Round($rectangle.Top + ($rectangle.Height / 2))
-        if (-not [AtomPixNativeUiInput]::SetCursorPos($x, $y)) {
-            throw "Could not position the pointer over the settings navigation element."
-        }
-        [AtomPixNativeUiInput]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-        [AtomPixNativeUiInput]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
-    }
-
-    $null = Wait-NamedElement -Root $root -Name "保存设置" -Deadline $deadline
-    Write-Host "AtomPix real-process UI Automation navigation smoke test passed."
+    Write-Host "AtomPix published-window, icon-rail, and settings-page UI Automation smoke test passed."
 } finally {
     if (-not $process.HasExited) {
         Stop-Process -Id $process.Id -Force

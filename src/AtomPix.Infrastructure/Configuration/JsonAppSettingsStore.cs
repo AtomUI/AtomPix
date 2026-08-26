@@ -13,7 +13,6 @@ using AtomPix.Core.Settings;
 
 public sealed class JsonAppSettingsStore : IAppSettingsStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = AtomPixJsonOptions.CreateIndented();
     private readonly IAppPathProvider _pathProvider;
 
     public JsonAppSettingsStore(IAppPathProvider pathProvider)
@@ -34,7 +33,11 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
             }
 
             await using var stream = File.OpenRead(SettingsPath);
-            var persisted = await JsonSerializer.DeserializeAsync<PersistedAppSettings>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
+            var persisted = await JsonSerializer.DeserializeAsync(
+                    stream,
+                    AtomPixJsonOptions.Context.PersistedAppSettings,
+                    cancellationToken)
+                .ConfigureAwait(false);
             if (persisted is null)
             {
                 return InfrastructureErrors.Failure<AppSettings>(AtomPixErrorCode.SettingsLoadFailed, AtomPixErrorCategory.Configuration, "Settings file is empty or invalid.");
@@ -72,7 +75,13 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
         {
             cancellationToken.ThrowIfCancellationRequested();
             Directory.CreateDirectory(_pathProvider.AppDataDirectory.Value);
-            await JsonFileWriter.WriteAsync(SettingsPath, settings, JsonOptions, cancellationToken).ConfigureAwait(false);
+            var persisted = PersistedAppSettings.From(settings);
+            await JsonFileWriter.WriteAsync(
+                    SettingsPath,
+                    persisted,
+                    AtomPixJsonOptions.Context.PersistedAppSettings,
+                    cancellationToken)
+                .ConfigureAwait(false);
             return OperationResult.Success();
         }
         catch (OperationCanceledException)
@@ -85,23 +94,36 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
         }
     }
 
-    private sealed class PersistedAppSettings
+}
+
+internal sealed class PersistedAppSettings
+{
+    public int? SchemaVersion { get; init; }
+
+    public CompressionProfile? DefaultCompressionProfile { get; init; }
+
+    public ConversionProfile? DefaultConversionProfile { get; init; }
+
+    public SameFormatEncodingPolicy? DefaultSameFormatEncodingPolicy { get; init; }
+
+    public OutputPolicy? DefaultOutputPolicy { get; init; }
+
+    public ThemeMode? ThemeMode { get; init; }
+
+    public string? Language { get; init; }
+
+    public RecentItemsSettings? RecentItems { get; init; }
+
+    public static PersistedAppSettings From(AppSettings settings) => new()
     {
-        public int? SchemaVersion { get; init; }
-
-        public CompressionProfile? DefaultCompressionProfile { get; init; }
-
-        public ConversionProfile? DefaultConversionProfile { get; init; }
-
-        public SameFormatEncodingPolicy? DefaultSameFormatEncodingPolicy { get; init; }
-
-        public OutputPolicy? DefaultOutputPolicy { get; init; }
-
-        public ThemeMode? ThemeMode { get; init; }
-
-        public string? Language { get; init; }
-
-        public RecentItemsSettings? RecentItems { get; init; }
-    }
+        SchemaVersion = settings.SchemaVersion,
+        DefaultCompressionProfile = settings.DefaultCompressionProfile,
+        DefaultConversionProfile = settings.DefaultConversionProfile,
+        DefaultSameFormatEncodingPolicy = settings.DefaultSameFormatEncodingPolicy,
+        DefaultOutputPolicy = settings.DefaultOutputPolicy,
+        ThemeMode = settings.ThemeMode,
+        Language = settings.Language,
+        RecentItems = settings.RecentItems
+    };
 }
 

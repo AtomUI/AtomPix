@@ -4,13 +4,16 @@ param(
     [string[]] $RuntimeIdentifier = @("win-x64", "linux-x64", "osx-arm64"),
     [ValidatePattern("^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")]
     [string] $Version = "0.1.0",
+    [ValidateSet("CompressedSingleFile", "TrimmedSingleFile", "NativeAot")]
+    [string] $PublishMode = "TrimmedSingleFile",
     [switch] $NoRestore
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $project = Join-Path $repoRoot "src/AtomPix.Desktop/AtomPix.Desktop.csproj"
-$publishRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts/publish"))
+$publishDirectoryName = if ($PublishMode -eq "NativeAot") { "publish-nativeaot" } else { "publish" }
+$publishRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts/$publishDirectoryName"))
 $packageRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts/packages"))
 New-Item -ItemType Directory -Force -Path $publishRoot, $packageRoot | Out-Null
 
@@ -30,11 +33,34 @@ foreach ($rid in $RuntimeIdentifier) {
         "--self-contained", "true",
         "--output", $output,
         "-p:Version=$Version",
-        "-p:PublishSingleFile=true",
-        "-p:IncludeNativeLibrariesForSelfExtract=true",
         "-p:DebugType=None",
         "-p:DebugSymbols=false"
     )
+    switch ($PublishMode) {
+        "CompressedSingleFile" {
+            $arguments += @(
+                "-p:PublishSingleFile=true",
+                "-p:IncludeNativeLibrariesForSelfExtract=true",
+                "-p:EnableCompressionInSingleFile=true"
+            )
+        }
+        "TrimmedSingleFile" {
+            $arguments += @(
+                "-p:PublishSingleFile=true",
+                "-p:IncludeNativeLibrariesForSelfExtract=true",
+                "-p:EnableCompressionInSingleFile=true",
+                "-p:PublishTrimmed=true",
+                "-p:TrimMode=partial"
+            )
+        }
+        "NativeAot" {
+            $arguments += @(
+                "-p:PublishAot=true",
+                "-p:IlcOptimizationPreference=Size",
+                "-p:StripSymbols=true"
+            )
+        }
+    }
     if ($NoRestore) { $arguments += "--no-restore" }
     & dotnet @arguments
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $rid." }
@@ -58,12 +84,18 @@ foreach ($rid in $RuntimeIdentifier) {
         runtimeIdentifier = $rid
         framework = "net10.0"
         selfContained = $true
-        singleFile = $true
+        publishMode = $PublishMode
+        singleFile = $PublishMode -ne "NativeAot"
+        singleFileCompression = $PublishMode -ne "NativeAot"
+        trimmed = $PublishMode -ne "CompressedSingleFile"
+        trimMode = if ($PublishMode -eq "TrimmedSingleFile") { "partial" } elseif ($PublishMode -eq "NativeAot") { "full" } else { "none" }
+        nativeAot = $PublishMode -eq "NativeAot"
         commit = $commit
         createdAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output "release-manifest.json") -Encoding utf8NoBOM
 
-    $baseName = "AtomPix-$Version-$rid"
+    $modeSuffix = if ($PublishMode -eq "NativeAot") { "-nativeaot" } else { "" }
+    $baseName = "AtomPix-$Version-$rid$modeSuffix"
     if ($rid -eq "win-x64") {
         $archive = Join-Path $packageRoot "$baseName.zip"
         if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }

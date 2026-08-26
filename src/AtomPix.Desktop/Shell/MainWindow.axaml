@@ -9,94 +9,156 @@
              x:Class="AtomPix.Desktop.Shell.MainWindow"
              x:DataType="shell:ShellViewModel"
              Title="AtomPix"
-             Width="1280"
-             Height="820"
+             Icon="/Assets/Branding/AtomPix.ico"
+             LogoVisibility="Always"
+             Width="1180"
+             Height="760"
              MinWidth="960"
              MinHeight="640"
+             TitleBarFrameBackground="{DynamicResource AtomPixWorkspaceSurfaceBrush}"
              WindowStartupLocation="CenterScreen">
     <atom:Window.DataTemplates>
-        <DataTemplate DataType="vm:HomePageViewModel">
-            <views:HomePageView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:ImageBrowserViewModel">
-            <views:ImageBrowserView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:CompressionEditorViewModel">
-            <views:CompressionEditorView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:ConversionEditorViewModel">
-            <views:ConversionEditorView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:ResizeEditorViewModel">
-            <views:ResizeEditorView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:CropEditorViewModel">
-            <views:CropEditorView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:BatchTaskViewModel">
-            <views:BatchTaskView />
-        </DataTemplate>
-        <DataTemplate DataType="vm:SettingsPageViewModel">
-            <views:SettingsPageView />
-        </DataTemplate>
+        <DataTemplate DataType="vm:HomePageViewModel"><views:HomePageView /></DataTemplate>
+        <DataTemplate DataType="vm:ImageBrowserViewModel"><views:ImageBrowserView /></DataTemplate>
+        <DataTemplate DataType="vm:CompressionEditorViewModel"><views:CompressionEditorView /></DataTemplate>
+        <DataTemplate DataType="vm:ConversionEditorViewModel"><views:ConversionEditorView /></DataTemplate>
+        <DataTemplate DataType="vm:ResizeEditorViewModel"><views:ResizeEditorView /></DataTemplate>
+        <DataTemplate DataType="vm:CropEditorViewModel"><views:CropEditorView /></DataTemplate>
+        <DataTemplate DataType="vm:SettingsPageViewModel"><views:SettingsPageView /></DataTemplate>
+        <DataTemplate DataType="vm:ToolDrawerSessionViewModel"><views:ToolDrawerSessionView /></DataTemplate>
     </atom:Window.DataTemplates>
 
-    <Grid ColumnDefinitions="232,*" Background="{atom:SharedTokenResource ColorBgLayout}">
-        <Border Grid.Column="0"
-                Background="{atom:SharedTokenResource ColorBgContainer}"
-                BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
-                BorderThickness="0,0,1,0">
-            <Grid RowDefinitions="84,*">
-                <StackPanel Margin="24,18,16,12" Spacing="2">
-                    <TextBlock Text="AtomPix" FontSize="24" FontWeight="SemiBold" />
-                    <TextBlock Text="本地图片工具" Opacity="0.58" FontSize="12" />
-                </StackPanel>
+    <Grid x:Name="AppLayoutRoot"
+          AutomationProperties.Name="AtomPix 应用工作区"
+          Background="{DynamicResource AtomPixWorkspaceSurfaceBrush}">
+        <Grid ColumnDefinitions="*,Auto">
+            <Grid Grid.Column="0" MinWidth="0">
+                <ContentControl x:Name="PrimaryWorkspace"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                Content="{Binding CurrentPage}" />
 
-                <atom:NavMenu x:Name="NavigationMenu"
-                              AutomationProperties.Name="主导航"
-                              Grid.Row="1"
-                              Mode="Inline"
-                              HorizontalAlignment="Stretch"
-                              Padding="10,4">
-                    <atom:NavMenuNode Header="浏览"
-                                      ItemKey="browse"
-                                      Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
-                                      Command="{Binding NavigateCommand}"
-                                      CommandParameter="{x:Static nav:DesktopRoute.Browse}" />
-                    <atom:NavMenuNode Header="压缩"
-                                      ItemKey="compress"
-                                      Icon="{antdicons:AntDesignIconProvider Kind=CompressOutlined}"
-                                      Command="{Binding NavigateCommand}"
-                                      CommandParameter="{x:Static nav:DesktopRoute.Compress}" />
-                    <atom:NavMenuNode Header="转换"
-                                      ItemKey="convert"
-                                      Icon="{antdicons:AntDesignIconProvider Kind=SwapOutlined}"
-                                      Command="{Binding NavigateCommand}"
-                                      CommandParameter="{x:Static nav:DesktopRoute.Convert}" />
-                    <atom:NavMenuNode Header="调整尺寸"
-                                      ItemKey="resize"
-                                      Icon="{antdicons:AntDesignIconProvider Kind=ColumnWidthOutlined}"
-                                      Command="{Binding NavigateCommand}"
-                                      CommandParameter="{x:Static nav:DesktopRoute.Resize}" />
-                    <atom:NavMenuNode Header="裁剪"
-                                      ItemKey="crop"
-                                      Icon="{antdicons:AntDesignIconProvider Kind=ScissorOutlined}"
-                                      Command="{Binding NavigateCommand}"
-                                      CommandParameter="{x:Static nav:DesktopRoute.Crop}" />
-                    <atom:NavMenuNode Header="批量任务"
-                                      ItemKey="batch"
-                                      Icon="{antdicons:AntDesignIconProvider Kind=FolderOpenOutlined}"
-                                      Command="{Binding NavigateCommand}"
-                                      CommandParameter="{x:Static nav:DesktopRoute.Batch}" />
-                    <atom:NavMenuNode Header="设置"
-                                      ItemKey="settings"
-                                      Icon="{antdicons:AntDesignIconProvider Kind=SettingOutlined}"
-                                      Command="{Binding NavigateCommand}"
-                                      CommandParameter="{x:Static nav:DesktopRoute.Settings}" />
-                </atom:NavMenu>
+                <Border x:Name="NavigationRail"
+                        AutomationProperties.Name="主功能导航轨"
+                        Width="{DynamicResource AtomPixNavigationRailWidth}"
+                        Padding="5,8"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource AtomPixFloatingSurfaceBrush}"
+                        BorderThickness="0"
+                        CornerRadius="{DynamicResource AtomPixNavigationRailCornerRadius}"
+                        BoxShadow="{DynamicResource AtomPixNavigationRailShadow}"
+                        IsVisible="{Binding IsPrimaryNavigationVisible}"
+                        ZIndex="30">
+                    <StackPanel Spacing="2">
+                        <atom:Button Classes="AtomPixFloatingIconButton"
+                                     ButtonType="Text"
+                                     Width="44" Height="44"
+                                     AutomationProperties.Name="返回首页"
+                                     atom:ToolTip.Tip="首页"
+                                     Command="{Binding NavigateCommand}"
+                                     CommandParameter="{x:Static nav:DesktopRoute.Browse}">
+                            <Image Width="30" Height="30" Source="/Assets/Branding/AtomPix-64.png" />
+                        </atom:Button>
+
+                        <Grid>
+                            <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsCompressActive}" />
+                            <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsCompressActive}" />
+                            <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
+                                         AutomationProperties.Name="压缩体积" atom:ToolTip.Tip="压缩体积"
+                                         Icon="{antdicons:AntDesignIconProvider Kind=CompressOutlined}"
+                                         Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Compress}" />
+                        </Grid>
+                        <Grid>
+                            <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsConvertActive}" />
+                            <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsConvertActive}" />
+                            <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
+                                         AutomationProperties.Name="转换格式" atom:ToolTip.Tip="转换格式"
+                                         Icon="{antdicons:AntDesignIconProvider Kind=SwapOutlined}"
+                                         Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Convert}" />
+                        </Grid>
+                        <Grid>
+                            <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsResizeActive}" />
+                            <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsResizeActive}" />
+                            <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
+                                         AutomationProperties.Name="调整尺寸" atom:ToolTip.Tip="调整尺寸"
+                                         Icon="{antdicons:AntDesignIconProvider Kind=ColumnWidthOutlined}"
+                                         Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Resize}" />
+                        </Grid>
+                        <Grid>
+                            <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsCropActive}" />
+                            <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsCropActive}" />
+                            <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
+                                         AutomationProperties.Name="剪裁尺寸" atom:ToolTip.Tip="剪裁尺寸"
+                                         Icon="{antdicons:AntDesignIconProvider Kind=ScissorOutlined}"
+                                         Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Crop}" />
+                        </Grid>
+                        <Grid>
+                            <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsSettingsActive}" />
+                            <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsSettingsActive}" />
+                            <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
+                                         AutomationProperties.Name="设置" atom:ToolTip.Tip="设置"
+                                         Icon="{antdicons:AntDesignIconProvider Kind=SettingOutlined}"
+                                         Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Settings}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
             </Grid>
-        </Border>
 
-        <ContentControl Grid.Column="1" Content="{Binding CurrentPage}" />
+            <Border x:Name="ToolPanel"
+                    Grid.Column="1"
+                    AutomationProperties.Name="图片处理配置面板"
+                    Width="380"
+                    Background="{DynamicResource AtomPixInspectorSurfaceBrush}"
+                    BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
+                    BorderThickness="1,0,0,0"
+                    IsVisible="{Binding IsToolPanelVisible}">
+                <Grid RowDefinitions="Auto,*">
+                    <Border Padding="18,14"
+                            Background="{DynamicResource AtomPixInspectorSurfaceBrush}"
+                            BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
+                            BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock VerticalAlignment="Center" FontSize="20" FontWeight="SemiBold" Text="{Binding DrawerTitle}" />
+                            <atom:Button Grid.Column="1"
+                                         Classes="AtomPixFloatingIconButton"
+                                         ButtonType="Text"
+                                         Width="34" Height="34"
+                                         AutomationProperties.Name="关闭配置面板"
+                                         Icon="{antdicons:AntDesignIconProvider Kind=CloseOutlined}"
+                                         Command="{Binding CloseDrawerCommand}" />
+                        </Grid>
+                    </Border>
+                    <ContentControl Grid.Row="1"
+                                    Content="{Binding DrawerContent}"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border x:Name="SettingsTitleBarSeparator"
+                AutomationProperties.Name="设置页面标题栏分割线"
+                Height="1"
+                VerticalAlignment="Top"
+                Background="{atom:SharedTokenResource ColorBorderSecondary}"
+                IsHitTestVisible="False"
+                IsVisible="{Binding IsSettingsActive}"
+                ZIndex="90" />
+
+        <atom:Dialog x:Name="BatchResultDialog"
+                     AutomationProperties.Name="批量处理结果详情"
+                     IsModal="True"
+                     IsClosable="True"
+                     IsResizable="False"
+                     IsMinimizable="False"
+                     IsMaximizable="False"
+                     IsFooterVisible="False"
+                     DialogHostType="Overlay"
+                     HorizontalStartupLocation="Center"
+                     VerticalStartupLocation="Center"
+                     Title="批量处理结果"
+                     HostWidth="720"
+                     HostHeight="600" />
     </Grid>
 </atom:Window>

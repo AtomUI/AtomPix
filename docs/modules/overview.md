@@ -23,7 +23,9 @@
 
 Workflows 如何驱动 Core `ImageJob` / `BatchJob`，见 [Workflow 任务状态机编排设计](workflows/job-state-orchestration.md)。
 
-Desktop 如何把 01–13 原型落实为 AtomUI 组件、独立包和必要自定义控件，见 [AtomUI 组件映射与实现基线](desktop/atomui-component-mapping.md)。
+Desktop 如何把产品能力落实为 AtomUI 组件、独立包和必要自定义控件，见 [AtomUI 组件映射与实现基线](desktop/atomui-component-mapping.md)。
+
+Desktop 当前视觉结构和人肉验收原型见 [UI 设计入口](../ui-design/README.md)。
 
 跨 Desktop、Workflows、Imaging.Magick 与 Infrastructure 的诊断关联、日志落盘和隐私边界，见 [诊断与本地日志设计](infrastructure/diagnostics-and-logging.md)。
 
@@ -44,7 +46,7 @@ Desktop 如何把 01–13 原型落实为 AtomUI 组件、独立包和必要自�
 12. docs/modules/desktop/overview.md
 13. docs/modules/desktop/interaction-state-design.md
 14. docs/modules/desktop/atomui-component-mapping.md
-15. docs/ui-prototype/README.md
+15. docs/ui-design/README.md
 ```
 
 ## 3. 模块依赖摘要

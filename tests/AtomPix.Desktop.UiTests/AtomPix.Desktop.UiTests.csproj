@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <None Include="..\TestAssets\Images\png-alpha.png" Link="TestAssets\png-alpha.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\TestAssets\Images\jpeg-basic.jpg" Link="TestAssets\jpeg-basic.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\TestAssets\Images\jpeg-detailed.jpg" Link="TestAssets\jpeg-detailed.jpg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

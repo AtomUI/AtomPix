@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
+  <title id="title">AtomPix 设置页面</title>
+  <desc id="desc">设置平铺在软件主体内。左侧为压缩、转换、输出和关于四个滚动锚点，右侧展示重新设计的输出上下文与品牌化关于区域。</desc>
+  <defs>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdfd"/><stop offset=".58" stop-color="#fff7f7"/><stop offset="1" stop-color="#f7f9fc"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#1f2937" flood-opacity=".08"/></filter>
+    <style>.font{font-family:'Microsoft YaHei','Segoe UI',sans-serif;fill:#20242b}.muted{font-family:'Microsoft YaHei','Segoe UI',sans-serif;fill:#7b8491}.icon{fill:none;stroke:#3f4854;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.line{stroke:#e3e8ee;stroke-width:1}.surface{fill:#f5f7fa;stroke:#dfe4ea;stroke-width:1}.control{fill:#f4f5f7}</style>
+  </defs>
+  <rect width="1280" height="820" fill="#fff"/><rect width="1280" height="44" fill="#f5f7fa"/>
+  <path d="M14 8h10c11 0 18 6 18 16s-7 16-18 16H14z" fill="#f5222d"/><path d="M21 14h5c6 0 9 3 9 9s-3 9-9 9h-5z" fill="#fff"/>
+  <text class="font" x="52" y="29" font-size="14" font-weight="650">AtomPix</text><g class="icon" stroke-width="1.5"><path d="M1188 22h13"/><rect x="1221" y="16" width="12" height="11" rx="1"/><path d="m1256 16 12 12m0-12-12 12"/></g>
+  <rect x="0" y="44" width="224" height="776" fill="#f7f9fb"/><line class="line" x1="224" y1="44" x2="224" y2="820"/><text class="font" x="28" y="92" font-size="23" font-weight="700">设置</text>
+  <g transform="translate(16 120)">
+    <g><path class="icon" d="M21 15v20m-7-13h14m9-7h16m-16 9h16m-16 9h16"/><text class="font" x="72" y="29" font-size="15">压缩配置</text></g>
+    <g transform="translate(0 54)"><path class="icon" d="m14 18 8-7 8 7m23 12-8 7-8-7M22 11v26m23-26v26"/><text class="font" x="72" y="29" font-size="15">转换配置</text></g>
+    <rect x="0" y="108" width="192" height="48" rx="9" fill="#eaf3ff"/><g transform="translate(0 108)"><path d="M16 18h38v22H16zM24 18v-6h22v6" fill="none" stroke="#1677ff" stroke-width="2"/><text x="72" y="30" font-family="Microsoft YaHei,Segoe UI" font-size="15" fill="#1677ff" font-weight="650">输出配置</text></g>
+    <g transform="translate(0 162)"><circle class="icon" cx="35" cy="24" r="13"/><path class="icon" d="M35 22v9m0-16v1"/><text class="font" x="72" y="29" font-size="15">关于</text></g>
+  </g>
+  <g transform="translate(270 76)">
+    <text class="font" font-size="28" font-weight="700">输出配置</text><text class="muted" y="28" font-size="13">设定之后新建图片处理任务使用的默认输出规则。</text>
+    <text class="font" y="79" font-size="17" font-weight="650">默认输出</text><text class="font" y="121" font-size="14" font-weight="650">输出位置</text><text class="muted" y="142" font-size="12">新建任务默认使用的保存位置</text>
+    <rect class="control" x="218" y="99" width="716" height="44" rx="9"/><rect x="222" y="103" width="233" height="36" rx="7" fill="#fff"/>
+    <text class="font" x="338" y="127" font-size="13" text-anchor="middle">原图旁的输出子目录</text><text class="font" x="576" y="127" font-size="13" text-anchor="middle">与原图相同目录</text><text class="font" x="814" y="127" font-size="13" text-anchor="middle">自定义目录</text>
+    <rect class="surface" x="218" y="155" width="716" height="124" rx="9"/><text class="muted" x="234" y="181" font-size="12">子目录名称</text>
+    <rect x="234" y="193" width="684" height="38" rx="7" fill="#f5f7fa" stroke="#cfd6df"/><text class="font" x="248" y="218" font-size="13">AtomPix_Output</text><text class="muted" x="234" y="258" font-size="12">图片将保存到：每张原图所在目录 / AtomPix_Output</text>
+    <text class="font" y="330" font-size="14" font-weight="650">文件命名</text><text class="muted" y="351" font-size="12">支持 {name} 与 {index} 占位符</text><rect x="218" y="307" width="716" height="42" rx="8" fill="#f5f7fa" stroke="#cfd6df"/><text class="font" x="232" y="334" font-size="13">{name}_atompix</text>
+    <line class="line" y1="390" x2="934" y2="390"/><text class="font" y="438" font-size="28" font-weight="700">关于 AtomPix</text>
+    <rect y="466" width="934" height="122" rx="14" fill="url(#hero)" stroke="#ffe1e2" filter="url(#shadow)"/><rect x="26" y="495" width="64" height="64" rx="16" fill="#fff" stroke="#ffd9db"/>
+    <path d="M38 507h14c17 0 27 8 27 20s-10 20-27 20H38z" fill="#f5222d"/><path d="M48 515h7c8 0 13 4 13 12s-5 12-13 12h-7z" fill="#fff"/>
+    <text class="font" x="112" y="516" font-size="28" font-weight="700">AtomPix</text><rect x="242" y="493" width="124" height="28" rx="14" fill="#ffecef"/><text x="304" y="512" text-anchor="middle" font-family="Microsoft YaHei,Segoe UI" font-size="12" fill="#c72f3a">AtomPix 1.0.0</text>
+    <text class="font" x="112" y="550" font-size="16" font-weight="650">轻巧、专注的图片处理工具</text>
+    <text class="font" y="634" font-size="17" font-weight="650">运行信息</text><rect y="652" width="934" height="110" rx="12" fill="#fff" stroke="#e3e8ee"/>
+    <text class="font" x="28" y="686" font-size="13" font-weight="650">图片引擎</text><text class="font" x="176" y="686" font-size="13">ImageMagick · Magick.NET</text><line class="line" x1="18" y1="706" x2="916" y2="706"/>
+    <text class="font" x="28" y="738" font-size="13" font-weight="650">桌面框架</text><text class="font" x="176" y="738" font-size="13">Avalonia · AtomUI · .NET 10</text>
+  </g>
+  <rect x="1264" y="62" width="8" height="690" rx="4" fill="#edf0f3"/><rect x="1264" y="290" width="8" height="128" rx="4" fill="#aeb6c0"/>
+  <rect x="224" y="756" width="1056" height="64" fill="#fff" fill-opacity=".97"/><line class="line" x1="224" y1="756" x2="1280" y2="756"/><rect x="254" y="770" width="94" height="36" rx="8" fill="#fff" stroke="#cfd6df"/><text class="font" x="301" y="793" font-size="13" text-anchor="middle">恢复默认</text><rect x="1054" y="770" width="78" height="36" rx="8" fill="#fff" stroke="#cfd6df"/><text class="font" x="1093" y="793" font-size="13" text-anchor="middle">返回</text><rect x="1144" y="770" width="108" height="36" rx="8" fill="#1677ff"/><text x="1198" y="793" font-family="Microsoft YaHei,Segoe UI" font-size="13" fill="#fff" text-anchor="middle">保存设置</text>
+</svg>

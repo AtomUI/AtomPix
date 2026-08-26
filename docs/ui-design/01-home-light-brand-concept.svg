@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
+  <title id="title">AtomPix 首页轻品牌启动台概念稿</title>
+  <desc id="desc">独立浅色标题栏与悬浮图标轨，中间为带有克制品牌光影和像素视觉的图片启动台，保留拖入图片或文件夹、打开图片和打开文件夹入口。</desc>
+  <defs data-atompix-embedded-assets="true">
+    <symbol id="brand64" viewBox="0 0 64 64"><image href="data:image/png;base64,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" width="64" height="64"/></symbol>
+    <linearGradient id="workspace" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f8fb"/><stop offset=".55" stop-color="#f4f6f9"/><stop offset="1" stop-color="#f7f5f6"/>
+    </linearGradient>
+    <radialGradient id="blueGlow"><stop stop-color="#dfeeff" stop-opacity=".9"/><stop offset="1" stop-color="#eaf3ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="redGlow"><stop stop-color="#ffe5e5" stop-opacity=".8"/><stop offset="1" stop-color="#fff0f0" stop-opacity="0"/></radialGradient>
+    <linearGradient id="stage" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#fbfcff"/></linearGradient>
+    <linearGradient id="brandDisc" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff0f0"/><stop offset=".48" stop-color="#f7f3ff"/><stop offset="1" stop-color="#eaf3ff"/></linearGradient>
+    <filter id="stageShadow" x="-15%" y="-20%" width="130%" height="155%"><feDropShadow dx="0" dy="18" stdDeviation="30" flood-color="#233044" flood-opacity=".09"/></filter>
+    <filter id="railShadow" x="-40%" y="-25%" width="190%" height="180%"><feDropShadow dx="2" dy="7" stdDeviation="11" flood-color="#162235" flood-opacity=".18"/></filter>
+    <filter id="buttonShadow" x="-20%" y="-40%" width="140%" height="200%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1677ff" flood-opacity=".18"/></filter>
+    <clipPath id="stageClip"><rect x="180" y="154" width="920" height="520" rx="26"/></clipPath>
+    <style>
+      .text{font-family:'Microsoft YaHei','Segoe UI',sans-serif;fill:#20242b}.muted{font-family:'Microsoft YaHei','Segoe UI',sans-serif;fill:#77808d}.icon{fill:none;stroke:#4e5865;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.railHit{fill:transparent}
+    </style>
+  </defs>
+
+  <rect width="1280" height="820" fill="url(#workspace)"/>
+  <circle cx="1090" cy="170" r="310" fill="url(#redGlow)"/>
+  <circle cx="220" cy="710" r="330" fill="url(#blueGlow)" opacity=".65"/>
+
+  <!-- 独立标题栏 -->
+  <rect width="1280" height="44" fill="#ffffff"/>
+  <use href="#brand64" x="12" y="8" width="27" height="27"/>
+  <text class="text" x="48" y="28" font-size="13" font-weight="650">AtomPix</text>
+  <g class="icon" stroke-width="1.55"><path d="M1188 21h13"/><rect x="1221" y="15" width="12" height="11" rx="1"/><path d="m1256 15 12 12m0-12-12 12"/></g>
+  <line x1="0" y1="44.5" x2="1280" y2="44.5" stroke="#dce1e8"/>
+
+  <!-- 轻品牌启动台 -->
+  <g clip-path="url(#stageClip)" opacity=".72">
+    <circle cx="1030" cy="172" r="190" fill="url(#redGlow)"/>
+    <circle cx="236" cy="650" r="190" fill="url(#blueGlow)"/>
+    <g fill="#ff4d4f"><rect x="1000" y="191" width="12" height="12" rx="3" opacity=".22"/><rect x="1021" y="211" width="8" height="8" rx="2" opacity=".36"/><rect x="1043" y="180" width="6" height="6" rx="1.5" opacity=".5"/></g>
+    <g fill="#1677ff"><rect x="220" y="594" width="10" height="10" rx="2" opacity=".18"/><rect x="244" y="615" width="7" height="7" rx="1.5" opacity=".35"/><rect x="204" y="630" width="5" height="5" rx="1" opacity=".5"/></g>
+  </g>
+
+  <text class="text" x="640" y="218" text-anchor="middle" font-size="30" font-weight="700">开始使用 AtomPix</text>
+  <text class="muted" x="640" y="250" text-anchor="middle" font-size="14">打开图片或文件夹，开始本地图片处理</text>
+
+  <!-- 实际拖放区 -->
+  <rect x="246" y="286" width="788" height="306" rx="20" fill="#fbfcfe" stroke="#c8d1dd" stroke-width="1.4" stroke-dasharray="8 8"/>
+  <circle cx="640" cy="370" r="54" fill="url(#brandDisc)"/>
+  <use href="#brand64" x="608" y="338" width="64" height="64"/>
+  <text class="text" x="640" y="454" text-anchor="middle" font-size="22" font-weight="650">拖入图片或文件夹</text>
+  <g transform="translate(463 486)" filter="url(#buttonShadow)">
+    <rect width="166" height="44" rx="9" fill="#1677ff"/>
+    <rect x="27" y="14" width="17" height="14" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="33" cy="19" r="2" fill="#fff"/><path d="m29 26 5-5 4 4 3-3 3 4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+    <text x="101" y="28" text-anchor="middle" fill="#fff" font-family="Microsoft YaHei,Segoe UI" font-size="14" font-weight="650">打开图片</text>
+  </g>
+  <g transform="translate(651 486)">
+    <rect width="166" height="44" rx="9" fill="#ffffff" stroke="#cbd3dd"/>
+    <path d="M27 17h13l4 4h15v13H27z" fill="none" stroke="#4e5865" stroke-width="1.8" stroke-linejoin="round"/>
+    <text class="text" x="101" y="28" text-anchor="middle" font-size="14" font-weight="600">打开文件夹</text>
+  </g>
+
+  <!-- 悬浮图标轨 -->
+  <g filter="url(#railShadow)"><path d="M0 274h36q16 0 16 16v268q0 16-16 16H0z" fill="#ffffff" fill-opacity=".95"/></g>
+  <use href="#brand64" x="12" y="288" width="29" height="29"/>
+  <line x1="10" y1="327.5" x2="42" y2="327.5" stroke="#e3e7ed"/>
+  <g transform="translate(8 338)"><rect class="railHit" width="36" height="36"/><path class="icon" d="M10 12h16M8 18h20M11 24h14m-11-15v6m8 6v6"/><title>压缩体积</title></g>
+  <g transform="translate(8 382)"><rect class="railHit" width="36" height="36"/><path class="icon" d="M8 13h18l-4-4m4 4-4 4M28 23H10l4 4m-4-4 4-4"/><title>转换格式</title></g>
+  <g transform="translate(8 426)"><rect class="railHit" width="36" height="36"/><path class="icon" d="M9 11v16m0 0h16m-11-11h13m0 0V9m0 7-5-5"/><title>调整尺寸</title></g>
+  <g transform="translate(8 470)"><rect class="railHit" width="36" height="36"/><circle class="icon" cx="13" cy="13" r="3"/><circle class="icon" cx="13" cy="23" r="3"/><path class="icon" d="m16 15 12 12M16 21 27 10"/><title>剪裁尺寸</title></g>
+  <g transform="translate(8 522)"><rect class="railHit" width="36" height="36"/><circle class="icon" cx="18" cy="18" r="5"/><path class="icon" d="M18 7v3m0 16v3M7 18h3m16 0h3m-18.8-7.8 2.2 2.2m11.2 11.2 2.2 2.2m0-15.6-2.2 2.2M12.4 23.6l-2.2 2.2"/><title>设置</title></g>
+</svg>

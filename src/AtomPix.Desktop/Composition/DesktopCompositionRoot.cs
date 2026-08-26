@@ -23,8 +23,9 @@ public static class DesktopCompositionRoot
         services.AddSingleton<IDesktopLauncherService, AvaloniaDesktopLauncherService>();
         services.AddSingleton<IDesktopDialogService, AvaloniaDesktopDialogService>();
         services.AddSingleton<IDesktopClipboardService, AvaloniaDesktopClipboardService>();
-        services.AddSingleton<IDesktopAppearanceService, AvaloniaDesktopAppearanceService>();
         services.AddSingleton<IDesktopDispatcher, AvaloniaDesktopDispatcher>();
+        services.AddSingleton<AvaloniaDesktopFeedbackService>();
+        services.AddSingleton<IDesktopFeedbackService>(provider => provider.GetRequiredService<AvaloniaDesktopFeedbackService>());
         services.AddSingleton<ResultOutputGuard>();
         services.AddSingleton<DesktopExceptionBoundary>();
         services.AddSingleton<DesktopNavigationCoordinator>();

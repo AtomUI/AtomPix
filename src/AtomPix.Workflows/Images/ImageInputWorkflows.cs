@@ -48,6 +48,7 @@ public sealed class OpenFolderWorkflow
         }
 
         var candidates = new List<BrowserImageCandidate>();
+        var knownPaths = new SortedSet<LocalPath>(Comparer<LocalPath>.Create(_fileSystem.ComparePaths));
         var unsupportedCount = 0;
         foreach (var path in enumeration.Value!)
         {
@@ -66,7 +67,7 @@ public sealed class OpenFolderWorkflow
                 continue;
             }
 
-            if (candidates.Any(item => _fileSystem.PathsEqual(item.Path, normalizedPath)))
+            if (!knownPaths.Add(normalizedPath))
             {
                 continue;
             }

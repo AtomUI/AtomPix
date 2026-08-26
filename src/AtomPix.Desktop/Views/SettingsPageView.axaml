@@ -6,180 +6,326 @@
              xmlns:vm="using:AtomPix.Desktop.ViewModels"
              x:Class="AtomPix.Desktop.Views.SettingsPageView"
              x:DataType="vm:SettingsPageViewModel">
-    <Grid Margin="34,28" RowDefinitions="Auto,*">
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,20">
-            <StackPanel Spacing="6">
-                <TextBlock Text="设置" FontSize="26" FontWeight="SemiBold" />
-                <TextBlock Text="显式保存处理默认值、外观与本地最近记录偏好。" FontSize="14" Opacity="0.64" />
+    <Grid Background="{DynamicResource AtomPixWorkspaceSurfaceBrush}">
+        <atom:Spin IsVisible="{Binding IsLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+        <StackPanel IsVisible="{Binding IsLoadFailure}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="12" MaxWidth="520">
+            <atom:Alert Type="Error" IsShowIcon="True" Message="无法读取设置" Description="{Binding ErrorMessage}" />
+            <controls:DiagnosticIdView DataContext="{Binding Diagnostic}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                <atom:Button Content="打开设置目录" Command="{Binding OpenSettingsDirectoryCommand}" />
+                <atom:Button Content="恢复默认草稿" ButtonType="Primary" Command="{Binding RestoreDefaultsCommand}" />
             </StackPanel>
-            <Border Grid.Column="1" Background="#FFF7E6" BorderBrush="#FFD591" BorderThickness="1" CornerRadius="12"
-                    Padding="10,4" IsVisible="{Binding IsDirty}" VerticalAlignment="Center">
-                <TextBlock Text="有未保存的修改" Foreground="#AD6800" FontSize="12" />
-            </Border>
-        </Grid>
+        </StackPanel>
 
-        <Grid Grid.Row="1">
-            <atom:Spin IsVisible="{Binding IsLoading}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-
-            <StackPanel IsVisible="{Binding IsLoadFailure}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" MaxWidth="560">
-                <atom:Alert Type="Error" IsShowIcon="True" Message="无法读取设置" Description="{Binding ErrorMessage}" />
-                <controls:DiagnosticIdView DataContext="{Binding Diagnostic}" />
-                <TextBlock Text="AtomPix 不会自动覆盖损坏或高版本的设置文件。" TextWrapping="Wrap" Opacity="0.62" />
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                    <atom:Button Content="打开设置目录" Command="{Binding OpenSettingsDirectoryCommand}" />
-                    <atom:Button Content="恢复默认草稿" ButtonType="Primary" Command="{Binding RestoreDefaultsCommand}" />
-                </StackPanel>
-            </StackPanel>
-
-            <Grid IsVisible="{Binding IsReady}" ColumnDefinitions="210,*" ColumnSpacing="24">
-                <atom:Card SizeType="Small">
-                    <StackPanel Spacing="6">
-                        <atom:Button Content="处理默认值" HorizontalContentAlignment="Left"
-                                     Icon="{antdicons:AntDesignIconProvider Kind=SlidersOutlined}"
-                                     Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:SettingsSection.Processing}" />
-                        <atom:Button Content="外观与语言" HorizontalContentAlignment="Left"
-                                     Icon="{antdicons:AntDesignIconProvider Kind=BgColorsOutlined}"
-                                     Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:SettingsSection.Appearance}" />
-                        <atom:Button Content="最近记录" HorizontalContentAlignment="Left"
-                                     Icon="{antdicons:AntDesignIconProvider Kind=HistoryOutlined}"
-                                     Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:SettingsSection.Recent}" />
-                        <atom:Button Content="关于 AtomPix" HorizontalContentAlignment="Left"
-                                     Icon="{antdicons:AntDesignIconProvider Kind=InfoCircleOutlined}"
-                                     Command="{Binding SelectSectionCommand}" CommandParameter="{x:Static vm:SettingsSection.About}" />
-                    </StackPanel>
-                </atom:Card>
-
-                <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
-                    <StackPanel Spacing="3" Margin="0,0,0,14">
-                        <TextBlock Text="{Binding SectionTitle}" FontSize="21" FontWeight="SemiBold" />
-                        <TextBlock Text="修改保留在当前草稿中，只有保存成功后才影响后续任务。" Opacity="0.58" />
-                    </StackPanel>
-
-                    <atom:ScrollViewer Grid.Row="1">
-                        <StackPanel Spacing="14" Margin="0,0,8,0">
-                            <StackPanel IsVisible="{Binding IsProcessingSection}" Spacing="14">
-                                <atom:Card Header="默认压缩" SizeType="Middle">
-                                    <StackPanel Spacing="13">
-                                        <TextBlock Text="压缩模式" />
-                                        <atom:Segmented AutomationProperties.Name="默认压缩模式" ItemsSource="{Binding CompressionModes}" SelectedItem="{Binding SelectedCompressionMode, Mode=TwoWay}" IsExpanding="True" />
-                                        <Grid IsVisible="{Binding IsCustomCompression}" ColumnDefinitions="*,86" ColumnSpacing="10">
-                                            <atom:Slider AutomationProperties.Name="默认压缩质量" Minimum="1" Maximum="100" Value="{Binding CustomCompressionQualitySlider, Mode=TwoWay}" />
-                                            <atom:NumericUpDown AutomationProperties.Name="默认压缩质量数值" Grid.Column="1" Minimum="1" Maximum="100" FormatString="0"
-                                                                Value="{Binding CustomCompressionQuality, Mode=TwoWay}" />
-                                        </Grid>
-                                        <atom:CheckBox Content="移除拍摄信息与位置数据" IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
-                                        <TextBlock Text="该公共开关同步写入压缩、转换和同格式编码；ICC 色彩配置始终尽量保留。"
-                                                   Opacity="0.58" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </atom:Card>
-
-                                <atom:Card Header="默认转换" SizeType="Middle">
-                                    <StackPanel Spacing="13">
-                                        <TextBlock Text="输出格式" />
-                                        <atom:Segmented AutomationProperties.Name="默认转换格式" ItemsSource="{Binding ConversionFormats}" SelectedItem="{Binding SelectedConversionFormat, Mode=TwoWay}" IsExpanding="True" />
-                                        <StackPanel IsVisible="{Binding ConversionUsesQuality}" Spacing="7">
-                                            <TextBlock Text="输出质量" />
-                                            <Grid ColumnDefinitions="*,86" ColumnSpacing="10">
-                                                <atom:Slider AutomationProperties.Name="默认转换质量" Minimum="1" Maximum="100" Value="{Binding ConversionQualitySlider, Mode=TwoWay}" />
-                                                <atom:NumericUpDown AutomationProperties.Name="默认转换质量数值" Grid.Column="1" Minimum="1" Maximum="100" FormatString="0"
-                                                                    Value="{Binding ConversionQuality, Mode=TwoWay}" />
-                                            </Grid>
-                                        </StackPanel>
-                                        <TextBlock Text="JPEG 透明区域背景色" />
-                                        <Grid ColumnDefinitions="44,*,Auto,Auto" ColumnSpacing="8">
-                                            <controls:RgbColorPickerBridge HexValue="{Binding BackgroundHex, Mode=TwoWay}" />
-                                            <atom:TextBox AutomationProperties.Name="默认透明区域背景色十六进制值" Grid.Column="1" Text="{Binding BackgroundHex, Mode=TwoWay}" PlaceholderText="#RRGGBB" />
-                                            <atom:Button Grid.Column="2" Content="白色" Click="UseWhiteClick" />
-                                            <atom:Button Grid.Column="3" Content="黑色" Click="UseBlackClick" />
-                                        </Grid>
-                                        <TextBlock Text="PNG / WebP 保留透明度；背景色只在透明输入转 JPEG 时实际生效。" Opacity="0.58" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </atom:Card>
-
-                                <atom:Card Header="同格式编码与默认输出" SizeType="Middle">
-                                    <StackPanel Spacing="12">
-                                        <atom:Alert Type="Info" IsShowIcon="True" Message="同格式编码策略" Description="{Binding SameFormatSummary}" />
-                                        <TextBlock Text="输出位置" />
-                                        <atom:Segmented AutomationProperties.Name="默认输出位置" ItemsSource="{Binding OutputLocations}" SelectedItem="{Binding SelectedOutputLocation, Mode=TwoWay}" IsExpanding="True" />
-                                        <StackPanel IsVisible="{Binding IsSubfolderOutput}" Spacing="6">
-                                            <TextBlock Text="输出子目录名称" Opacity="0.62" />
-                                            <atom:TextBox AutomationProperties.Name="默认输出子目录名称" Text="{Binding SubfolderName, Mode=TwoWay}" PlaceholderText="AtomPix_Output" />
-                                        </StackPanel>
-                                        <StackPanel IsVisible="{Binding IsCustomDirectoryOutput}" Spacing="6">
-                                            <TextBlock Text="自定义输出目录" Opacity="0.62" />
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                                <atom:TextBox AutomationProperties.Name="默认自定义输出目录" Text="{Binding CustomOutputDirectory, Mode=TwoWay}" IsReadOnly="True" />
-                                                <atom:Button Grid.Column="1" Content="选择目录" Command="{Binding ChooseOutputDirectoryCommand}" />
-                                            </Grid>
-                                        </StackPanel>
-                                        <TextBlock Text="默认文件名格式（不含扩展名）" />
-                                        <atom:TextBox AutomationProperties.Name="默认文件名格式" Text="{Binding FileNamePattern, Mode=TwoWay}" PlaceholderText="示例：原文件名_atompix" />
-                                        <TextBlock Text="支持原文件名和序号占位符；批量多项缺少序号时会自动派生稳定序号。" Opacity="0.58" TextWrapping="Wrap" />
-                                        <TextBlock Text="目标文件已存在时" />
-                                        <atom:Segmented AutomationProperties.Name="默认已有文件处理方式" ItemsSource="{Binding OverwritePolicies}" SelectedItem="{Binding SelectedOverwritePolicy, Mode=TwoWay}" IsExpanding="True" />
-                                    </StackPanel>
-                                </atom:Card>
-                            </StackPanel>
-
-                            <StackPanel IsVisible="{Binding IsAppearanceSection}" Spacing="14">
-                                <atom:Card Header="主题" SizeType="Middle">
-                                    <StackPanel Spacing="10">
-                                        <atom:Segmented AutomationProperties.Name="主题" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme, Mode=TwoWay}" IsExpanding="True" />
-                                        <TextBlock Text="主题在设置保存成功后应用。" Opacity="0.58" />
-                                    </StackPanel>
-                                </atom:Card>
-                                <atom:Card Header="语言" SizeType="Middle">
-                                    <StackPanel Spacing="10">
-                                        <atom:Segmented AutomationProperties.Name="语言" ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}" IsExpanding="True" />
-                                        <TextBlock Text="第一阶段仅保存语言偏好，不承诺所有第三方控件已经完整本地化。" Opacity="0.58" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </atom:Card>
-                            </StackPanel>
-
-                            <StackPanel IsVisible="{Binding IsRecentSection}" Spacing="14">
-                                <atom:Card Header="最近记录" SizeType="Middle">
-                                    <StackPanel Spacing="12">
-                                        <atom:CheckBox Content="在首页保留最近打开的图片和文件夹" IsChecked="{Binding RecentEnabled, Mode=TwoWay}" />
-                                        <Grid ColumnDefinitions="*,120" ColumnSpacing="12">
-                                            <StackPanel Spacing="3">
-                                                <TextBlock Text="最多保留条数" />
-                                                <TextBlock Text="列表内容使用独立本地存储；关闭后不会删除磁盘上的图片。" Opacity="0.58" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <atom:NumericUpDown AutomationProperties.Name="最近记录最大数量" Grid.Column="1" Minimum="1" Maximum="100" FormatString="0"
-                                                                Value="{Binding RecentMaxCount, Mode=TwoWay}" />
-                                        </Grid>
-                                    </StackPanel>
-                                </atom:Card>
-                            </StackPanel>
-
-                            <StackPanel IsVisible="{Binding IsAboutSection}" Spacing="14">
-                                <atom:Card Header="AtomPix" SizeType="Middle">
-                                    <StackPanel Spacing="9">
-                                        <TextBlock Text="{Binding VersionText}" FontSize="18" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding SchemaText}" Opacity="0.62" />
-                                        <TextBlock Text="图片处理在本机完成；第一阶段不上传图片、不包含遥测，也不要求联网。" TextWrapping="Wrap" />
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <atom:Button Content="查看隐私说明" Command="{Binding ShowPrivacyCommand}" />
-                                            <atom:Button Content="打开设置目录" Command="{Binding OpenSettingsDirectoryCommand}" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </atom:Card>
-                            </StackPanel>
-
-                            <atom:Alert Type="Error" IsShowIcon="True" Message="设置草稿无效" Description="{Binding DraftError}" IsVisible="{Binding HasDraftError}" />
-                            <atom:Alert Type="Error" IsShowIcon="True" Message="设置未保存" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
-                            <controls:DiagnosticIdView DataContext="{Binding Diagnostic}" />
-                            <atom:Alert Type="Success" IsShowIcon="True" Message="{Binding SaveMessage}" IsVisible="{Binding HasSaveMessage}" />
-                        </StackPanel>
-                    </atom:ScrollViewer>
-
-                    <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="8" Margin="0,16,8,0">
-                        <atom:Button Content="保存设置" ButtonType="Primary" Command="{Binding SaveCommand}" />
-                        <atom:Button Grid.Column="1" Content="恢复默认" Command="{Binding RestoreDefaultsCommand}" />
-                        <TextBlock Grid.Column="2" Text="所有处理任务都使用开始时冻结的设置快照。" HorizontalAlignment="Right" VerticalAlignment="Center" Opacity="0.58" />
+        <Grid x:Name="SettingsReadyContent" IsVisible="{Binding IsReady}"
+              ColumnDefinitions="224,*" RowDefinitions="*,Auto">
+            <Border Grid.RowSpan="2" Background="{DynamicResource AtomPixSettingsSidebarBrush}"
+                    BorderBrush="{DynamicResource AtomPixInspectorDividerBrush}" BorderThickness="0,0,1,0">
+                <StackPanel Margin="16,24" Spacing="8">
+                    <TextBlock Margin="12,0,0,16" FontSize="22" FontWeight="SemiBold" Text="设置" />
+                    <Grid>
+                        <Border Background="{DynamicResource AtomPixSettingsSelectionBrush}" CornerRadius="8"
+                                IsVisible="{Binding IsCompressionSection}" />
+                        <atom:Button Classes="AtomPixSettingsNavigation" Content="压缩配置"
+                                     AutomationProperties.Name="压缩配置"
+                                     Icon="{antdicons:AntDesignIconProvider Kind=CompressOutlined}"
+                                     Command="{Binding SelectSectionCommand}"
+                                     CommandParameter="{x:Static vm:SettingsSection.Compression}" />
                     </Grid>
+                    <Grid>
+                        <Border Background="{DynamicResource AtomPixSettingsSelectionBrush}" CornerRadius="8"
+                                IsVisible="{Binding IsConversionSection}" />
+                        <atom:Button Classes="AtomPixSettingsNavigation" Content="转换配置"
+                                     AutomationProperties.Name="转换配置"
+                                     Icon="{antdicons:AntDesignIconProvider Kind=SwapOutlined}"
+                                     Command="{Binding SelectSectionCommand}"
+                                     CommandParameter="{x:Static vm:SettingsSection.Conversion}" />
+                    </Grid>
+                    <Grid>
+                        <Border Background="{DynamicResource AtomPixSettingsSelectionBrush}" CornerRadius="8"
+                                IsVisible="{Binding IsOutputSection}" />
+                        <atom:Button Classes="AtomPixSettingsNavigation" Content="输出配置"
+                                     AutomationProperties.Name="输出配置"
+                                     Icon="{antdicons:AntDesignIconProvider Kind=FolderOpenOutlined}"
+                                     Command="{Binding SelectSectionCommand}"
+                                     CommandParameter="{x:Static vm:SettingsSection.Output}" />
+                    </Grid>
+                    <Grid>
+                        <Border Background="{DynamicResource AtomPixSettingsSelectionBrush}" CornerRadius="8"
+                                IsVisible="{Binding IsAboutSection}" />
+                        <atom:Button Classes="AtomPixSettingsNavigation" Content="关于 AtomPix"
+                                     AutomationProperties.Name="关于 AtomPix"
+                                     Icon="{antdicons:AntDesignIconProvider Kind=InfoCircleOutlined}"
+                                     Command="{Binding SelectSectionCommand}"
+                                     CommandParameter="{x:Static vm:SettingsSection.About}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <atom:ScrollViewer x:Name="SettingsScrollViewer" Grid.Column="1"
+                               VerticalScrollBarVisibility="Auto" ScrollChanged="SettingsScrollChanged">
+                <StackPanel x:Name="SettingsSections" Margin="42,34,46,160" Spacing="42">
+                    <StackPanel x:Name="CompressionSettingsSection" Spacing="26">
+                        <StackPanel Spacing="5">
+                            <TextBlock Classes="AtomPixSettingsPageTitle" Text="压缩配置" />
+                            <TextBlock Classes="AtomPixSettingsDescription"
+                                       Text="设定之后新建压缩任务使用的默认参数。" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="18">
+                            <TextBlock Classes="AtomPixSettingsSectionTitle" Text="默认压缩" />
+                            <Grid ColumnDefinitions="190,*" ColumnSpacing="28">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="AtomPixSettingsRowTitle" Text="压缩模式" />
+                                    <TextBlock Classes="AtomPixSettingsDescription" Text="新建压缩任务时使用的默认策略" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="10">
+                                    <atom:Segmented AutomationProperties.Name="默认压缩模式"
+                                                    ItemsSource="{Binding CompressionModes}"
+                                                    SelectedItem="{Binding SelectedCompressionMode, Mode=TwoWay}"
+                                                    IsExpanding="True" />
+                                    <Grid IsVisible="{Binding IsCustomCompression}" ColumnDefinitions="*,112" ColumnSpacing="12">
+                                        <atom:Slider Classes="AtomPixInspectorAlignedSlider"
+                                                     AutomationProperties.Name="默认压缩质量" Minimum="1" Maximum="100"
+                                                     Value="{Binding CustomCompressionQualitySlider, Mode=TwoWay}" />
+                                        <atom:NumericUpDown Grid.Column="1" AutomationProperties.Name="默认压缩质量数值"
+                                                            Width="112" HorizontalAlignment="Right"
+                                                            Minimum="1" Maximum="100" FormatString="0"
+                                                            Value="{Binding CustomCompressionQuality, Mode=TwoWay}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                            <Grid ColumnDefinitions="190,*" ColumnSpacing="28">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="AtomPixSettingsRowTitle" Text="图片信息" />
+                                    <TextBlock Classes="AtomPixSettingsDescription" Text="控制新任务是否保留拍摄与位置数据" />
+                                </StackPanel>
+                                <atom:CheckBox Grid.Column="1" VerticalAlignment="Center"
+                                               Content="默认移除拍摄信息与位置数据"
+                                               IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Classes="AtomPixSettingsDivider" />
+                    <StackPanel x:Name="ConversionSettingsSection" Spacing="26">
+                        <StackPanel Spacing="5">
+                            <TextBlock Classes="AtomPixSettingsPageTitle" Text="转换配置" />
+                            <TextBlock Classes="AtomPixSettingsDescription"
+                                       Text="设定之后新建格式转换任务使用的默认参数。" />
+                        </StackPanel>
+                        <StackPanel Spacing="18">
+                            <TextBlock Classes="AtomPixSettingsSectionTitle" Text="默认转换" />
+                            <Grid ColumnDefinitions="190,*" ColumnSpacing="28">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="AtomPixSettingsRowTitle" Text="输出格式" />
+                                    <TextBlock Classes="AtomPixSettingsDescription" Text="新建转换任务时预先选择的格式" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="10">
+                                    <atom:Segmented AutomationProperties.Name="默认转换格式"
+                                                    ItemsSource="{Binding ConversionFormats}"
+                                                    SelectedItem="{Binding SelectedConversionFormat, Mode=TwoWay}"
+                                                    IsExpanding="True" />
+                                    <Grid IsVisible="{Binding ConversionUsesQuality}" ColumnDefinitions="*,112" ColumnSpacing="12">
+                                        <atom:Slider Classes="AtomPixInspectorAlignedSlider"
+                                                     AutomationProperties.Name="默认转换质量" Minimum="1" Maximum="100"
+                                                     Value="{Binding ConversionQualitySlider, Mode=TwoWay}" />
+                                        <atom:NumericUpDown Grid.Column="1" AutomationProperties.Name="默认转换质量数值"
+                                                            Width="112" HorizontalAlignment="Right"
+                                                            Minimum="1" Maximum="100" FormatString="0"
+                                                            Value="{Binding ConversionQuality, Mode=TwoWay}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                            <Grid ColumnDefinitions="190,*" ColumnSpacing="28">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="AtomPixSettingsRowTitle" Text="透明区域背景" />
+                                    <TextBlock Classes="AtomPixSettingsDescription" Text="转换为 JPEG 时用于铺设透明像素" />
+                                </StackPanel>
+                                <controls:RgbColorPickerBridge Grid.Column="1"
+                                                               Width="36" Height="36"
+                                                               HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                               HexValue="{Binding BackgroundHex, Mode=TwoWay}" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Classes="AtomPixSettingsDivider" />
+                    <StackPanel x:Name="OutputSettingsSection" Spacing="26">
+                        <StackPanel Spacing="5">
+                            <TextBlock Classes="AtomPixSettingsPageTitle" Text="输出配置" />
+                            <TextBlock Classes="AtomPixSettingsDescription"
+                                       Text="设定之后新建图片处理任务使用的默认输出规则。" />
+                        </StackPanel>
+                        <StackPanel Spacing="18">
+                            <TextBlock Classes="AtomPixSettingsSectionTitle" Text="默认输出" />
+                            <Grid ColumnDefinitions="190,*" ColumnSpacing="28">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="AtomPixSettingsRowTitle" Text="输出位置" />
+                                    <TextBlock Classes="AtomPixSettingsDescription" Text="新建任务默认使用的保存位置" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="10">
+                                    <atom:Segmented AutomationProperties.Name="默认输出位置"
+                                                    ItemsSource="{Binding OutputLocations}"
+                                                    SelectedItem="{Binding SelectedOutputLocation, Mode=TwoWay}"
+                                                    IsExpanding="True" />
+                                    <Border x:Name="SettingsSubfolderContextSurface"
+                                            Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsSubfolderOutput}">
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Classes="AtomPixInspectorCaption" Text="子目录名称" />
+                                            <atom:TextBox Classes="AtomPixOutputInput"
+                                                          AutomationProperties.Name="默认输出子目录"
+                                                          Text="{Binding SubfolderName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          PlaceholderText="AtomPix_Output" />
+                                            <TextBlock Classes="AtomPixInspectorCaption"
+                                                       Text="{Binding SubfolderDestinationHint}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border x:Name="SettingsSameAsInputContextSurface"
+                                            Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsSameAsInputOutput}">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock FontWeight="SemiBold" Text="输出到原图片所在目录" />
+                                            <TextBlock Classes="AtomPixInspectorCaption"
+                                                       Text="同名情况由下方的同名文件策略处理"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border x:Name="SettingsCustomDirectoryContextSurface"
+                                            Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsCustomDirectoryOutput}">
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Classes="AtomPixInspectorCaption" Text="指定输出文件夹" />
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" VerticalAlignment="Center">
+                                                <atom:TextBox Classes="AtomPixOutputInput"
+                                                              AutomationProperties.Name="默认自定义输出目录"
+                                                              VerticalAlignment="Center"
+                                                              Text="{Binding CustomOutputDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              PlaceholderText="尚未选择输出文件夹"
+                                                              IsReadOnly="True" />
+                                                <atom:Button Grid.Column="1" Content="选择目录"
+                                                             AutomationProperties.Name="选择默认输出目录"
+                                                             SizeType="Middle"
+                                                             Height="{atom:SharedTokenResource ControlHeight}"
+                                                             VerticalAlignment="Center"
+                                                             Command="{Binding ChooseOutputDirectoryCommand}" />
+                                            </Grid>
+                                            <TextBlock Classes="AtomPixInspectorCaption"
+                                                       Text="所有图片都将输出到这个固定目录"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                            <Grid ColumnDefinitions="190,*" ColumnSpacing="28">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="AtomPixSettingsRowTitle" Text="文件命名" />
+                                    <TextBlock Classes="AtomPixSettingsDescription" Text="支持 {name} 与 {index} 占位符" />
+                                </StackPanel>
+                                <atom:TextBox Grid.Column="1" Classes="AtomPixOutputInput"
+                                              AutomationProperties.Name="默认文件名格式"
+                                              Text="{Binding FileNamePattern, Mode=TwoWay}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="190,*" ColumnSpacing="28">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Classes="AtomPixSettingsRowTitle" Text="同名文件" />
+                                    <TextBlock Classes="AtomPixSettingsDescription" Text="目标文件已经存在时的默认处理方式" />
+                                </StackPanel>
+                                <atom:Segmented Grid.Column="1" AutomationProperties.Name="默认已有文件处理方式"
+                                                ItemsSource="{Binding OverwritePolicies}"
+                                                SelectedItem="{Binding SelectedOverwritePolicy, Mode=TwoWay}"
+                                                IsExpanding="True" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Border Classes="AtomPixSettingsDivider" />
+
+                    <StackPanel x:Name="AboutSettingsSection" Spacing="26">
+                        <StackPanel Spacing="5">
+                            <TextBlock Classes="AtomPixSettingsPageTitle" Text="关于 AtomPix" />
+                        </StackPanel>
+                        <Border Classes="AtomPixSettingsAboutHero">
+                            <Grid ColumnDefinitions="72,*" ColumnSpacing="18">
+                                <Border Width="64" Height="64" CornerRadius="16"
+                                        Background="White"
+                                        BorderBrush="#24FF4D4F" BorderThickness="1"
+                                        BoxShadow="0 10 24 0 #1A9F1D24">
+                                    <Image Width="50" Height="50"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Source="/Assets/Branding/AtomPix-128.png" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="7" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="AtomPix" FontSize="29" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                        <Border Padding="9,3" CornerRadius="99"
+                                                Background="#16FF4D4F" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding VersionText}" FontSize="12"
+                                                       Foreground="#C72F3A" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="轻巧、专注的图片处理工具"
+                                               FontSize="16" FontWeight="Medium" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="AtomPixSettingsSectionTitle" Text="运行信息" />
+                            <Border Classes="AtomPixSettingsRuntimeSurface">
+                                <StackPanel>
+                                    <Grid Classes="AtomPixSettingsRuntimeRow" ColumnDefinitions="36,132,*" ColumnSpacing="12">
+                                        <ContentControl Width="18" Height="18"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                        Content="{antdicons:AntDesignIconProvider Kind=PictureOutlined}" />
+                                        <TextBlock Grid.Column="1" Classes="AtomPixSettingsRowTitle"
+                                                   Text="图片引擎" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding ImageEngineText}"
+                                                   VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </Grid>
+                                    <Border Classes="AtomPixSettingsDivider" />
+                                    <Grid Classes="AtomPixSettingsRuntimeRow" ColumnDefinitions="36,132,*" ColumnSpacing="12">
+                                        <ContentControl Width="18" Height="18"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                        Content="{antdicons:AntDesignIconProvider Kind=SlidersOutlined}" />
+                                        <TextBlock Grid.Column="1" Classes="AtomPixSettingsRowTitle"
+                                                   Text="桌面框架" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding RuntimeText}"
+                                                   VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </Grid>
+                                    <Border Classes="AtomPixSettingsDivider" />
+                                    <Grid Classes="AtomPixSettingsRuntimeRow" ColumnDefinitions="36,132,*" ColumnSpacing="12">
+                                        <ContentControl Width="18" Height="18"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                        Content="{antdicons:AntDesignIconProvider Kind=SettingOutlined}" />
+                                        <TextBlock Grid.Column="1" Classes="AtomPixSettingsRowTitle"
+                                                   Text="运行平台" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding PlatformText}"
+                                                   VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </atom:ScrollViewer>
+
+            <Border Grid.Row="1" Grid.Column="1" Padding="28,12"
+                    BorderBrush="{DynamicResource AtomPixInspectorDividerBrush}" BorderThickness="0,1,0,0"
+                    Background="White">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+                    <atom:Button Content="恢复默认" AutomationProperties.Name="恢复默认"
+                                 Command="{Binding RestoreDefaultsCommand}" IsVisible="{Binding IsDefaultsSection}" />
+                    <TextBlock Grid.Column="2" Text="有未保存的修改" VerticalAlignment="Center"
+                               Opacity="0.58" IsVisible="{Binding IsDirty}" />
+                    <atom:Button Grid.Column="3" Content="返回" AutomationProperties.Name="返回设置前页面"
+                                 Command="{Binding CloseCommand}" />
+                    <atom:Button Grid.Column="4" Content="保存设置" AutomationProperties.Name="保存设置"
+                                 ButtonType="Primary" Command="{Binding SaveCommand}" />
                 </Grid>
-            </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

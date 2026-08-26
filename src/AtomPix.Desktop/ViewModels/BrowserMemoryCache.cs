@@ -1,45 +1,5 @@
 namespace AtomPix.Desktop.ViewModels;
 
-public sealed record BrowserCacheOptions
-{
-    public BrowserCacheOptions(
-        long previewByteBudget = 128L * 1024 * 1024,
-        int previewEntryLimit = 64,
-        long thumbnailByteBudget = 64L * 1024 * 1024,
-        int thumbnailEntryLimit = 512,
-        int probeEntryLimit = 4096)
-    {
-        if (previewByteBudget <= 0) throw new ArgumentOutOfRangeException(nameof(previewByteBudget));
-        if (previewEntryLimit <= 0) throw new ArgumentOutOfRangeException(nameof(previewEntryLimit));
-        if (thumbnailByteBudget <= 0) throw new ArgumentOutOfRangeException(nameof(thumbnailByteBudget));
-        if (thumbnailEntryLimit <= 0) throw new ArgumentOutOfRangeException(nameof(thumbnailEntryLimit));
-        if (probeEntryLimit <= 0) throw new ArgumentOutOfRangeException(nameof(probeEntryLimit));
-
-        PreviewByteBudget = previewByteBudget;
-        PreviewEntryLimit = previewEntryLimit;
-        ThumbnailByteBudget = thumbnailByteBudget;
-        ThumbnailEntryLimit = thumbnailEntryLimit;
-        ProbeEntryLimit = probeEntryLimit;
-    }
-
-    public long PreviewByteBudget { get; }
-
-    public int PreviewEntryLimit { get; }
-
-    public long ThumbnailByteBudget { get; }
-
-    public int ThumbnailEntryLimit { get; }
-
-    public int ProbeEntryLimit { get; }
-}
-
-public sealed record BrowserCacheSnapshot(
-    int PreviewEntryCount,
-    long PreviewBytes,
-    int RetainedThumbnailCount,
-    long RetainedThumbnailBytes,
-    int ProbeEntryCount);
-
 internal sealed class BoundedLruCache<TKey, TValue>
     where TKey : notnull
 {

@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>AtomUI.Labs.Controls.ImageGallery</id>
+    <version>6.0.8</version>
+    <title>AtomUI Labs ImageGallery Control</title>
+    <authors>Qinware Technologies Ltd.</authors>
+    <license type="file">LICENSE</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <readme>README.nuget.md</readme>
+    <description>An experimental immersive image gallery control for AtomUI applications.</description>
+    <copyright>Copyright (c) Qinware Technologies Ltd. All rights reserved.</copyright>
+    <tags>avalonia AtomUI Labs Image Gallery Image Viewer Desktop Experimental</tags>
+    <repository type="git" url="https://github.com/AtomUI/AtomUI.Labs" commit="18ea3f9dbbf49f8ab1b1cac04962aac616a3b389" />
+    <dependencies>
+      <group targetFramework="net10.0">
+        <dependency id="AtomUI.Core" version="6.0.8" exclude="Build,Analyzers" />
+        <dependency id="Avalonia" version="12.0.5" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework="net8.0">
+        <dependency id="AtomUI.Core" version="6.0.8" exclude="Build,Analyzers" />
+        <dependency id="Avalonia" version="12.0.5" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+</package>
