@@ -1305,3 +1305,25 @@ NativeAOT 实验命令：
 
 仍可见的 Trim 分析警告来自 Built-in COM、AtomUI.Core、Avalonia.DesignerSupport、DynamicData 与 ReactiveUI 依赖链。它们是维持 `TrimMode=partial`、不把 Full Trim/AOT 直接设为正式唯一产物的依据，不能通过全局 `NoWarn` 隐藏。
 
+## 56. 2026-08-27 GitHub 五平台安装器与 Release 基线
+
+本节取代第 51 节中“正式 Release 只生成三个平台便携归档”的旧口径；第 51 节的日常 CI、测试、压力与依赖审计门禁继续有效。
+
+正式 GitHub 仓库为 `https://github.com/AtomUI/AtomPix`，程序集与安装器元数据必须使用该地址；应用 Bundle Identifier 固定为 `net.atomui.atompix`。正式发布只由 `v*` Tag 触发，工作流入口必须再次校验版本满足 `v<major>.<minor>.<patch>` 以及当前脚本支持的可选预发布或构建后缀。本阶段首个目标 Tag 为 `v0.1.0`。
+
+`.github/workflows/ci.yml` 继续承担日常三平台质量门禁、Windows 压力测试和便携包验证，不得退化为 AtomBox 的较小测试集合。`.github/workflows/release.yml` 在完整 `eng/verify.ps1` 门禁通过后，按 AtomBox 已验证的 AtomUITools 安装器链路生成以下正式产物：
+
+| RID | Runner | 正式产物 |
+| --- | --- | --- |
+| `win-x64` | `windows-latest` | 自包含、压缩单文件、Partial Trim ZIP |
+| `osx-x64` | `macos-15-intel` | 已签名 DMG |
+| `osx-arm64` | `macos-latest` | 已签名 DMG |
+| `linux-x64` | `ubuntu-latest` | AppImage |
+| `linux-arm64` | `ubuntu-24.04-arm` | AppImage |
+
+五个平台都必须通过原生 Runner 的 restore、Release 测试、`TrimmedSingleFile` publish 和发布目录启动烟测。Windows 额外运行真实进程 UIA；macOS 在 DMG 挂载后对其中唯一 `.app` 执行 `codesign --verify --deep --strict`；Linux 使用 Xvfb 验证发布入口。每个正式包必须有同名 `.sha256`，Release 汇总 Job 只接受五个包和五个校验文件，数量不符时不得创建不完整 GitHub Release。
+
+macOS/Linux 安装器使用私有 `https://github.com/AtomUI/AtomUITools` 仓库的 `develop` 分支，与 AtomBox 当前发布做法保持一致。仓库必须配置 `ACCESS_TOKEN`；macOS 强制签名并要求 `CERT_P12_BASE64`、`CERT_PASSWORD`、`KEYCHAIN_PASSWORD`、`CERT_IDENTITY`。任一凭据缺失或签名验证失败都必须使发布失败，不允许自动降级为未签名 DMG。当前阶段不包含 Apple notarization、Windows 代码签名或 Linux 包签名。
+
+安装器不得复用 AtomBox 品牌资源。三平台图标采用与 AtomBox 一致的组织和消费方式：Windows 的多分辨率 `AtomPix.ico` 保留在 Desktop `Assets/Branding` 中，并同时作为项目 `ApplicationIcon` 与主窗口 `Icon`；macOS 在 `assets/macos/AtomPix.icns` 提供受版本控制的标准 ICNS；Linux 在 `assets/linux/icons/hicolor/{size}x{size}/apps/atompix.png` 提供 16、32、48、64、128、256、512 七档桌面图标。`assets/source/AtomPix-1024.png` 是安装器图标的主源副本，`eng/generate-platform-icons.ps1` 只从现有 AtomPix 品牌资源可重复生成上述跨平台资产，不产生第二套视觉设计。发布 Runner 必须直接打包仓库内的 ICNS 和 hicolor 资源，不得在 CI 中临时缩放或转换，以避免平台产物与本地审阅资源漂移。`eng/publish.ps1` 与 `eng/smoke-test.ps1` 的正式 RID 集合统一为 `win-x64`、`osx-x64`、`osx-arm64`、`linux-x64`、`linux-arm64`，五个平台继续遵守第 55 节的 Partial Trim、manifest、无 PDB 和自包含约束。
+

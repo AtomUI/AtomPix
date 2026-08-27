@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Installer>
+    <Name>AtomPix</Name>
+    <AssemblyName>AtomPix.Desktop</AssemblyName>
+    <Version>__VERSION__</Version>
+    <AppBundleIdentifier>net.atomui.atompix</AppBundleIdentifier>
+    <Title>AtomPix Installer</Title>
+    <AppIcon>Assets/Images/AtomPix</AppIcon>
+    <Company>AtomUI</Company>
+    <CompanyFullName>AtomUI</CompanyFullName>
+    <CompanyUrl>https://github.com/AtomUI/AtomPix</CompanyUrl>
+    <Copyright>Copyright AtomPix Contributors.</Copyright>
+    <InstallerWindowIcon>AtomPix</InstallerWindowIcon>
+    <InstallerApplicationIcon>AtomPix</InstallerApplicationIcon>
+</Installer>

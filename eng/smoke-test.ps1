@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("win-x64", "linux-x64", "osx-arm64")]
+    [ValidateSet("win-x64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64")]
     [string] $RuntimeIdentifier,
     [ValidateRange(2, 60)]
     [int] $Seconds = 5

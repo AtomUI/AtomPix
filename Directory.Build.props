@@ -9,7 +9,7 @@
     <Company>AtomPix</Company>
     <Authors>AtomPix Contributors</Authors>
     <Copyright>Copyright © AtomPix Contributors</Copyright>
-    <RepositoryUrl>https://github.com/atompix/atompix</RepositoryUrl>
+    <RepositoryUrl>https://github.com/AtomUI/AtomPix</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>

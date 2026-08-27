@@ -153,7 +153,7 @@ try {
     $invokePattern.Invoke()
     Start-Sleep -Milliseconds 350
     if ($process.HasExited) { throw "AtomPix exited while opening settings." }
-    foreach ($name in @("默认配置项", "关于 AtomPix", "保存设置")) {
+    foreach ($name in @("压缩配置", "转换配置", "输出配置", "关于 AtomPix", "保存设置")) {
         $null = Wait-NamedElement -Root $root -Name $name -Deadline $deadline
     }
     Assert-No-BrandLogoTakeover -WindowHandle $handle

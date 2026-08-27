@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("win-x64", "linux-x64", "osx-arm64")]
-    [string[]] $RuntimeIdentifier = @("win-x64", "linux-x64", "osx-arm64"),
+    [ValidateSet("win-x64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64")]
+    [string[]] $RuntimeIdentifier = @("win-x64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64"),
     [ValidatePattern("^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")]
     [string] $Version = "0.1.0",
     [ValidateSet("CompressedSingleFile", "TrimmedSingleFile", "NativeAot")]
