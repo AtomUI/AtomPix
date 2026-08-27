@@ -12,6 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $project = Join-Path $repoRoot "src/AtomPix.Desktop/AtomPix.Desktop.csproj"
+$nugetConfig = Join-Path $repoRoot "NuGet.config"
 $publishDirectoryName = if ($PublishMode -eq "NativeAot") { "publish-nativeaot" } else { "publish" }
 $publishRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts/$publishDirectoryName"))
 $packageRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts/packages"))
@@ -32,6 +33,7 @@ foreach ($rid in $RuntimeIdentifier) {
         "--runtime", $rid,
         "--self-contained", "true",
         "--output", $output,
+        "-p:RestoreConfigFile=$nugetConfig",
         "-p:Version=$Version",
         "-p:DebugType=None",
         "-p:DebugSymbols=false"

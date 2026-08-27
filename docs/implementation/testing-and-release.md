@@ -1327,3 +1327,5 @@ macOS/Linux 安装器使用私有 `https://github.com/AtomUI/AtomUITools` 仓库
 
 安装器不得复用 AtomBox 品牌资源。三平台图标采用与 AtomBox 一致的组织和消费方式：Windows 的多分辨率 `AtomPix.ico` 保留在 Desktop `Assets/Branding` 中，并同时作为项目 `ApplicationIcon` 与主窗口 `Icon`；macOS 在 `assets/macos/AtomPix.icns` 提供受版本控制的标准 ICNS；Linux 在 `assets/linux/icons/hicolor/{size}x{size}/apps/atompix.png` 提供 16、32、48、64、128、256、512 七档桌面图标。`assets/source/AtomPix-1024.png` 是安装器图标的主源副本，`eng/generate-platform-icons.ps1` 只从现有 AtomPix 品牌资源可重复生成上述跨平台资产，不产生第二套视觉设计。发布 Runner 必须直接打包仓库内的 ICNS 和 hicolor 资源，不得在 CI 中临时缩放或转换，以避免平台产物与本地审阅资源漂移。`eng/publish.ps1` 与 `eng/smoke-test.ps1` 的正式 RID 集合统一为 `win-x64`、`osx-x64`、`osx-arm64`、`linux-x64`、`linux-arm64`，五个平台继续遵守第 55 节的 Partial Trim、manifest、无 PDB 和自包含约束。
 
+仓库级 `NuGet.config` 只声明随仓库提交的 `eng/nuget-local` 与 `nuget.org` 两个正式包源。不得把用户目录下的全局包缓存配置成 `fallbackPackageFolders`：全新 GitHub Runner 上该目录可能尚不存在，而 NuGet 会把 fallback 目录当成必须已经存在的包源并以 `NU1301` 终止。全局包缓存的位置和创建由 NuGet 自身管理；CI 可通过临时 `NUGET_PACKAGES` 路径执行冷缓存恢复，以验证构建不依赖开发机缓存。
+

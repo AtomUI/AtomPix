@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $solution = Join-Path $repoRoot "AtomPix.slnx"
+$nugetConfig = Join-Path $repoRoot "NuGet.config"
 $results = Join-Path $repoRoot ".artifacts/test-results"
 New-Item -ItemType Directory -Force -Path $results | Out-Null
 
@@ -22,7 +23,7 @@ function Invoke-Checked([string] $description, [scriptblock] $action) {
 Push-Location $repoRoot
 try {
     if (-not $NoRestore) {
-        Invoke-Checked "Restore" { dotnet restore $solution }
+        Invoke-Checked "Restore" { dotnet restore $solution --configfile $nugetConfig }
     }
     if (-not $SkipBuild) {
         Invoke-Checked "Release build" { dotnet build $solution -c Release --no-restore }

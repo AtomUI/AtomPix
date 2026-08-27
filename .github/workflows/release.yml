@@ -58,7 +58,7 @@ jobs:
       - name: Restore and test
         shell: pwsh
         run: |
-          dotnet restore AtomPix.slnx
+          dotnet restore AtomPix.slnx --configfile NuGet.config
           dotnet test AtomPix.slnx --configuration Release --no-restore
       - name: Publish Windows package
         shell: pwsh
@@ -133,7 +133,7 @@ jobs:
       - name: Restore and test
         shell: pwsh
         run: |
-          dotnet restore AtomPix.slnx
+          dotnet restore AtomPix.slnx --configfile NuGet.config
           dotnet test AtomPix.slnx --configuration Release --no-restore
       - name: Build AtomUITools
         shell: pwsh
@@ -258,7 +258,7 @@ jobs:
       - name: Restore and test
         shell: pwsh
         run: |
-          dotnet restore AtomPix.slnx
+          dotnet restore AtomPix.slnx --configfile NuGet.config
           dotnet test AtomPix.slnx --configuration Release --no-restore
       - name: Build AtomUITools
         shell: pwsh
