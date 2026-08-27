@@ -9,7 +9,8 @@ internal static class JsonFileWriter
         string path,
         T value,
         JsonTypeInfo<T> typeInfo,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        JsonFileCommit? commit = null)
     {
         var directory = Path.GetDirectoryName(path);
         if (string.IsNullOrWhiteSpace(directory))
@@ -28,13 +29,17 @@ internal static class JsonFileWriter
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            File.Move(tempPath, path, overwrite: true);
+            (commit ?? Commit)(tempPath, path);
         }
         finally
         {
             TryDeleteTemporaryFile(tempPath);
         }
     }
+
+    private static void Commit(string tempPath, string destinationPath) =>
+        File.Move(tempPath, destinationPath, overwrite: true);
+
     private static void TryDeleteTemporaryFile(string tempPath)
     {
         try
@@ -52,4 +57,6 @@ internal static class JsonFileWriter
         }
     }
 }
+
+internal delegate void JsonFileCommit(string tempPath, string destinationPath);
 

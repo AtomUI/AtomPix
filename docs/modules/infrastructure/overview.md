@@ -465,6 +465,8 @@ AtomPix 第一阶段本地 JSON 存储采用差异化容错策略。
 
 临时文件清理失败不应覆盖原始保存错误。
 
+跨平台测试不得依赖 `FileShare.None` 阻止目标文件替换：Windows 使用强制共享锁，而 macOS/Linux 允许重命名覆盖仍被打开的文件。Infrastructure 测试通过内部 `JsonFileCommit` 边界在“临时文件已写入、原子提交尚未执行”时确定性注入 `IOException`，并统一验证错误码、原文件保留和临时文件清理；该边界不进入公开 API，也不改变生产提交实现。
+
 ## 14. Infrastructure DI 注册补充
 
 `AtomPix.Infrastructure.DependencyInjection` 提供 `AddAtomPixInfrastructure()`。

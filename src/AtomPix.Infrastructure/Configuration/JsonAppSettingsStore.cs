@@ -14,10 +14,16 @@ using AtomPix.Core.Settings;
 public sealed class JsonAppSettingsStore : IAppSettingsStore
 {
     private readonly IAppPathProvider _pathProvider;
+    private readonly JsonFileCommit? _commit;
 
-    public JsonAppSettingsStore(IAppPathProvider pathProvider)
+    public JsonAppSettingsStore(IAppPathProvider pathProvider) : this(pathProvider, null)
+    {
+    }
+
+    internal JsonAppSettingsStore(IAppPathProvider pathProvider, JsonFileCommit? commit)
     {
         _pathProvider = pathProvider ?? throw new ArgumentNullException(nameof(pathProvider));
+        _commit = commit;
     }
 
     private string SettingsPath => Path.Combine(_pathProvider.AppDataDirectory.Value, "settings.json");
@@ -80,7 +86,8 @@ public sealed class JsonAppSettingsStore : IAppSettingsStore
                     SettingsPath,
                     persisted,
                     AtomPixJsonOptions.Context.PersistedAppSettings,
-                    cancellationToken)
+                    cancellationToken,
+                    _commit)
                 .ConfigureAwait(false);
             return OperationResult.Success();
         }

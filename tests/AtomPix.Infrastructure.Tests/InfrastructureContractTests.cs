@@ -268,16 +268,17 @@ public sealed class InfrastructureContractTests : IDisposable
     [Fact]
     public async Task Store_save_failure_preserves_existing_files_and_cleans_temporary_files()
     {
-        var settingsStore = new JsonAppSettingsStore(_paths);
-        var recentStore = new JsonRecentItemsStore(_paths);
+        var initialSettingsStore = new JsonAppSettingsStore(_paths);
+        var initialRecentStore = new JsonRecentItemsStore(_paths);
         var recent = new RecentItem(new LocalPath("C:\\tmp\\old.jpg"), RecentItemKind.File, DateTimeOffset.UtcNow);
-        Assert.True((await settingsStore.SaveAsync(AppSettings.Default, CancellationToken.None)).Succeeded);
-        Assert.True((await recentStore.SaveAsync([recent], CancellationToken.None)).Succeeded);
+        Assert.True((await initialSettingsStore.SaveAsync(AppSettings.Default, CancellationToken.None)).Succeeded);
+        Assert.True((await initialRecentStore.SaveAsync([recent], CancellationToken.None)).Succeeded);
         var originalSettings = await File.ReadAllTextAsync(SettingsPath());
         var originalRecent = await File.ReadAllTextAsync(RecentItemsPath());
 
-        var settingsLock = new FileStream(SettingsPath(), FileMode.Open, FileAccess.Read, FileShare.None);
-        var recentLock = new FileStream(RecentItemsPath(), FileMode.Open, FileAccess.Read, FileShare.None);
+        static void RejectCommit(string _, string __) => throw new IOException("Injected atomic commit failure.");
+        var settingsStore = new JsonAppSettingsStore(_paths, RejectCommit);
+        var recentStore = new JsonRecentItemsStore(_paths, RejectCommit);
         var settingsSave = await settingsStore.SaveAsync(new AppSettings(
             AppSettings.Default.DefaultCompressionProfile,
             AppSettings.Default.DefaultConversionProfile,
@@ -292,8 +293,6 @@ public sealed class InfrastructureContractTests : IDisposable
         Assert.Equal(AtomPixErrorCode.SettingsSaveFailed, settingsSave.Error!.Code);
         Assert.False(recentSave.Succeeded);
         Assert.Equal(AtomPixErrorCode.RecentItemsSaveFailed, recentSave.Error!.Code);
-        settingsLock.Dispose();
-        recentLock.Dispose();
         Assert.Equal(originalSettings, await File.ReadAllTextAsync(SettingsPath()));
         Assert.Equal(originalRecent, await File.ReadAllTextAsync(RecentItemsPath()));
         Assert.Empty(Directory.EnumerateFiles(_paths.AppDataDirectory.Value, ".*.tmp"));

@@ -10,10 +10,16 @@ using AtomPix.Core.Settings;
 public sealed class JsonRecentItemsStore : IRecentItemsStore
 {
     private readonly IAppPathProvider _pathProvider;
+    private readonly JsonFileCommit? _commit;
 
-    public JsonRecentItemsStore(IAppPathProvider pathProvider)
+    public JsonRecentItemsStore(IAppPathProvider pathProvider) : this(pathProvider, null)
+    {
+    }
+
+    internal JsonRecentItemsStore(IAppPathProvider pathProvider, JsonFileCommit? commit)
     {
         _pathProvider = pathProvider ?? throw new ArgumentNullException(nameof(pathProvider));
+        _commit = commit;
     }
 
     private string RecentItemsPath => Path.Combine(_pathProvider.AppDataDirectory.Value, "recent-items.json");
@@ -58,7 +64,8 @@ public sealed class JsonRecentItemsStore : IRecentItemsStore
                     RecentItemsPath,
                     items.ToList(),
                     AtomPixJsonOptions.Context.ListRecentItem,
-                    cancellationToken)
+                    cancellationToken,
+                    _commit)
                 .ConfigureAwait(false);
             return OperationResult.Success();
         }
