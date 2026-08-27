@@ -711,13 +711,16 @@ public sealed class DesktopUiAutomationTests
                 Assert.Equal(sectionButtons[0].Bounds.Width, button.Bounds.Width, 3);
             });
 
+            var settingsScrollViewer = view.FindControl<AtomUI.Desktop.Controls.ScrollViewer>("SettingsScrollViewer")!;
             settings.SelectSectionCommand.Execute(SettingsSection.About);
-            await Task.Delay(260);
+            await WaitUntilAsync(() =>
+                settings.SelectedSection == SettingsSection.About
+                && settingsScrollViewer.Offset.Y > 0);
             Assert.True(view.FindControl<StackPanel>("CompressionSettingsSection")!.IsVisible);
             Assert.True(view.FindControl<StackPanel>("ConversionSettingsSection")!.IsVisible);
             Assert.True(view.FindControl<StackPanel>("OutputSettingsSection")!.IsVisible);
             Assert.True(view.FindControl<StackPanel>("AboutSettingsSection")!.IsVisible);
-            Assert.True(view.FindControl<AtomUI.Desktop.Controls.ScrollViewer>("SettingsScrollViewer")!.Offset.Y > 0);
+            Assert.True(settingsScrollViewer.Offset.Y > 0);
             var restoreButton = view.GetLogicalDescendants()
                 .OfType<AtomUI.Desktop.Controls.Button>()
                 .Single(button => AutomationProperties.GetName(button) == "恢复默认");

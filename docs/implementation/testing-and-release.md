@@ -1329,3 +1329,5 @@ macOS/Linux 安装器使用私有 `https://github.com/AtomUI/AtomUITools` 仓库
 
 仓库级 `NuGet.config` 只声明随仓库提交的 `eng/nuget-local` 与 `nuget.org` 两个正式包源。不得把用户目录下的全局包缓存配置成 `fallbackPackageFolders`：全新 GitHub Runner 上该目录可能尚不存在，而 NuGet 会把 fallback 目录当成必须已经存在的包源并以 `NU1301` 终止。全局包缓存的位置和创建由 NuGet 自身管理；CI 可通过临时 `NUGET_PACKAGES` 路径执行冷缓存恢复，以验证构建不依赖开发机缓存。
 
+Headless UI 自动化不得以“动画时长加少量余量”的固定 `Task.Delay` 作为完成条件。GitHub macOS/Linux Runner 会并发执行多个测试程序集，调度延迟可能超过动画余量。涉及滚动、导航和异步布局的断言必须等待可观测的最终状态，并在等待期间推进 Avalonia UI 调度队列；超时只承担防止永久等待的职责，不作为正常同步机制。
+
