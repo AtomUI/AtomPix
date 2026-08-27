@@ -43,7 +43,12 @@ jobs:
 
       - name: Full release gate
         shell: pwsh
-        run: ./eng/verify.ps1
+        run: ./eng/verify.ps1 -SkipAudit
+
+      - name: NuGet vulnerability audit
+        timeout-minutes: 5
+        shell: pwsh
+        run: dotnet list AtomPix.slnx package --vulnerable --include-transitive --no-restore
 
   build-windows:
     name: Build AtomPix-win-x64

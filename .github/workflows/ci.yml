@@ -17,6 +17,7 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -25,9 +26,14 @@ jobs:
       - name: Restore
         shell: pwsh
         run: dotnet restore AtomPix.slnx
-      - name: Build, functional tests, UI automation, audit
+      - name: Build, functional tests and UI automation
         shell: pwsh
-        run: ./eng/verify.ps1 -NoRestore -SkipStress
+        run: ./eng/verify.ps1 -NoRestore -SkipStress -SkipAudit
+      - name: NuGet vulnerability audit
+        if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 5
+        shell: pwsh
+        run: dotnet list AtomPix.slnx package --vulnerable --include-transitive --no-restore
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -39,6 +45,7 @@ jobs:
   stress:
     name: Stress and virtualization
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
