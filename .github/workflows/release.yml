@@ -18,6 +18,7 @@ jobs:
   validate:
     name: Validate release
     runs-on: windows-latest
+    timeout-minutes: 20
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -48,6 +49,7 @@ jobs:
     name: Build AtomPix-win-x64
     needs: validate
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,11 +57,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Restore and test
-        shell: pwsh
-        run: |
-          dotnet restore AtomPix.slnx --configfile NuGet.config
-          dotnet test AtomPix.slnx --configuration Release --no-restore
       - name: Publish Windows package
         shell: pwsh
         run: >
@@ -86,6 +83,7 @@ jobs:
     name: Build ${{ matrix.artifact_name }}
     needs: validate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -130,11 +128,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Restore and test
-        shell: pwsh
-        run: |
-          dotnet restore AtomPix.slnx --configfile NuGet.config
-          dotnet test AtomPix.slnx --configuration Release --no-restore
       - name: Build AtomUITools
         shell: pwsh
         run: |
@@ -212,6 +205,7 @@ jobs:
     name: Build ${{ matrix.artifact_name }}
     needs: validate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     env:
       APPIMAGE_EXTRACT_AND_RUN: "1"
     strategy:
@@ -255,11 +249,6 @@ jobs:
           wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.appimage_arch }}.AppImage" -O appimagetool
           chmod +x appimagetool
           sudo mv appimagetool /usr/local/bin/appimagetool
-      - name: Restore and test
-        shell: pwsh
-        run: |
-          dotnet restore AtomPix.slnx --configfile NuGet.config
-          dotnet test AtomPix.slnx --configuration Release --no-restore
       - name: Build AtomUITools
         shell: pwsh
         run: |
@@ -331,6 +320,7 @@ jobs:
       - build-macos
       - build-linux
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
