@@ -784,7 +784,7 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 
 当前独立 Core / Workflow / Magick Resize 契约、批量逐图解析、Desktop Pixel / Percentage 控件、状态投影和 ViewModel 到真实 Workflow 的执行测试已经实现；真实窗口多 DPI 与键盘端到端验收仍是发布门禁。
 
-- Core：覆盖 Pixel 单边、双边保持比例、非保持比例、整数与小数百分比，以及双边最小约束向下取整。
+- Core：覆盖 Pixel 单边、双边保持比例、非保持比例、整数与小数百分比；用非整除比例验证单边中点取整和双边精确边界，禁止有限精度缩放导致少一个像素。
 - Imaging.Abstractions：覆盖 `ImageResizeRequest`、`ImageResizeResult`、`ImageResizeCapabilities` 和 `SameFormatEncodingPolicy` 的有效与非法状态。
 - Imaging.Magick：覆盖 JPEG/PNG/WebP 保持原格式、实际尺寸严格等于目标、EXIF 方向后的逻辑尺寸、元数据策略、有损质量、无损格式忽略质量、多帧拒绝与取消。
 - Workflows：覆盖创建 Job 前的输入、动画、格式和极端尺寸拒绝；Skip、运行前取消、运行中取消及处理失败的合法状态迁移。
@@ -812,14 +812,14 @@ dotnet publish src/AtomPix.Desktop/AtomPix.Desktop.csproj -c Release -r win-x64 
 当前 Batch Resize 共享参数、逐图尺寸解析、父子 Job、最终汇总、Desktop 表单、逐行预计尺寸和运行结果投影均已实现；10000 项 AtomUI ListView 虚拟化已在第 51 节进入压力门禁。
 
 - 请求快照：输入顺序、共享 `ResizePolicy`、`OutputPolicy` 与 `SameFormatEncodingPolicy` 在批次接受时冻结，运行中不能被 UI 或设置修改。
-- 共享规则：覆盖 Percentage、保持比例单边、保持比例双边最大约束，以及不保持比例的统一确定 Width / Height。
+- 共享规则：覆盖 Percentage、保持比例时共享最后编辑轴及该轴目标值，以及不保持比例的统一确定 Width / Height；Core 双边最大边界作为独立契约测试，不由当前联动 UI 构造。
 - 混合尺寸：同一共享规则应用到横图、竖图和方图时，每项 TargetSize 必须由自己的逻辑 InputSize 解析；保持比例场景不得误用第一张图片的目标尺寸。
 - 无逐项覆盖：请求和执行计划中不存在单项 ResizePolicy；不同规则必须形成不同批次。
 - 逐项结果：Probe 前失败、策略解析失败、能力/路径失败、Skipped、处理失败、取消和成功分别满足可空字段矩阵。
 - 结果对齐：`BatchResizeResult.ItemResults` 与 `BatchResult.Items` 数量、顺序和 JobId 一致；尚未开始的 Pending 项不生成结果。
 - 成功校验：每个成功项的实际格式保持不变，`ActualOutputSize` 严格等于该项自己的 `TargetSize`。
 - 批量语义：单项失败继续、输出冲突 Skip、运行中取消、公共输出位置失效 Abort、最终进度与终态结果一致。
-- Desktop：默认保持比例；双边保持比例显示最大宽高语义；关闭保持比例显示持续变形警告；逐行预计尺寸随输入或共享参数变化重算。
+- Desktop：默认保持比例且默认 Width 锚点；真实 `NumericUpDown` 输入与增减按钮都更新最后编辑轴、联动值和预计尺寸；单张/批量草稿往返保留锚点；关闭保持比例显示持续变形警告。必须覆盖 `2604 × 2084` 输入、Width `751` 得到 `751 × 601` 的回归场景，并断言正式 Workflow 请求与 UI 预计一致。
 
 上述目标契约实现并通过后，才可把 Batch Resize 标记为代码层完成。
 
