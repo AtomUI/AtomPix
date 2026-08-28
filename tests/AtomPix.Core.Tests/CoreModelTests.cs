@@ -243,6 +243,24 @@ public sealed class CoreModelTests
     }
 
     [Fact]
+    public void Pixel_resize_uses_exact_integer_ratios_for_non_divisible_dimensions()
+    {
+        var input = new ImageSize(2604, 2084);
+
+        Assert.Equal(new ResolvedResizeSize(751, 601), new PixelResizePolicy(751, null, true).Resolve(input));
+        Assert.Equal(new ResolvedResizeSize(751, 601), new PixelResizePolicy(null, 601, true).Resolve(input));
+        Assert.Equal(new ResolvedResizeSize(750, 601), new PixelResizePolicy(751, 601, true).Resolve(input));
+    }
+
+    [Fact]
+    public void Pixel_resize_rounds_single_dependent_dimension_away_from_midpoint()
+    {
+        Assert.Equal(
+            new ResolvedResizeSize(1, 2),
+            new PixelResizePolicy(1, null, true).Resolve(new ImageSize(2, 3)));
+    }
+
+    [Fact]
     public void Pixel_resize_can_prevent_upscaling_with_aspect_and_independent_axes()
     {
         var input = new ImageSize(800, 600);

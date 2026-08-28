@@ -437,6 +437,15 @@ public sealed class DesktopUiAutomationTests
             var heightInput = Assert.IsType<AtomUI.Desktop.Controls.NumericUpDown>(view.FindControl<Control>("PixelHeightInput"));
             Assert.Equal("0", widthInput.FormatString);
             Assert.Equal("0", heightInput.FormatString);
+            viewModel.PixelWidth = 750;
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var increaseButton = Assert.Single(
+                widthInput.GetVisualDescendants().OfType<AtomUI.Desktop.Controls.IconButton>(),
+                button => button.Name == "PART_IncreaseButton");
+            increaseButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Equal(751, viewModel.PixelWidth);
+            Assert.Equal(PixelDimensionAnchor.Width, viewModel.PixelAnchor);
             var aspect = Assert.IsType<AtomUI.Desktop.Controls.CheckBox>(view.FindControl<Control>("MaintainAspectRatioCheckBox"));
             var prevent = Assert.IsType<AtomUI.Desktop.Controls.CheckBox>(view.FindControl<Control>("PreventUpscalingCheckBox"));
             Assert.Equal("保持宽高比", aspect.Content);

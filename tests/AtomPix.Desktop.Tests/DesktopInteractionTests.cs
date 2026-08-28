@@ -436,7 +436,7 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Resize_editor_uses_smaller_pixel_constraint_and_percentage_rules()
+    public async Task Resize_editor_uses_last_edited_pixel_dimension_and_percentage_rules()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-draft.jpg"));
         var processor = new TestImageProcessor(path);
@@ -465,7 +465,7 @@ public sealed class DesktopInteractionTests
     public async Task Resize_editor_links_pixel_dimensions_only_while_aspect_ratio_is_enabled()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-linked-pixels.jpg"));
-        var processor = new TestImageProcessor(path, width: 1200, height: 800);
+        var processor = new TestImageProcessor(path, width: 2604, height: 2084);
         using var viewModel = CreateResizeEditor(
             new TestPicker(DesktopSelectionResult.Canceled()),
             processor,
@@ -473,15 +473,99 @@ public sealed class DesktopInteractionTests
             new DesktopNavigationCoordinator());
         await viewModel.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
 
-        viewModel.PixelWidth = 600;
-        Assert.Equal(400, viewModel.PixelHeight);
+        viewModel.PixelWidth = 751;
+        Assert.Equal(601, viewModel.PixelHeight);
+        Assert.Equal(PixelDimensionAnchor.Width, viewModel.PixelAnchor);
+        Assert.Equal("751 × 601 px", viewModel.EstimatedSize);
 
-        viewModel.PixelHeight = 200;
-        Assert.Equal(300, viewModel.PixelWidth);
+        viewModel.PixelHeight = 500;
+        Assert.Equal(625, viewModel.PixelWidth);
+        Assert.Equal(PixelDimensionAnchor.Height, viewModel.PixelAnchor);
+        Assert.Equal("625 × 500 px", viewModel.EstimatedSize);
 
         viewModel.MaintainAspectRatio = false;
         viewModel.PixelWidth = 500;
-        Assert.Equal(200, viewModel.PixelHeight);
+        Assert.Equal(500, viewModel.PixelHeight);
+    }
+
+    [Fact]
+    public async Task Resize_editor_executes_the_same_exact_target_that_it_estimates()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-exact-target.jpg"));
+        var processor = new TestImageProcessor(path, width: 2604, height: 2084);
+        using var viewModel = CreateResizeEditor(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            new TestFileSystem([path]),
+            new DesktopNavigationCoordinator());
+        await viewModel.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+
+        viewModel.PixelWidth = 751;
+        Assert.Equal("751 × 601 px", viewModel.EstimatedSize);
+
+        await viewModel.StartCommand.ExecuteAsync();
+
+        Assert.Equal(new ResolvedResizeSize(751, 601), processor.LastResizeRequest!.TargetSize);
+    }
+
+    [Fact]
+    public async Task Resize_editor_preserves_height_anchor_when_the_current_gallery_item_changes()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-anchor-first.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-anchor-second.jpg"));
+        var processor = new TestImageProcessor(first, width: 2604, height: 2084);
+        using var viewModel = CreateResizeEditor(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            new TestFileSystem([first, second]),
+            new DesktopNavigationCoordinator());
+        await viewModel.LoadAsync(new SingleImageNavigationContext(first, processor.Probe));
+        viewModel.PixelHeight = 601;
+
+        var firstProbe = processor.Probe;
+        var secondProbe = new ImageProbeResult(
+            second,
+            firstProbe.Format,
+            1000,
+            500,
+            firstProbe.FileSizeBytes,
+            firstProbe.HasAlphaChannel,
+            firstProbe.HasTransparency,
+            firstProbe.IsAnimated,
+            firstProbe.FrameCount,
+            firstProbe.HasMetadata,
+            firstProbe.HasColorProfile);
+        await viewModel.SynchronizeInputAsync(new SingleImageNavigationContext(second, secondProbe));
+
+        Assert.Equal(PixelDimensionAnchor.Height, viewModel.PixelAnchor);
+        Assert.Equal(1202, viewModel.PixelWidth);
+        Assert.Equal(601, viewModel.PixelHeight);
+        Assert.Equal("1202 × 601 px", viewModel.EstimatedSize);
+    }
+
+    [Fact]
+    public async Task Resize_editor_applies_a_batch_draft_atomically_without_changing_its_anchor()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-apply-batch-draft.jpg"));
+        var processor = new TestImageProcessor(path, width: 2604, height: 2084);
+        using var viewModel = CreateResizeEditor(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            new TestFileSystem([path]),
+            new DesktopNavigationCoordinator());
+        await viewModel.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+
+        viewModel.ApplyResizeDraft(
+            ResizeDraftMode.Pixel,
+            width: 751,
+            height: 601,
+            anchor: PixelDimensionAnchor.Height,
+            maintainAspectRatio: true,
+            preventUpscaling: false,
+            percentage: 50);
+
+        Assert.Equal(PixelDimensionAnchor.Height, viewModel.PixelAnchor);
+        Assert.Equal("751 × 601 px", viewModel.EstimatedSize);
     }
 
     [Fact]
@@ -1181,6 +1265,29 @@ public sealed class DesktopInteractionTests
 
         Assert.True(batch.PreventUpscaling);
         Assert.Equal("800 × 600", batch.Items[0].EstimatedSize);
+    }
+
+    [Fact]
+    public async Task Resize_batch_draft_preserves_the_last_edited_dimension_anchor()
+    {
+        var path = new LocalPath(Path.Combine(Path.GetTempPath(), "resize-height-anchor.jpg"));
+        var processor = new TestImageProcessor(path, width: 2604, height: 2084);
+        var fileSystem = new TestFileSystem([path]);
+        using var editor = CreateResizeEditor(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            fileSystem,
+            new DesktopNavigationCoordinator());
+        await editor.LoadAsync(new SingleImageNavigationContext(path, processor.Probe));
+        editor.PixelHeight = 601;
+        var batch = CreateBatch(new TestPicker(DesktopSelectionResult.Canceled()), processor, fileSystem);
+
+        Assert.True(ShellViewModel.TryCaptureBatchDraft(editor, batch, out var applyDraft));
+        await batch.PrepareAsync(BatchTaskKind.Resize, [path]);
+        applyDraft!();
+
+        Assert.Equal(PixelDimensionAnchor.Height, batch.PixelAnchor);
+        Assert.Equal("751 × 601", batch.Items[0].EstimatedSize);
     }
 
     [Fact]
