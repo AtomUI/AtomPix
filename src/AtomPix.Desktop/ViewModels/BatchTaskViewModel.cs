@@ -186,6 +186,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     private DesktopChoiceOption<ResizeDraftMode> _selectedResizeMode;
     private decimal? _pixelWidth;
     private decimal? _pixelHeight;
+    private PixelDimensionAnchor _pixelAnchor = PixelDimensionAnchor.Width;
     private bool _maintainAspectRatio = true;
     private bool _preventUpscaling;
     private decimal _percentage = 50;
@@ -309,8 +310,9 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     public string BackgroundHex { get => _backgroundHex; set { if (SetProperty(ref _backgroundHex, value ?? string.Empty)) NotifyDraft(); } }
     public bool RemoveMetadata { get => _removeMetadata; set { if (SetProperty(ref _removeMetadata, value)) NotifyDraft(); } }
     public DesktopChoiceOption<ResizeDraftMode> SelectedResizeMode { get => _selectedResizeMode; set { if (value is not null && SetProperty(ref _selectedResizeMode, value)) NotifyDraft(); } }
-    public decimal? PixelWidth { get => _pixelWidth; set { if (SetProperty(ref _pixelWidth, value)) NotifyDraft(); } }
-    public decimal? PixelHeight { get => _pixelHeight; set { if (SetProperty(ref _pixelHeight, value)) NotifyDraft(); } }
+    public decimal? PixelWidth { get => _pixelWidth; set { if (SetProperty(ref _pixelWidth, value)) { _pixelAnchor = PixelDimensionAnchor.Width; OnPropertyChanged(nameof(PixelAnchor)); NotifyDraft(); } } }
+    public decimal? PixelHeight { get => _pixelHeight; set { if (SetProperty(ref _pixelHeight, value)) { _pixelAnchor = PixelDimensionAnchor.Height; OnPropertyChanged(nameof(PixelAnchor)); NotifyDraft(); } } }
+    public PixelDimensionAnchor PixelAnchor => _pixelAnchor;
     public bool MaintainAspectRatio { get => _maintainAspectRatio; set { if (SetProperty(ref _maintainAspectRatio, value)) NotifyDraft(); } }
     public bool PreventUpscaling { get => _preventUpscaling; set { if (SetProperty(ref _preventUpscaling, value)) NotifyDraft(); } }
     public decimal Percentage { get => _percentage; set { if (SetProperty(ref _percentage, value)) NotifyDraft(); } }
@@ -479,6 +481,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         ResizeDraftMode mode,
         decimal? width,
         decimal? height,
+        PixelDimensionAnchor anchor,
         bool maintainAspectRatio,
         bool preventUpscaling,
         decimal percentage,
@@ -487,11 +490,13 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     {
         SelectedTask = TaskKinds.First(option => option.Value == BatchTaskKind.Resize);
         SelectedResizeMode = ResizeModes.First(option => option.Value == mode);
-        PixelWidth = width;
-        PixelHeight = height;
-        MaintainAspectRatio = maintainAspectRatio;
-        PreventUpscaling = preventUpscaling;
-        Percentage = percentage;
+        SetProperty(ref _pixelWidth, width, nameof(PixelWidth));
+        SetProperty(ref _pixelHeight, height, nameof(PixelHeight));
+        _pixelAnchor = anchor;
+        OnPropertyChanged(nameof(PixelAnchor));
+        SetProperty(ref _maintainAspectRatio, maintainAspectRatio, nameof(MaintainAspectRatio));
+        SetProperty(ref _preventUpscaling, preventUpscaling, nameof(PreventUpscaling));
+        SetProperty(ref _percentage, percentage, nameof(Percentage));
         _sameFormatEncoding = encodingPolicy;
         Output.Apply(outputPolicy);
         NotifyDraft();
@@ -787,6 +792,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
                 _selectedResizeMode = ResizeModes.First(option => option.Value == ResizeDraftMode.Pixel);
                 _pixelWidth = pixel.Width;
                 _pixelHeight = pixel.Height;
+                _pixelAnchor = pixel.Width is not null ? PixelDimensionAnchor.Width : PixelDimensionAnchor.Height;
                 _maintainAspectRatio = pixel.MaintainAspectRatio;
                 _preventUpscaling = pixel.PreventUpscaling;
                 break;
@@ -954,7 +960,11 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
 
     private ResizePolicy BuildResizePolicy() => SelectedResizeMode.Value switch
     {
-        ResizeDraftMode.Pixel => new PixelResizePolicy(ToOptionalPositiveInteger(PixelWidth), ToOptionalPositiveInteger(PixelHeight), MaintainAspectRatio, PreventUpscaling),
+        ResizeDraftMode.Pixel => new PixelResizePolicy(
+            MaintainAspectRatio && PixelAnchor == PixelDimensionAnchor.Height ? null : ToOptionalPositiveInteger(PixelWidth),
+            MaintainAspectRatio && PixelAnchor == PixelDimensionAnchor.Width ? null : ToOptionalPositiveInteger(PixelHeight),
+            MaintainAspectRatio,
+            PreventUpscaling),
         ResizeDraftMode.Percentage => new PercentageResizePolicy(Percentage),
         _ => throw new ArgumentOutOfRangeException()
     };

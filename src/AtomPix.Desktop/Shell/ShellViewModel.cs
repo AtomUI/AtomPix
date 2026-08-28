@@ -528,6 +528,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 var resizeMode = vm.SelectedMode.Value;
                 var pixelWidth = vm.PixelWidth;
                 var pixelHeight = vm.PixelHeight;
+                var pixelAnchor = vm.PixelAnchor;
                 var maintainAspectRatio = vm.MaintainAspectRatio;
                 var preventUpscaling = vm.PreventUpscaling;
                 var percentage = vm.Percentage;
@@ -535,6 +536,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                     resizeMode,
                     pixelWidth,
                     pixelHeight,
+                    pixelAnchor,
                     maintainAspectRatio,
                     preventUpscaling,
                     percentage,
@@ -565,12 +567,14 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 if (_batch.Output.TryBuild(out var conversionOutput, out _) && conversionOutput is not null) vm.Output.Apply(conversionOutput);
                 break;
             case ResizeEditorViewModel vm:
-                vm.SelectedMode = vm.ResizeModes.First(option => option.Value == _batch.SelectedResizeMode.Value);
-                vm.PixelWidth = _batch.PixelWidth;
-                vm.PixelHeight = _batch.PixelHeight;
-                vm.MaintainAspectRatio = _batch.MaintainAspectRatio;
-                vm.PreventUpscaling = _batch.PreventUpscaling;
-                vm.Percentage = _batch.Percentage;
+                vm.ApplyResizeDraft(
+                    _batch.SelectedResizeMode.Value,
+                    _batch.PixelWidth,
+                    _batch.PixelHeight,
+                    _batch.PixelAnchor,
+                    _batch.MaintainAspectRatio,
+                    _batch.PreventUpscaling,
+                    _batch.Percentage);
                 if (_batch.Output.TryBuild(out var resizeOutput, out _) && resizeOutput is not null) vm.Output.Apply(resizeOutput);
                 break;
         }

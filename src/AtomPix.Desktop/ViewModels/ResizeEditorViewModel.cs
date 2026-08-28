@@ -17,6 +17,12 @@ public enum ResizeDraftMode
     Percentage
 }
 
+public enum PixelDimensionAnchor
+{
+    Width,
+    Height
+}
+
 public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
@@ -39,6 +45,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
     private DesktopChoiceOption<ResizeDraftMode> _selectedMode;
     private decimal? _pixelWidth;
     private decimal? _pixelHeight;
+    private PixelDimensionAnchor _pixelAnchor = PixelDimensionAnchor.Width;
     private bool _maintainAspectRatio = true;
     private bool _preventUpscaling;
     private decimal _percentage = 50;
@@ -133,7 +140,14 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         get => _pixelWidth;
         set
         {
-            if (SetProperty(ref _pixelWidth, value))
+            var anchorChanged = !_isSynchronizingPixelDimensions && _pixelAnchor != PixelDimensionAnchor.Width;
+            if (anchorChanged)
+            {
+                _pixelAnchor = PixelDimensionAnchor.Width;
+                OnPropertyChanged(nameof(PixelAnchor));
+            }
+
+            if (SetProperty(ref _pixelWidth, value) || anchorChanged)
             {
                 SynchronizeHeightFromWidth();
                 MarkDraftChanged();
@@ -147,7 +161,14 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         get => _pixelHeight;
         set
         {
-            if (SetProperty(ref _pixelHeight, value))
+            var anchorChanged = !_isSynchronizingPixelDimensions && _pixelAnchor != PixelDimensionAnchor.Height;
+            if (anchorChanged)
+            {
+                _pixelAnchor = PixelDimensionAnchor.Height;
+                OnPropertyChanged(nameof(PixelAnchor));
+            }
+
+            if (SetProperty(ref _pixelHeight, value) || anchorChanged)
             {
                 SynchronizeWidthFromHeight();
                 MarkDraftChanged();
@@ -165,6 +186,8 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
             {
                 if (value)
                 {
+                    _pixelAnchor = PixelDimensionAnchor.Width;
+                    OnPropertyChanged(nameof(PixelAnchor));
                     SynchronizeHeightFromWidth();
                 }
                 MarkDraftChanged();
@@ -185,6 +208,8 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
             }
         }
     }
+
+    public PixelDimensionAnchor PixelAnchor => _pixelAnchor;
 
     public decimal Percentage
     {
@@ -353,9 +378,19 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         _probe = context.Probe;
         if (!preserveDraft)
         {
-            PixelWidth = context.Probe.Width;
-            PixelHeight = context.Probe.Height;
+            SetPixelDimensions(context.Probe.Width, context.Probe.Height, PixelDimensionAnchor.Width);
             Percentage = 50;
+        }
+        else if (MaintainAspectRatio)
+        {
+            if (PixelAnchor == PixelDimensionAnchor.Width)
+            {
+                SynchronizeHeightFromWidth();
+            }
+            else
+            {
+                SynchronizeWidthFromHeight();
+            }
         }
         _lastResult = null;
         ResultFeedback.Dismiss();
@@ -575,8 +610,8 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
             policy = SelectedMode.Value switch
             {
                 ResizeDraftMode.Pixel => new PixelResizePolicy(
-                    ToPositiveInteger(PixelWidth),
-                    ToPositiveInteger(PixelHeight),
+                    MaintainAspectRatio && PixelAnchor == PixelDimensionAnchor.Height ? null : ToPositiveInteger(PixelWidth),
+                    MaintainAspectRatio && PixelAnchor == PixelDimensionAnchor.Width ? null : ToPositiveInteger(PixelHeight),
                     MaintainAspectRatio,
                     PreventUpscaling),
                 ResizeDraftMode.Percentage => new PercentageResizePolicy(Percentage),
@@ -678,7 +713,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
     private void SynchronizeHeightFromWidth()
     {
         if (_isSynchronizingPixelDimensions || !MaintainAspectRatio || _probe is null
-            || !TryCalculateLinkedDimension(PixelWidth, _probe.Height, _probe.Width, out var height))
+            || !TryResolveLinkedSize(PixelDimensionAnchor.Width, out var resolved))
         {
             return;
         }
@@ -686,7 +721,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         _isSynchronizingPixelDimensions = true;
         try
         {
-            SetProperty(ref _pixelHeight, height, nameof(PixelHeight));
+            SetProperty(ref _pixelHeight, (decimal)resolved.Height, nameof(PixelHeight));
         }
         finally
         {
@@ -697,7 +732,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
     private void SynchronizeWidthFromHeight()
     {
         if (_isSynchronizingPixelDimensions || !MaintainAspectRatio || _probe is null
-            || !TryCalculateLinkedDimension(PixelHeight, _probe.Width, _probe.Height, out var width))
+            || !TryResolveLinkedSize(PixelDimensionAnchor.Height, out var resolved))
         {
             return;
         }
@@ -705,7 +740,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         _isSynchronizingPixelDimensions = true;
         try
         {
-            SetProperty(ref _pixelWidth, width, nameof(PixelWidth));
+            SetProperty(ref _pixelWidth, (decimal)resolved.Width, nameof(PixelWidth));
         }
         finally
         {
@@ -713,25 +748,71 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         }
     }
 
-    private static bool TryCalculateLinkedDimension(decimal? editedValue, int dependentOriginal, int editedOriginal, out decimal result)
+    private bool TryResolveLinkedSize(PixelDimensionAnchor anchor, out ResolvedResizeSize resolved)
     {
-        result = 0;
-        if (editedValue is null || editedValue <= 0 || editedValue > int.MaxValue)
+        resolved = default!;
+        if (_probe is null)
         {
             return false;
         }
 
         try
         {
-            result = Math.Max(1, decimal.Round(
-                editedValue.Value * dependentOriginal / editedOriginal,
-                0,
-                MidpointRounding.AwayFromZero));
-            return result <= int.MaxValue;
+            var width = anchor == PixelDimensionAnchor.Width ? ToPositiveInteger(PixelWidth) : null;
+            var height = anchor == PixelDimensionAnchor.Height ? ToPositiveInteger(PixelHeight) : null;
+            resolved = new PixelResizePolicy(width, height, maintainAspectRatio: true)
+                .Resolve(new ImageSize(_probe.Width, _probe.Height));
+            return true;
         }
-        catch (OverflowException)
+        catch (Exception exception) when (exception is ArgumentException or OverflowException)
         {
             return false;
+        }
+    }
+
+    public void ApplyResizeDraft(
+        ResizeDraftMode mode,
+        decimal? width,
+        decimal? height,
+        PixelDimensionAnchor anchor,
+        bool maintainAspectRatio,
+        bool preventUpscaling,
+        decimal percentage)
+    {
+        _isSynchronizingPixelDimensions = true;
+        try
+        {
+            SetProperty(ref _selectedMode, ResizeModes.First(option => option.Value == mode), nameof(SelectedMode));
+            SetProperty(ref _pixelWidth, width, nameof(PixelWidth));
+            SetProperty(ref _pixelHeight, height, nameof(PixelHeight));
+            SetProperty(ref _maintainAspectRatio, maintainAspectRatio, nameof(MaintainAspectRatio));
+            SetProperty(ref _preventUpscaling, preventUpscaling, nameof(PreventUpscaling));
+            SetProperty(ref _percentage, percentage, nameof(Percentage));
+            _pixelAnchor = anchor;
+            OnPropertyChanged(nameof(PixelAnchor));
+        }
+        finally
+        {
+            _isSynchronizingPixelDimensions = false;
+        }
+
+        MarkDraftChanged();
+        NotifyDraft();
+    }
+
+    private void SetPixelDimensions(decimal? width, decimal? height, PixelDimensionAnchor anchor)
+    {
+        _isSynchronizingPixelDimensions = true;
+        try
+        {
+            SetProperty(ref _pixelWidth, width, nameof(PixelWidth));
+            SetProperty(ref _pixelHeight, height, nameof(PixelHeight));
+            _pixelAnchor = anchor;
+            OnPropertyChanged(nameof(PixelAnchor));
+        }
+        finally
+        {
+            _isSynchronizingPixelDimensions = false;
         }
     }
 

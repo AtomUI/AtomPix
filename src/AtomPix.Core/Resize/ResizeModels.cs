@@ -128,20 +128,27 @@ public sealed record PixelResizePolicy : ResizePolicy
         }
         else if (Width is { } width && Height is null)
         {
-            var resolvedHeight = RoundAndClamp((decimal)inputSize.Height * width / inputSize.Width, nameof(Width));
+            var resolvedHeight = RoundRatioAndClamp(inputSize.Height, width, inputSize.Width, nameof(Width));
             resolved = new ResolvedResizeSize(width, resolvedHeight);
         }
         else if (Height is { } height && Width is null)
         {
-            var resolvedWidth = RoundAndClamp((decimal)inputSize.Width * height / inputSize.Height, nameof(Height));
+            var resolvedWidth = RoundRatioAndClamp(inputSize.Width, height, inputSize.Height, nameof(Height));
             resolved = new ResolvedResizeSize(resolvedWidth, height);
         }
         else
         {
-            var scale = Math.Min((decimal)Width!.Value / inputSize.Width, (decimal)Height!.Value / inputSize.Height);
-            resolved = new ResolvedResizeSize(
-                FloorAndClamp(inputSize.Width * scale, nameof(Width)),
-                FloorAndClamp(inputSize.Height * scale, nameof(Height)));
+            var targetWidth = Width!.Value;
+            var targetHeight = Height!.Value;
+            var widthConstraintIsTighter = checked((long)targetWidth * inputSize.Height)
+                <= checked((long)targetHeight * inputSize.Width);
+            resolved = widthConstraintIsTighter
+                ? new ResolvedResizeSize(
+                    targetWidth,
+                    FloorRatioAndClamp(inputSize.Height, targetWidth, inputSize.Width, nameof(Width)))
+                : new ResolvedResizeSize(
+                    FloorRatioAndClamp(inputSize.Width, targetHeight, inputSize.Height, nameof(Height)),
+                    targetHeight);
         }
 
         if (!PreventUpscaling)
@@ -159,6 +166,35 @@ public sealed record PixelResizePolicy : ResizePolicy
         return new ResolvedResizeSize(
             Math.Min(resolved.Width, inputSize.Width),
             Math.Min(resolved.Height, inputSize.Height));
+    }
+
+    private static int RoundRatioAndClamp(int dependentOriginal, int requested, int editedOriginal, string parameterName)
+    {
+        var numerator = checked((long)dependentOriginal * requested);
+        var quotient = numerator / editedOriginal;
+        var remainder = numerator % editedOriginal;
+        if (checked(remainder * 2) >= editedOriginal)
+        {
+            quotient++;
+        }
+
+        return ClampRatioResult(quotient, parameterName);
+    }
+
+    private static int FloorRatioAndClamp(int dependentOriginal, int requested, int editedOriginal, string parameterName)
+    {
+        var numerator = checked((long)dependentOriginal * requested);
+        return ClampRatioResult(numerator / editedOriginal, parameterName);
+    }
+
+    private static int ClampRatioResult(long value, string parameterName)
+    {
+        if (value > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, value, "Resolved image dimension exceeds the supported integer range.");
+        }
+
+        return Math.Max(1, checked((int)value));
     }
 }
 
