@@ -5,6 +5,7 @@ English | [简体中文](./README.zh-CN.md)
 [![CI](https://github.com/AtomUI/AtomPix/actions/workflows/ci.yml/badge.svg)](https://github.com/AtomUI/AtomPix/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/AtomUI/AtomPix)](https://github.com/AtomUI/AtomPix/releases)
 [![UI](https://img.shields.io/badge/UI-Powered%20by%20AtomUI-1677ff)](https://github.com/AtomUI/AtomUI)
+[![License: GPL v3 or later](https://img.shields.io/badge/License-GPL_v3_or_later-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 
 AtomPix is a focused desktop tool for browsing and processing images locally.
@@ -132,3 +133,7 @@ The desktop UI is built with Avalonia and AtomUI, the gallery is provided by Ato
 ## Current Scope
 
 AtomPix currently focuses on mainstream static-image workflows. Animated GIF, multi-frame WebP, TIFF editing, batch cropping, cloud processing, accounts, plugins, and full editor features such as layers, filters, drawing, and text are outside the current release scope.
+
+## License
+
+AtomPix is free software licensed under the [GNU General Public License, version 3 or (at your option) any later version](LICENSE). The SPDX license identifier is `GPL-3.0-or-later`.

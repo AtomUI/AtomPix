@@ -5,6 +5,7 @@
 [![CI](https://github.com/AtomUI/AtomPix/actions/workflows/ci.yml/badge.svg)](https://github.com/AtomUI/AtomPix/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/AtomUI/AtomPix)](https://github.com/AtomUI/AtomPix/releases)
 [![UI](https://img.shields.io/badge/UI-Powered%20by%20AtomUI-1677ff)](https://github.com/AtomUI/AtomUI)
+[![License: GPL v3 or later](https://img.shields.io/badge/License-GPL_v3_or_later-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 
 AtomPix 是一款轻巧、专注的本地图片浏览与处理桌面工具。
@@ -132,3 +133,7 @@ Desktop 界面基于 Avalonia 与 AtomUI 构建，图片画廊使用 AtomUI Labs
 ## 当前版本边界
 
 AtomPix 当前专注于主流静态图片处理。动画 GIF、多帧 WebP、TIFF 编辑、批量裁剪、云端处理、账号系统、插件，以及图层、滤镜、画笔、文字等完整图片编辑器能力暂不属于当前版本范围。
+
+## 开源协议
+
+AtomPix 是自由软件，采用 [GNU General Public License 第 3 版或任何后续版本](LICENSE)授权，对应的 SPDX 标识为 `GPL-3.0-or-later`。
