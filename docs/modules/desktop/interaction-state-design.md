@@ -499,8 +499,8 @@ Pending ────────────> Failed | Skipped | Canceled
 批量 Resize 的 `BatchDraft` 只保存一套共享 `ResizePolicy`，不为列表项目保存逐项覆盖：
 
 - 默认勾选“保持比例”。
-- 保持比例且同时填写 Width / Height 时，标签和帮助文案使用“最大宽度 / 最大高度”，每行按自己的原图比例显示预计输出尺寸。
-- 保持比例且只填写一边时，该边是每个项目的共同约束，另一边逐项计算。
+- 保持比例时，`BatchDraft` 额外保存最后编辑轴。Width 为锚点时共享 Width，Height 为锚点时共享 Height；界面中的另一边只是按当前图片比例联动得到的显示值，不进入共享 `ResizePolicy`。
+- 批量提交时冻结“锚点 + 权威值”；同一规则应用到每个输入自己的逻辑原始尺寸，逐项调用 Core 解析另一边。
 - 关闭保持比例后 Width / Height 都必须为正整数，并持续显示非阻断变形警告；用户确认有效参数后仍可开始。
 - 参数、输入列表或某项 Probe 信息变化时，只重算预计尺寸，不生成真实处理预览。
 - 无法预探测的项目显示“预计尺寸不可用”，不伪造数值；Workflow 执行结果是最终事实。
@@ -617,7 +617,7 @@ flowchart TD
 
 ## 11. 调整尺寸处理面板
 
-Resize 预计尺寸由原图尺寸和草稿同步计算；不生成真实处理预览。
+Resize 预计尺寸由原图尺寸和草稿同步计算；不生成真实处理预览。Desktop 不实现第二套比例公式：输入联动、预计尺寸、单张提交和批量逐项预计都必须调用 Core `ResizePolicy.Resolve`。同一解析器可以在预览和正式执行阶段重复调用，但计算决策只能有一个实现。
 
 Resize 面板展示尺寸规则、公共输出位置、命名和冲突策略编辑器，但不展示输出格式、编码质量或元数据控件。输出格式固定为输入格式；点击单张开始时构造不可变 `ResizeImageRequest`，点击批量开始时按走廊顺序构造 `BatchResizeRequest`。两者都冻结公共 `SameFormatEncodingPolicy`、`ResizePolicy` 和 `OutputPolicy`，任务接受后不受设置或面板变化影响。持久化边界必须通过受校验的 `ImageQuality` JSON 转换器恢复同格式有损质量，禁止让只读值对象的默认值 `0` 进入 Magick 编码请求；单张与批量的默认有损质量必须一致。
 
@@ -625,8 +625,8 @@ Resize 面板展示尺寸规则、公共输出位置、命名和冲突策略编�
 | --- | --- | --- | --- | --- | --- |
 | 当前图片目标 | 面板打开 | 只读 | 当前项 Loading | 跟随走廊 CurrentItem；保留模式和用户约束，按新图重算单张预计尺寸 | 无法得到正尺寸时单张 Draft Invalid。 |
 | Pixel/百分比 | 来源 Ready | `CanEditParameters` | 无 | 切换控件组；保留各模式会话值 | 只提交当前模式字段。 |
-| Width/Height | Pixel | `CanEditParameters` | 无 | 输入和上下箭头统一显示整数；保持比例时，编辑 Width 立即按原图比例反算 Height，编辑 Height 立即反算 Width | 同步使用中点远离零取整；不裁剪、不补边。 |
-| 保持比例 | Pixel | `CanEditParameters` | 无 | 勾选后以 Width 为当前约束立即同步 Height，后续由用户最后编辑的一边驱动另一边 | 关闭后两边独立且均须为正整数。 |
+| Width/Height | Pixel | `CanEditParameters` | 无 | 输入和上下箭头统一显示整数；保持比例时，编辑 Width 将锚点设为 Width 并用 Core 单边策略回填 Height，编辑 Height 则反向处理 | 联动值不是第二个约束；不裁剪、不补边。 |
+| 保持比例 | Pixel | `CanEditParameters` | 无 | 勾选后以 Width 为当前锚点立即同步 Height，后续由用户最后编辑的一边驱动另一边；锚点随单张/批量草稿往返同步 | 关闭后两边独立且均须为正整数。 |
 | 小于目标尺寸时不放大 | Pixel | `CanEditParameters` | 无 | 默认不勾选；勾选后保持比例时禁止整体放大，不保持比例时分别钳制两边 | 只影响 Pixel；最终与原图同尺寸仍正常编码和写出。 |
 | 百分比滑块/数值 | Percentage | `CanEditParameters` | 无 | 只展示一组滑块与整数输入，两者双向同步并实时重算 | 范围 `1..1000`，允许大于 `100%` 的放大；不展示快捷预设。 |
 | 编码摘要 | 来源 Ready | 只读 | 无 | 显示“保留原格式”、当前拍摄信息策略及“ICC 保留”；不提供质量编辑 | 设置缺失或非法时禁止开始，并引导恢复默认设置。 |
@@ -648,7 +648,7 @@ flowchart TD
   H -->|编辑/换图| A
 ```
 
-Pixel 模式采用紧凑逐行表单：Width 与 Height 各占一行，标签左对齐、AtomUI `NumericUpDown` 右对齐且使用整数格式；其后依次为“保持宽高比”和“小于目标尺寸时不放大”两个 AtomUI `CheckBox`，不再显示模式解释或较小约束说明。Percentage 模式删除模式解释、“调整比例”标题和三个快捷预设，只保留自由滑块与较宽的 `NumericUpDown`。两种模式、单张和批量共用同一个 ViewModel 草稿与 Core `ResizePolicy`，不得在 View 中复制尺寸算法。
+Pixel 模式采用紧凑逐行表单：Width 与 Height 各占一行，标签左对齐、AtomUI `NumericUpDown` 右对齐且使用整数格式；其后依次为“保持宽高比”和“小于目标尺寸时不放大”两个 AtomUI `CheckBox`，不再显示模式解释或较小约束说明。Percentage 模式删除模式解释、“调整比例”标题和三个快捷预设，只保留自由滑块与较宽的 `NumericUpDown`。两种模式、单张和批量共用同一个 ViewModel 草稿与 Core `ResizePolicy`；`PixelDimensionAnchor` 只是 Desktop 会话状态，不持久化、不暴露为 Core 契约，也不得在 View 中复制尺寸算法。
 
 单张任务结束时，统一工具会话必须同时响应单张命令的 `CanExecuteChanged`。`AsyncCommand` 在 `finally` 中解除运行状态后，批量按钮必须立即重新计算；不得依赖用户再次修改任意参数来“唤醒”批量入口。
 

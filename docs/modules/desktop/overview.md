@@ -122,7 +122,7 @@ AtomPix 不提供原地覆盖输入图片。Workflow 返回 `StartRejected(Outpu
 
 Resize 页面只编辑 `ResizePolicy` 与输出策略，不展示输出格式、质量或元数据控件。输出格式固定为输入格式；提交时 Desktop 把当前公共 `SameFormatEncodingPolicy` 作为不可变快照写入 `ResizeImageRequest`，任务接受后不再受设置变化影响。
 
-批量 Resize 同样只维护一套共享 `ResizePolicy`。共享百分比、单边约束或双边最大边界时，每张图片根据自己的逻辑原始尺寸显示不同的预计结果；关闭保持比例后才表示所有项目强制输出为相同 Width / Height，并必须显示变形警告。第一阶段不提供逐项 Resize 参数覆盖。
+批量 Resize 同样只维护一套共享规则。百分比模式共享百分比；Pixel 保持比例时共享“最后编辑轴 + 该轴目标值”，每张图片根据自己的逻辑原始尺寸解析另一边；关闭保持比例后才共享确定的 Width / Height 并允许变形。锚点属于 Desktop 草稿与提交投影，不进入 Core 的持久化设置；第一阶段不提供逐项 Resize 参数覆盖。
 
 压缩、转换、Resize、Crop 与批量草稿共用同一个输出策略编辑器。“文件命名”先用 AtomUI `Segmented` 明确选择“保留原文件名 / 添加后缀 / 自定义格式”，下方只呈现当前模式需要的上下文区域，并实时显示不含扩展名的名称示例。默认选择“添加后缀”，后缀为 `_atompix`；只有“自定义格式”展示 `{name}`、`{index}` 插入项。三种选择必须分别构造 Core 的 `KeepOriginalName`、`AppendSuffix`、`CustomPattern` 契约，不得全部降格为自定义模板。
 

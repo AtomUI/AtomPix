@@ -401,6 +401,7 @@ public sealed record PercentageResizePolicy(
 - `PixelResizePolicy + MaintainAspectRatio = true` 时，至少提供 `Width` 或 `Height` 之一。
 - 保持比例且只提供一边时，另一边按原始宽高比计算。
 - 保持比例且同时提供两边时，两者表示最大边界，按 `min(Width / OriginalWidth, Height / OriginalHeight)` 计算缩放比例。
+- Core 保留上述双边最大边界能力用于契约兼容和未来独立模式；当前 Desktop 联动宽高界面在保持比例时只向 Core 提交最后编辑的一边。
 - `PreventUpscaling` 只属于 Pixel 模式，默认 `false`。开启后不得把任何输出边放大到超过原图对应边。
 - 开启 `PreventUpscaling` 且保持比例时，如果正常解析结果会放大任意一边，则最终尺寸回退为原图尺寸。
 - 开启 `PreventUpscaling` 且关闭保持比例时，两边分别使用 `min(Target, Original)`；因此允许一边缩小、另一边保持原尺寸。
@@ -453,9 +454,9 @@ Pixel，保持比例，只提供 Height：
   ResolvedHeight = Height
 
 Pixel，保持比例，同时提供 Width / Height：
-  Scale = min(Width / OriginalWidth, Height / OriginalHeight)
-  ResolvedWidth  = floor(OriginalWidth * Scale)
-  ResolvedHeight = floor(OriginalHeight * Scale)
+  先用交叉乘法比较 Width / OriginalWidth 与 Height / OriginalHeight，不构造十进制 Scale
+  Width 边更紧或相等：ResolvedWidth = Width；ResolvedHeight = floor(OriginalHeight * Width / OriginalWidth)
+  Height 边更紧：ResolvedHeight = Height；ResolvedWidth = floor(OriginalWidth * Height / OriginalHeight)
 
 Percentage：
   Scale = Percentage / 100
@@ -468,7 +469,7 @@ Pixel，PreventUpscaling = true：
              ResolvedHeight = min(ResolvedHeight, OriginalHeight)
 ```
 
-只提供一边时，该边严格等于用户输入；同时提供两个最大边界时使用向下取整，保证结果不超过任一边界。启用禁止放大后，由上述 Pixel 规则对解析结果进行最后钳制。百分比计算使用统一的中点远离零取整；任何结果最小钳制为 `1 × 1`。即使禁止放大最终得到原图尺寸，任务仍按用户显式操作正常编码并生成输出，不映射为 `Skipped`。
+只提供一边时，该边严格等于用户输入；同时提供两个最大边界时精确保留更紧的一边，只对依赖边向下取整，保证结果不超过任一边界。所有 Pixel 比例运算使用整数分子、分母和商余数完成：单边派生采用“中点远离零”取整，双边用交叉乘法选择更紧约束。禁止先计算有限精度的 decimal/double 缩放值再乘回原尺寸，否则循环小数误差可能使精确边界少一个像素。正整数乘积使用足够宽的整数类型并检查溢出。启用禁止放大后，由上述 Pixel 规则对解析结果进行最后钳制。Percentage 计算仍使用统一的中点远离零取整；任何结果最小钳制为 `1 × 1`。即使禁止放大最终得到原图尺寸，任务仍按用户显式操作正常编码并生成输出，不映射为 `Skipped`。
 
 Workflow 在 Probe 后把逻辑 `ImageSize` 和 `ResizePolicy` 交给 Core 解析，再根据 Imaging Capabilities 检查极端尺寸、内存或引擎限制。Core 不冻结特定图片库的最大尺寸常量。
 
