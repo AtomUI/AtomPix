@@ -7,3 +7,4 @@ TestResults/
 .vs/
 .idea
 out-lib
+eng/nuget-cache
