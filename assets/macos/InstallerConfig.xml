@@ -4,6 +4,7 @@
     <AssemblyName>AtomPix.Desktop</AssemblyName>
     <Version>__VERSION__</Version>
     <AppBundleIdentifier>net.atomui.atompix</AppBundleIdentifier>
+    <MinimumSystemVersion>__MINIMUM_SYSTEM_VERSION__</MinimumSystemVersion>
     <Title>AtomPix Installer</Title>
     <AppIcon>Assets/Images/AtomPix</AppIcon>
     <Company>AtomUI</Company>

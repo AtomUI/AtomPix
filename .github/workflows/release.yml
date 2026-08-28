@@ -95,11 +95,13 @@ jobs:
         include:
           - os: macos-15-intel
             rid: osx-x64
+            minimum_system_version: "15.0"
             artifact_name: AtomPix-osx-x64
             installer_root: .artifacts/installer/AtomPix-osx-x64
             output_dir: .artifacts/packages/dmg/x64
           - os: macos-latest
             rid: osx-arm64
+            minimum_system_version: "14.0"
             artifact_name: AtomPix-osx-arm64
             installer_root: .artifacts/installer/AtomPix-osx-arm64
             output_dir: .artifacts/packages/dmg/arm64
@@ -125,9 +127,8 @@ jobs:
       - name: Checkout AtomUITools
         uses: actions/checkout@v4
         with:
-          repository: AtomUI/AtomUITools
-          ref: develop
-          token: ${{ secrets.ACCESS_TOKEN }}
+          repository: kusarparlly/AtomUITools
+          ref: fbef34d0f85aeacc40231b447973716c05684a19
           path: .artifacts/atomuitools-source
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -163,6 +164,7 @@ jobs:
           $imagesDir = "$packages/Assets/Images"
           New-Item -ItemType Directory -Force $configDir, $imagesDir, "${{ matrix.output_dir }}" | Out-Null
           $config = (Get-Content assets/macos/InstallerConfig.xml -Raw).Replace('__VERSION__', '${{ needs.validate.outputs.version }}')
+          $config = $config.Replace('__MINIMUM_SYSTEM_VERSION__', '${{ matrix.minimum_system_version }}')
           Set-Content -LiteralPath "$configDir/InstallerConfig.xml" -Value $config -Encoding utf8
           Copy-Item -LiteralPath "assets/macos/AtomPix.icns" -Destination "$imagesDir/AtomPix.icns" -Force
       - name: Create signed DMG
@@ -190,6 +192,12 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Unable to mount $packageName for signature verification." }
             $apps = @(Get-ChildItem -LiteralPath $mountPoint -Filter '*.app' -Directory)
             if ($apps.Count -ne 1) { throw "Expected exactly one application bundle in $packageName, found $($apps.Count)." }
+            $plistPath = Join-Path $apps[0].FullName 'Contents/Info.plist'
+            $minimumSystemVersion = & /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' $plistPath
+            if ($LASTEXITCODE -ne 0) { throw "LSMinimumSystemVersion is missing from $packageName." }
+            if ($minimumSystemVersion.Trim() -ne '${{ matrix.minimum_system_version }}') {
+              throw "Expected LSMinimumSystemVersion '${{ matrix.minimum_system_version }}' in $packageName, actual '$minimumSystemVersion'."
+            }
             & codesign --verify --deep --strict --verbose=2 $apps[0].FullName
             if ($LASTEXITCODE -ne 0) { throw "Application signature verification failed for $packageName." }
           } finally {
@@ -235,9 +243,8 @@ jobs:
       - name: Checkout AtomUITools
         uses: actions/checkout@v4
         with:
-          repository: AtomUI/AtomUITools
-          ref: develop
-          token: ${{ secrets.ACCESS_TOKEN }}
+          repository: kusarparlly/AtomUITools
+          ref: fbef34d0f85aeacc40231b447973716c05684a19
           path: .artifacts/atomuitools-source
       - name: Setup .NET
         uses: actions/setup-dotnet@v4

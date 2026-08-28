@@ -1323,7 +1323,7 @@ NativeAOT 实验命令：
 
 五个平台都必须通过原生 Runner 的 restore、Release 测试、`TrimmedSingleFile` publish 和发布目录启动烟测。Windows 额外运行真实进程 UIA；macOS 在 DMG 挂载后对其中唯一 `.app` 执行 `codesign --verify --deep --strict`；Linux 使用 Xvfb 验证发布入口。每个正式包必须有同名 `.sha256`，Release 汇总 Job 只接受五个包和五个校验文件，数量不符时不得创建不完整 GitHub Release。
 
-macOS/Linux 安装器使用私有 `https://github.com/AtomUI/AtomUITools` 仓库的 `develop` 分支，与 AtomBox 当前发布做法保持一致。仓库必须配置 `ACCESS_TOKEN`；macOS 强制签名并要求 `CERT_P12_BASE64`、`CERT_PASSWORD`、`KEYCHAIN_PASSWORD`、`CERT_IDENTITY`。任一凭据缺失或签名验证失败都必须使发布失败，不允许自动降级为未签名 DMG。当前阶段不包含 Apple notarization、Windows 代码签名或 Linux 包签名。
+macOS/Linux 安装器使用公开仓库 `https://github.com/kusarparlly/AtomUITools`，并固定到经过 AtomPix 验证的完整提交 SHA，不跟随可变分支，也不再依赖 `ACCESS_TOKEN`。更新工具版本时必须显式修改 SHA 并重新执行五平台发布门禁。macOS 安装器按架构声明实际最低系统版本：`osx-arm64` 为 macOS 14.0，`osx-x64` 为 macOS 15.0；AtomUITools 必须在代码签名前将其写入 `Info.plist` 的 `LSMinimumSystemVersion`，发布流水线挂载 DMG 后必须校验该值与矩阵一致。macOS 强制签名并要求 `CERT_P12_BASE64`、`CERT_PASSWORD`、`KEYCHAIN_PASSWORD`、`CERT_IDENTITY`。任一凭据缺失、最低系统版本不符或签名验证失败都必须使发布失败，不允许自动降级为未签名 DMG。当前阶段不包含 Apple notarization、Windows 代码签名或 Linux 包签名。
 
 安装器不得复用 AtomBox 品牌资源。三平台图标采用与 AtomBox 一致的组织和消费方式：Windows 的多分辨率 `AtomPix.ico` 保留在 Desktop `Assets/Branding` 中，并同时作为项目 `ApplicationIcon` 与主窗口 `Icon`；macOS 在 `assets/macos/AtomPix.icns` 提供受版本控制的标准 ICNS；Linux 在 `assets/linux/icons/hicolor/{size}x{size}/apps/atompix.png` 提供 16、32、48、64、128、256、512 七档桌面图标。`assets/source/AtomPix-1024.png` 是安装器图标的主源副本，`eng/generate-platform-icons.ps1` 只从现有 AtomPix 品牌资源可重复生成上述跨平台资产，不产生第二套视觉设计。发布 Runner 必须直接打包仓库内的 ICNS 和 hicolor 资源，不得在 CI 中临时缩放或转换，以避免平台产物与本地审阅资源漂移。`eng/publish.ps1` 与 `eng/smoke-test.ps1` 的正式 RID 集合统一为 `win-x64`、`osx-x64`、`osx-arm64`、`linux-x64`、`linux-arm64`，五个平台继续遵守第 55 节的 Partial Trim、manifest、无 PDB 和自包含约束。
 
