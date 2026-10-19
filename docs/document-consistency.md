@@ -17,6 +17,7 @@
 5. Desktop 当前视觉结构：`ui-design/README.md`；对应 SVG 只有在索引标记为“已按当前基线重绘”后才具备视觉验收效力。它们不得反向改变前四项业务与交互规则。
 6. AtomUI 组件选型与 View 实现边界：`modules/desktop/atomui-component-mapping.md`；ImageGallery 专项包治理与迁移边界另见 `modules/desktop/atomui-labs-imagegallery-migration.md`。它们不得反向改变前五项业务、交互与视觉规则。
 7. 实施与测试文档：记录实现顺序、当前代码差距和历史验证，不得反向改变产品或模块契约。
+8. `iterations/features/with-city-migration-matrix.md` 及其专项文档是 City 迁移的已冻结目标设计；在矩阵解除 `City Blocked` 且代码完成前，它们不得被解释为当前运行时事实，也不得覆盖前述产品与模块边界。
 
 旧 Desktop 视觉基线已经退役。当前视觉基线由 `ui-design/README.md` 与 2026-08-24 重绘完成的十张 SVG 共同表达；更早的颜色、尺寸、位置和页面构图均不再具备规范效力。
 
@@ -68,6 +69,12 @@ Core + Imaging.Abstractions <- Workflows
 - Markdown 相对链接以及 `ui-design/*.svg` 文件名是否存在。
 
 命中并不一定是错误；历史参考和明确的代码缺口可以保留，但必须有清楚的时间与规范层级标识。
+
+City 迁移还必须检查：
+
+- `rg "AtomUI.City" src tests` 与迁移主矩阵声明的项目边界一致。
+- `rg "审-[HML]" docs/iterations/features/with-city*` 不得命中冻结文档。
+- 主矩阵存在 `阻` 时，不得把 City 目标设计写成当前代码事实，也不得开始生产代码替换。
 
 ## 6. 当前施工一致性快照
 
