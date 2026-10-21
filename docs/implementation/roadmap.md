@@ -438,4 +438,4 @@ City Public API/Release gate
 
 City 前置能力未完成时，AtomPix 只允许维护文档和可逆验证，不实现临时框架替代。每个施工单元从决策登记表的 `Blocked/Not Started` 转为 `Verified` 时，必须附真实测试或发布证据；高层矩阵字符不能作为完成依据。
 
-截至 2026-10-21，City 前置能力、固定 SHA/Build package、AtomPix Host、AppSettings State、Routing/Presentation、Browser workspace、命令执行域、MVVM ownership 与可复现 Windows published functional 已完成并具有验证证据。Localization 的八目录/155 keys、应用级 projection 和全部 AXAML 已接通，重复/缺失 key 与 AXAML 中文回流门已进入 `eng/verify.ps1`；当前施工点是迁移剩余 319 行/18 个 C# 文件并建立诊断/注释 allowlist，随后重跑扩展 locpack 的 TrimmedSingleFile 验收。最终 Release 仍受第三方许可证、Notice/对应源码和 SBOM gate 阻塞。实时状态以决策登记表为准。
+截至 2026-10-21，City 前置能力、固定 SHA/Build package、AtomPix Host、AppSettings State、Routing/Presentation、Browser workspace、命令执行域、MVVM ownership、Localization 与可复现 Windows published functional 已完成并具有验证证据。Localization 的八目录/407 keys、应用级 projection 和全部 AXAML/C# 动态文案已接通，生产源码硬编码中文为零；重复/缺失 key 与 AXAML/C# 中文回流门已进入 `eng/verify.ps1`。commit `2ef33a6d` 的扩展 locpack 已通过 TrimmedSingleFile 启动、UIA 与 GUI `9/9` 验收。当前仅剩第三方许可证、Notice/对应源码和 SBOM gate；实时状态以决策登记表为准。

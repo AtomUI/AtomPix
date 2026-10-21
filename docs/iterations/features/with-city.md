@@ -2,7 +2,7 @@
 
 > 设计状态：Design Frozen
 >
-> 交付状态：Implementation In Progress；Host/State/Routing/MVVM/Build/发布验证及 Localization AXAML 层已完成，剩余项见[迁移主矩阵](with-city-migration-matrix.md)和[决策登记表](with-city-decision-register.md)
+> 交付状态：Implementation Complete；Host/State/Routing/MVVM/Build/Localization/发布验证已完成，Release 仅剩合规 blocker，详见[迁移主矩阵](with-city-migration-matrix.md)和[决策登记表](with-city-decision-register.md)
 
 ## 1. 目标与不变量
 

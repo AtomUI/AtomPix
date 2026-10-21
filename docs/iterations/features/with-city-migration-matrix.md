@@ -2,7 +2,7 @@
 
 > 设计状态：Design Frozen
 >
-> 交付状态：Implementation In Progress；Release Blocked
+> 交付状态：Implementation Complete；Release Blocked
 >
 > 实施分支：`feature/with-city`
 >
@@ -34,7 +34,7 @@ City 能力跟随事实、状态和生命周期 owner，而不是最先展示它
 | Imaging.Magick | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
 | Infrastructure | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
 | Workflows | 否 | 否 | 否 | 否 | 采 | 否 | 否 |
-| Desktop | 已 | 已 | 已 | 已 | 间 | 否 | 采 |
+| Desktop | 已 | 已 | 已 | 已 | 间 | 否 | 已 |
 
 解释：
 
@@ -73,7 +73,6 @@ City 能力跟随事实、状态和生命周期 owner，而不是最先展示它
 
 | Blocker | Owner | 解除条件 |
 | --- | --- | --- |
-| Localization C# 动态文案与最终发布闭环未完成 | AtomPix | 已接通的 8 catalog/155 keys、应用级 text projection 和全部 AXAML 继续扩展到剩余 319 行/18 个 C# 文件，完成逐项 allowlist，并重跑扩展 locpack 的 trim/single-file 验收；重复/缺失 key 与 AXAML 回流门已接入总验证 |
 | 发布许可证闭环未完成 | AtomPix/AtomUI | 字体与 Svg 清理、替代授权、Notice/源码/SBOM gate 通过 |
 
 ## 6. 解锁和施工顺序
@@ -81,8 +80,8 @@ City 能力跟随事实、状态和生命周期 owner，而不是最先展示它
 1. 已完成：City 四项 framework blocker、Release gate 和固定 SHA。
 2. 已完成：同 SHA Build 包、provenance、State/Host、Routing/Presentation 与发布功能门。
 3. 已完成：AtomPix MVVM ownership、Home/Settings EntryOwned 与导航/前台任务职责拆分。
-4. 当前：八个 Localization catalog、155 keys、generated registrar、UI bridge 与全部 AXAML 已接通；继续迁移 C# 动态文案、建立逐项 allowlist，并重跑扩展 locpack 的发布物查询。
-5. Release 前：关闭字体/Svg、Notice/源码/SBOM 合规 blocker；只有真实证据存在时才转为 `已`。
+4. 已完成：八个 Localization catalog、407 keys、generated registrar、UI bridge、全部 AXAML/C# 文案与扩展 locpack 发布物验收。
+5. 当前：关闭字体/Svg、Notice/源码/SBOM 合规 blocker；只有真实证据存在时才转为 `已`。
 
 ## 7. 专项文档
 

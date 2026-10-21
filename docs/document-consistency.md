@@ -6,7 +6,7 @@
 >
 > City 迁移设计：Design Frozen
 >
-> City 迁移交付：Implementation In Progress；Release Blocked
+> City 迁移交付：Implementation Complete；Release Blocked
 
 本文区分产品规范、目标设计、当前代码事实和历史验证，避免旧快照或讨论记录被当作现行施工合同。
 
@@ -182,3 +182,37 @@ Functional report: .artifacts/published-functional/20261021T090611571Z-29764-976
 施工中发现 Windows `Environment.GetFolderPath(LocalApplicationData)` 不会可靠地随测试父进程的 `LOCALAPPDATA` 覆盖而隔离。AtomPix 因此新增显式绝对路径环境变量 `ATOMPIX_APPDATA_DIRECTORY` 与 `ATOMPIX_TEMP_DIRECTORY`；发布功能测试为每个 case 提供独立目录并验证设置跨重启恢复。fixture manifest 校验源文件 SHA-256，所有 case 复制到唯一 run root，正常关闭失败会使测试失败而非用强制 kill 掩盖。
 
 本快照关闭 City framework、State、Routing-Presentation、MVVM ownership、Build provenance 和 Windows published functional blocker。`APX-CITY-MVVM-002` 已验证 Home/Settings EntryOwned、Browser workspace 保留，以及导航意图/前台任务 gate 职责拆分。`APX-CITY-LOC-001` 仍是 `In Progress`：八个 `zh-CN` catalog、generated registrar、City Dispatcher presentation bridge 和应用级 text projection 已验证；catalog 已扩展到 155 个唯一 key，Desktop 全部 AXAML 的硬编码中文已降为零，`eng/verify-localization.ps1` 已把八目录、重复/缺失 key 和 AXAML 中文回流接入总验证。完整 UI 项目 `19/19` 通过。全 Desktop 源码（排除 catalog）仍有 319 行、18 个 C# 文件含中文；其中用户可见文案仍须迁移，注释/诊断须建立逐项 allowlist。本轮扩展后的 locpack 还须重新执行 TrimmedSingleFile 发布查询；上一轮 EXE/UIA/GUI `9/9` 只证明 Shell/Home 纵切。整体迁移仍是 `Implementation In Progress / Release Blocked`；`APX-CITY-LIC-001` 仍受 AtomUI 传递 Alibaba Sans/Svg.Custom、替代授权、Magick.Native 材料和 SBOM/Notice/source gate 阻塞。
+
+## 9. 2026-10-21 Localization 完成验证快照
+
+本节晚于第 8 节，记录 Localization 余项完成后的当前证据；第 8 节的 155-key/319-line 数字和旧发布哈希保留为施工中历史，不得再用作当前结论。
+
+```text
+AtomPix implementation commit: 2ef33a6d0f063bb62c4d7ca179f46b8158a99a80
+Localization catalogs: 8
+Generated unique keys: 407
+AXAML localization references: 151
+Hard-coded Chinese in production Desktop AXAML/C#: 0
+
+AtomPix Release build: passed, 0 warning / 0 error
+City Release DLL closure hash check: passed
+Non-stress tests: 410 passed
+Stress tests: 4 passed
+Desktop UI project: 19 passed（Headless 18 + virtualization stress 1）
+NuGet vulnerability audit: 14/14 projects reported no vulnerable packages
+git diff --check: passed（仅 LF/CRLF working-copy 提示）
+
+win-x64 Partial Trim single-file publish/package: passed
+Published EXE SHA-256: 6DF8DB3B4B0ECF987D1FEDB3955786B69C77DB7E8C7AD55B2FF9FE6E17553A51
+ZIP SHA-256: 793F99FDF4C7684303F0FCF776B147F69516374BA64DF928491C361F95CF54DB
+Published EXE 5-second startup smoke: passed
+Published window/icon rail/settings UIA smoke: passed
+Published functional matrix: 9/9 passed
+Functional report: .artifacts/published-functional/20261021T093545336Z-16700-68239d5f/published-functional-results.json
+```
+
+`eng/verify-localization.ps1` 现在同时阻止固定八目录漂移、空值、全局重复 key、AXAML 缺失 key，以及生产 AXAML/C# 中文回流。生产代码当前没有例外，因此未引入掩盖问题的目录级 allowlist。`BatchItemViewModel.IsRunning`、不可用状态映射和 Settings 保存反馈也已改为显式状态，不再通过本地化显示文本推断业务状态。
+
+`eng/verify.ps1 -NoRestore` 的 build、closure、功能/UI 和 stress 阶段全部通过；其漏洞审计在受限沙箱内因 NuGet TLS 凭据不可用失败，随后以同一 `dotnet list AtomPix.slnx package --vulnerable --include-transitive --no-restore` 命令在允许联网的环境中成功复验，14 个项目均未报告已知漏洞。最终 publish 仍保留既有 Partial Trim 分析警告，不把它们误记为 NativeAOT 支持。
+
+`APX-CITY-LOC-001` 因此转为 `Verified`，City 迁移实现状态转为 `Implementation Complete / Release Blocked`。剩余 blocker 只有 `APX-CITY-LIC-001`：AtomUI 传递 Alibaba Sans/Svg.Custom、替代授权、Magick.Native 材料以及 SBOM/Notice/source gate。

@@ -4,7 +4,7 @@
 >
 > 设计状态：Design Frozen
 >
-> 交付状态：Implementation In Progress；Release 仍被 Localization 与许可证闭环阻塞
+> 交付状态：Implementation Complete；Release 仍被许可证闭环阻塞
 
 本表只登记有意义的采用、不采用、应用保留和阻塞决定，不为没有关系的矩阵空格制造记录。设计决定与交付状态必须分开：`Blocked` 不说明采用范围，`Verified` 也必须附真实证据。
 
@@ -33,8 +33,8 @@
 | `APX-CITY-MVVM-001` | City composition dependency | ViewModel composition | Adopt | Verified | None | City SHA `c2e41761` | City 真实 Presentation composition/close/stop Release validation 与 solution tests 通过；最终 internal-only Localization 修复未改变 Public API baseline |
 | `APX-CITY-MVVM-002` | Desktop ViewModels | ViewModelBase/activation/composition | Adopt | Verified | None | 已删除本地 `ObservableObject`/Commands；Shell/编辑器接入 WindowSession composition；Home/Settings 使用 transient factory + EntryOwned；导航意图与前台任务 gate 分离 | Settings 往返验证对象/View/scope 重建与 Browser workspace 保留；Desktop `77/77`、Headless UI `18/18`、UI stress `1/1` |
 | `APX-CITY-BUILD-001` | Repository engineering | `AtomUI.City.Build` package | Adopt | Verified | None | runtime SHA `c2e41761` + Build 包 `1.0.0-atompix.c2e4176` | 包 SHA-256 `5ED32116…9F8E`；MSBuild provenance、Release City DLL 哈希闭包、clean/incremental build 通过 |
-| `APX-CITY-LOC-001` | Desktop localization | Localization + Build generated registrar | Adopt | In Progress | AtomPix | 8 个 `zh-CN` RESX catalog/155 keys、应用级 text projection、City `IUiDispatcher` bridge、全部 AXAML 与完整 UI 项目 `19/19`（非压力 `18` + 压力 `1`）已通过；`verify-localization.ps1` 固化重复/缺失 key 和 AXAML 中文回流门；City `c2e41761` 修复非泵送 UI context 死锁 | 尚余 319 行/18 个 C# 文件需迁移或逐项 allowlist；155-key locpack 尚须重跑 TrimmedSingleFile UIA/发布 GUI |
-| `APX-CITY-TEST-001` | Windows publish verification | 不采用 City.Testing | Keep AtomPix | Verified | None | fixture manifest、隔离 appdata/temp、JSON/trace、CI/Release artifact | 2026-10-21：最新 TrimmedSingleFile 全新 run root 发布 GUI `9/9`；报告 `.artifacts/published-functional/20261021T090611571Z-29764-976985d3/` |
+| `APX-CITY-LOC-001` | Desktop localization | Localization + Build generated registrar | Adopt | Verified | None | 8 个 `zh-CN` RESX catalog/407 keys、应用级 text projection、City `IUiDispatcher` bridge、全部 AXAML/C# 动态文案；`verify-localization.ps1` 固化重复/缺失 key 与 AXAML/C# 中文回流门；City `c2e41761` 修复非泵送 UI context 死锁 | 生产 AXAML/C# 硬编码中文 0；UI `19/19`、非压力 `410/410`、压力 `4/4`；commit `2ef33a6d` 的 TrimmedSingleFile 启动/UIA/发布 GUI `9/9` |
+| `APX-CITY-TEST-001` | Windows publish verification | 不采用 City.Testing | Keep AtomPix | Verified | None | fixture manifest、隔离 appdata/temp、JSON/trace、CI/Release artifact | 2026-10-21：最新 TrimmedSingleFile 全新 run root 发布 GUI `9/9`；报告 `.artifacts/published-functional/20261021T093545336Z-16700-68239d5f/` |
 | `APX-CITY-LIC-001` | Release engineering | 无运行时框架能力 | Keep AtomPix | Blocked | AtomPix + AtomUI | [发布合规](../../implementation/release-compliance.md) | 目标：真实 publish closure、替代授权、Notice/源码/SBOM gate 通过 |
 | `APX-CITY-GOV-001` | Documentation | 无 | Keep AtomPix | Verified | None | 本表、[主矩阵](with-city-migration-matrix.md)、[一致性规则](../../document-consistency.md) | 2026-10-21：相对链接、术语/状态、17 个唯一 Decision ID、边界扫描和当前 Release 基线检查通过 |
 

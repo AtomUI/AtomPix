@@ -2,7 +2,7 @@
 
 > 设计状态：Design Frozen
 >
-> 交付状态：Verified（工程与发布功能门）；整体 Release 仍受 Localization/许可证约束
+> 交付状态：Verified（工程与发布功能门）；整体 Release 仍受许可证约束
 
 ## 1. 版本、子模块与包
 
@@ -38,6 +38,8 @@ City gate 仍记录 `Microsoft.AspNetCore.SignalR.Common 10.0.8` 的上游告警
 ```
 
 `verify.ps1` 默认不得跳过 stress 或 vulnerability audit。Windows published functional 已使用受控 fixture manifest、显式 `ATOMPIX_APPDATA_DIRECTORY`/`ATOMPIX_TEMP_DIRECTORY`、唯一 run root、正常关闭和 JSON/trace 证据，并接入 CI/Release artifact。CI 发布矩阵继续覆盖 `win-x64`、`linux-x64`、`linux-arm64`、`osx-x64`、`osx-arm64`；Windows 额外运行发布产物 UI 自动化与完整功能矩阵。
+
+2026-10-21 的最终 Localization 发布候选来自 commit `2ef33a6d0f063bb62c4d7ca179f46b8158a99a80`：win-x64 Partial Trim single-file EXE SHA-256 为 `6DF8DB3B4B0ECF987D1FEDB3955786B69C77DB7E8C7AD55B2FF9FE6E17553A51`，ZIP SHA-256 为 `793F99FDF4C7684303F0FCF776B147F69516374BA64DF928491C361F95CF54DB`；启动 smoke、发布窗口 UIA 与 GUI 功能矩阵 `9/9` 通过，功能报告为 `.artifacts/published-functional/20261021T093545336Z-16700-68239d5f/published-functional-results.json`。
 
 静态边界门：
 
