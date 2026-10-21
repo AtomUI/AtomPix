@@ -29,6 +29,7 @@
 | 注册入口 | `UseImageGallery()` | 已在首个 Window 创建前，与 `UseDesktopControls()`、`UseDesktopColorPicker()` 一起调用公开入口。 |
 | AXAML 命名空间 | `https://atomui.net/labs` | 页面只消费公开 `ImageGallery`，不引用 internal 类型或 Template Part。 |
 | 包定位 | Experimental | 过渡期按受控供应链二进制管理，不能按正式稳定包降低验收标准。 |
+| AtomPix 发布授权 | 精确快照另行 `GPL-3.0-or-later` | 每次正式发布绑定 package version、源 commit、权利主体声明、替代授权文本和对应源码；未来版本不自动受该授权影响。 |
 
 ## 3. 过渡期本地 NuGet 包治理
 
@@ -55,6 +56,7 @@ AtomPix/
 5. lock/资产审计必须证明最终只解析一份 `AtomUI.Core` 和一份 Avalonia 基线，且没有 `NU1605`、包降级、资产冲突或重复主题程序集。
 6. 本地包必须进入 CI、三平台 publish 和 release 的同一 restore 路径。CI 不允许访问 `D:\work\c#\AtomUI.Labs`，开发机绝对路径存在也不能改变构建结果。
 7. 正式 NuGet 发布了经过验收的 ImageGallery 后，退出过渡方案：切换到正式源、删除仓库内 nupkg/预展开 cache/哈希门禁，再执行一次完整升级验收；不得长期同时保留正式源和 vendored 包两种事实来源。
+8. 正式 AtomPix 发布还必须归档该精确 ImageGallery 快照的 GPLv3+ 替代授权和对应源码；包哈希门禁不替代许可证/SBOM 门禁，详见[发布依赖许可证与合规设计](../../implementation/release-compliance.md)。
 
 兼容性结论：新的 ImageGallery `6.0.8` 在 AtomUI `6.1.3` 运行时因 `LanguageProvider` 二进制契约变化而不兼容。为避免混装两套 AtomUI Core，AtomPix 已把全部 AtomUI 包统一到 `6.0.8`；Avalonia 仍固定 `12.1.1`。后续升级必须让 AtomUI 与 Labs 使用同一版本线并重新执行启动、主题、行为和发布回归，禁止只升级其中一侧。
 

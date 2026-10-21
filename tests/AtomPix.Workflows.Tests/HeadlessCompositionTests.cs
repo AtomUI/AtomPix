@@ -15,7 +15,6 @@ using AtomPix.Imaging.Magick.DependencyInjection;
 using AtomPix.Infrastructure.DependencyInjection;
 using AtomPix.Workflows.DependencyInjection;
 using AtomPix.Workflows.Images;
-using AtomPix.Workflows.RecentItems;
 
 public sealed class HeadlessCompositionTests : IDisposable
 {
@@ -54,13 +53,6 @@ public sealed class HeadlessCompositionTests : IDisposable
         Assert.True(File.Exists(result.Value!.Result.JobResult.OutputPath!.Value.Value));
         Assert.EndsWith("sample_atompix.webp", result.Value.Result.JobResult.OutputPath.Value.Value);
 
-        var recent = services.GetRequiredService<AddRecentItemWorkflow>();
-        var recentResult = await recent.ExecuteAsync(
-            new AddRecentItemRequest(new LocalPath(Path.Combine(_root, "sample.png")), RecentItemKind.File, DateTimeOffset.UtcNow, 20),
-            CancellationToken.None);
-
-        Assert.True(recentResult.Succeeded);
-        Assert.Single(recentResult.Value!.Items);
     }
 
     [Fact]

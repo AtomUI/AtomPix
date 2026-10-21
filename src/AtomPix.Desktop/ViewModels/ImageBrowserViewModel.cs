@@ -8,6 +8,7 @@ using AtomPix.Core.Conversion;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
+using AtomUI.City.Presentation;
 using AtomUI.Labs.Controls.ImageGallery;
 
 public enum BrowserItemAvailability
@@ -37,12 +38,14 @@ public sealed class BrowserItemViewModel : ObservableObject
     public BrowserItemViewModel(
         LocalPath path,
         string displayName,
-        Action<BrowserItemViewModel> removeUnavailable)
+        Action<BrowserItemViewModel> removeUnavailable,
+        IUiCommandFactory? commandFactory = null)
     {
         Path = path;
         DisplayName = displayName;
         ArgumentNullException.ThrowIfNull(removeUnavailable);
-        RemoveCommand = new RelayCommand<object?>(_ => removeUnavailable(this), _ => IsUnavailable);
+        RemoveCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance)
+            .Create(() => removeUnavailable(this), () => IsUnavailable);
         GalleryItem = new ImageGalleryItemAdapter(this);
     }
 
@@ -107,7 +110,7 @@ public sealed class BrowserItemViewModel : ObservableObject
         ? $"{DisplayName}，{TaskStatusText}"
         : DisplayName;
 
-    public RelayCommand<object?> RemoveCommand { get; }
+    public IRelayCommand RemoveCommand { get; }
 
     public void SetProbe(ImageProbeResult probe)
     {
@@ -116,7 +119,7 @@ public sealed class BrowserItemViewModel : ObservableObject
     }
 }
 
-public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
+public sealed class ImageBrowserViewModel : ViewModelBase
 {
     private readonly OpenImageWorkflow _openImage;
     private readonly ImageProcessorCapabilities _capabilities;
@@ -124,6 +127,8 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
     private readonly IDesktopLauncherService _launcher;
     private readonly IDesktopPickerService? _picker;
     private readonly BoundedLruCache<string, ImageProbeResult> _probeCache;
+    private readonly IUiCommandFactory _commands;
+    private readonly CommandExecutionDomain _interactionDomain = new();
     private readonly object _cacheSync = new();
     private CancellationTokenSource? _loadCancellation;
     private int _generation;
@@ -145,7 +150,8 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         IDesktopNavigator navigator,
         IDesktopLauncherService launcher,
         IDesktopClipboardService clipboard,
-        IDesktopPickerService? picker = null)
+        IDesktopPickerService? picker = null,
+        IUiCommandFactory? commandFactory = null)
     {
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
         _capabilities = (imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor))).Capabilities;
@@ -160,25 +166,50 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         _picker = picker;
+        _commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
         var pathComparer = PathComparer();
         _probeCache = new BoundedLruCache<string, ImageProbeResult>(
             256,
             256,
             _ => 1,
             pathComparer);
-        Diagnostic = new DiagnosticErrorViewModel(clipboard);
+        Diagnostic = new DiagnosticErrorViewModel(clipboard, _commands);
 
-        BackCommand = new RelayCommand<object?>(_ => NavigateHome());
-        SelectItemCommand = new AsyncCommand<BrowserItemViewModel>(SelectItemAsync);
-        PreviousCommand = new AsyncCommand(cancellationToken => MoveAsync(-1, cancellationToken), () => CanGoPrevious);
-        NextCommand = new AsyncCommand(cancellationToken => MoveAsync(1, cancellationToken), () => CanGoNext);
-        RemoveUnavailableCommand = new RelayCommand<BrowserItemViewModel>(RemoveUnavailable, item => item.IsUnavailable);
-        CompressCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Compress), _ => CanCompress);
-        ConvertCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Convert), _ => CanConvert);
-        ResizeCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Resize), _ => CanResize);
-        CropCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Crop), _ => CanCrop);
-        OpenDirectoryCommand = new AsyncCommand(OpenDirectoryAsync, () => DirectoryPath is not null || CurrentItem is not null);
-        AddImagesCommand = new AsyncCommand(AddImagesAsync, () => _picker is not null && !_isInteractionLocked && State != DesktopContentState.Loading);
+        BackCommand = _commands.Create(NavigateHome);
+        SelectItemCommand = _commands.CreateAsync<BrowserItemViewModel>(
+            _interactionDomain,
+            (item, _, token) => item is null ? Task.CompletedTask : SelectItemAsync(item, token),
+            activationOwner: activationOwner,
+            concurrencyPolicy: CommandConcurrencyPolicy.Allow);
+        PreviousCommand = _commands.CreateAsync(
+            _interactionDomain,
+            (_, token) => MoveAsync(-1, token),
+            () => CanGoPrevious,
+            activationOwner: activationOwner,
+            concurrencyPolicy: CommandConcurrencyPolicy.Allow);
+        NextCommand = _commands.CreateAsync(
+            _interactionDomain,
+            (_, token) => MoveAsync(1, token),
+            () => CanGoNext,
+            activationOwner: activationOwner,
+            concurrencyPolicy: CommandConcurrencyPolicy.Allow);
+        RemoveUnavailableCommand = _commands.Create<BrowserItemViewModel>(
+            item => { if (item is not null) RemoveUnavailable(item); },
+            item => item is { IsUnavailable: true });
+        CompressCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Compress), () => CanCompress);
+        ConvertCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Convert), () => CanConvert);
+        ResizeCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Resize), () => CanResize);
+        CropCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Crop), () => CanCrop);
+        OpenDirectoryCommand = _commands.CreateAsync(
+            OpenDirectoryAsync,
+            () => DirectoryPath is not null || CurrentItem is not null,
+            activationOwner: activationOwner);
+        AddImagesCommand = _commands.CreateAsync(
+            _interactionDomain,
+            (_, token) => AddImagesAsync(token),
+            () => _picker is not null && !_isInteractionLocked && State != DesktopContentState.Loading,
+            activationOwner: activationOwner);
     }
 
     public DesktopContentState State
@@ -288,7 +319,7 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         {
             if (!_isInteractionLocked && value is not null && !ReferenceEquals(_currentItem, value))
             {
-                _ = SelectItemAsync(value, CancellationToken.None);
+                SelectItemCommand.Execute(value);
             }
         }
     }
@@ -377,9 +408,9 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         && IsSingleFrameSupportedInput
         && _capabilities.Crop?.SupportedSameFormatFormats.Contains(_currentProbe!.Format) == true;
 
-    public bool CanGoPrevious => !_isInteractionLocked && State != DesktopContentState.Loading && CurrentIndex > 0;
+    public bool CanGoPrevious => !_isInteractionLocked && CurrentIndex > 0;
 
-    public bool CanGoNext => !_isInteractionLocked && State != DesktopContentState.Loading && CurrentIndex >= 0 && CurrentIndex < Items.Count - 1;
+    public bool CanGoNext => !_isInteractionLocked && CurrentIndex >= 0 && CurrentIndex < Items.Count - 1;
 
     public bool IsInteractionLocked
     {
@@ -387,27 +418,27 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isInteractionLocked, value);
     }
 
-    public RelayCommand<object?> BackCommand { get; }
+    public IRelayCommand BackCommand { get; }
 
-    public AsyncCommand<BrowserItemViewModel> SelectItemCommand { get; }
+    public IAsyncRelayCommand<BrowserItemViewModel> SelectItemCommand { get; }
 
-    public AsyncCommand PreviousCommand { get; }
+    public IAsyncRelayCommand PreviousCommand { get; }
 
-    public AsyncCommand NextCommand { get; }
+    public IAsyncRelayCommand NextCommand { get; }
 
-    public RelayCommand<BrowserItemViewModel> RemoveUnavailableCommand { get; }
+    public IRelayCommand<BrowserItemViewModel> RemoveUnavailableCommand { get; }
 
-    public RelayCommand<object?> CompressCommand { get; }
+    public IRelayCommand CompressCommand { get; }
 
-    public RelayCommand<object?> ConvertCommand { get; }
+    public IRelayCommand ConvertCommand { get; }
 
-    public RelayCommand<object?> ResizeCommand { get; }
+    public IRelayCommand ResizeCommand { get; }
 
-    public RelayCommand<object?> CropCommand { get; }
+    public IRelayCommand CropCommand { get; }
 
-    public AsyncCommand OpenDirectoryCommand { get; }
+    public IAsyncRelayCommand OpenDirectoryCommand { get; }
 
-    public AsyncCommand AddImagesCommand { get; }
+    public IAsyncRelayCommand AddImagesCommand { get; }
 
     public async Task LoadAsync(BrowserNavigationContext context, CancellationToken cancellationToken = default)
     {
@@ -423,7 +454,8 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
             .Select(item => new BrowserItemViewModel(
                 item.Path,
                 item.DisplayName,
-                RemoveUnavailable))
+                RemoveUnavailable,
+                _commands))
             .ToArray();
         ClearCurrent();
         ErrorMessage = null;
@@ -463,10 +495,21 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         Diagnostic.Clear();
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         CancelLoading();
-        ClearSessionData();
+        ++_generation;
+        _items = Array.Empty<BrowserItemViewModel>();
+        _galleryItems = Array.Empty<ImageGalleryItemAdapter>();
+        _currentItem = null;
+        _currentProbe = null;
+        _directoryPath = null;
+        _cropEditor = null;
+        lock (_cacheSync)
+        {
+            _probeCache.Clear();
+        }
+        _interactionDomain.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     public void EndSession() => ReleaseSession();
@@ -602,7 +645,8 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
                 appended.Add(new BrowserItemViewModel(
                     path,
                     Path.GetFileName(path.Value),
-                    RemoveUnavailable));
+                    RemoveUnavailable,
+                    _commands));
             }
         }
 

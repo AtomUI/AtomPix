@@ -1,9 +1,11 @@
 namespace AtomPix.Desktop.UiTests;
 
+using System.Globalization;
 using AtomPix.Core.Ports;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Desktop.Composition;
 using AtomPix.Desktop.Controls;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Desktop.Shell;
@@ -12,6 +14,8 @@ using AtomPix.Desktop.Views;
 using AtomPix.Workflows.Settings;
 using AtomPix.Workflows.Images;
 using AtomUI.Labs.Controls.ImageGallery;
+using AtomUI.City.Localization;
+using AtomUI.City.Presentation;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -30,15 +34,54 @@ public sealed class DesktopUiAutomationTests
             AvaloniaTestIsolationLevel.PerAssembly));
 
     [Fact]
+    public Task Generated_localization_catalogs_register_and_resolve_through_city_runtime() => RunAsync(async () =>
+    {
+        await using var harness = await CityWindowHarness.StartAsync();
+        var registry = harness.Services.GetRequiredService<LanguagePackageRegistry>();
+        var descriptors = registry.Descriptors
+            .Where(descriptor => descriptor.ScopeId == AtomPixLocalization.ModuleId)
+            .ToArray();
+
+        Assert.Equal(8, descriptors.Length);
+        Assert.All(descriptors, descriptor => Assert.Equal("zh-CN", descriptor.Culture.Name));
+        Assert.Equal(
+            new[] { "zh-CN" },
+            AtomUI.City.Generated.GeneratedLocalizationManifest.SupportedCultures);
+        Assert.Equal(8, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
+
+        var localization = harness.Services.GetRequiredService<ILocalizationService>();
+        var presentationBridge = harness.Services.GetRequiredService<IPresentationLocalizationBridge>();
+        Assert.IsType<AvaloniaPresentationLocalizationBridge>(presentationBridge);
+
+        var presentationResult = await presentationBridge.ApplyCultureAsync(
+            localization.CultureState.Value);
+        Assert.True(presentationResult.Succeeded);
+        Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentCulture?.Name);
+        Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentUICulture?.Name);
+
+        var context = new LocalizationLookupContext(moduleId: AtomPixLocalization.ModuleId);
+        using var scope = localization.ActivateScope(context);
+        var title = await localization.GetStringAsync(
+            AtomUI.City.Generated.GeneratedLocalizationManifest.Keys.Settings_Title,
+            context);
+
+        Assert.False(title.IsMissing);
+        Assert.Equal("设置", title.Value);
+        Assert.Equal("zh-CN", title.Culture.Name);
+    });
+
+    [Fact]
     public Task Shell_uses_a_non_immersive_primary_workspace_and_normal_right_tool_panel() => RunAsync(async () =>
     {
-        using var services = DesktopCompositionRoot.Build();
-        var shell = services.GetRequiredService<ShellViewModel>();
-        var window = new MainWindow(shell);
-        window.Show();
-        try
+        await using var harness = await CityWindowHarness.StartAsync();
+        var shell = harness.Shell;
+        var window = harness.Window;
         {
             using var frame = window.CaptureRenderedFrame();
+            var initialHomeView = Assert.Single(
+                window.GetVisualDescendants().OfType<HomePageView>());
+            var initialHomeActivation = shell.Home.CurrentActivationScope;
+            Assert.NotNull(initialHomeActivation);
             Assert.NotNull(frame);
             Assert.Equal(1180, window.Width);
             Assert.Equal(760, window.Height);
@@ -75,9 +118,10 @@ public sealed class DesktopUiAutomationTests
             window.MouseMove(clickPoint.Value, RawInputModifiers.None);
             window.MouseDown(clickPoint.Value, MouseButton.Left, RawInputModifiers.None);
             window.MouseUp(clickPoint.Value, MouseButton.Left, RawInputModifiers.None);
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await WaitUntilAsync(() => shell.IsSettingsOpen
+                && workspace.GetVisualDescendants().OfType<SettingsPageView>().Count() == 1);
             Assert.True(shell.IsSettingsOpen);
-            Assert.Same(shell.Settings, shell.CurrentPage);
+            Assert.False(shell.Home.IsActive);
             Assert.False(rail.IsVisible);
             Assert.False(panel.IsVisible);
             var settingsSeparator = Assert.IsType<Border>(window.FindControl<Border>("SettingsTitleBarSeparator"));
@@ -93,16 +137,74 @@ public sealed class DesktopUiAutomationTests
             Assert.True(Assert.IsType<StackPanel>(settingsView.FindControl<StackPanel>("AboutSettingsSection")).IsVisible);
 
             shell.Settings.CloseCommand.Execute(null);
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await WaitUntilAsync(() => !shell.IsSettingsOpen
+                && workspace.GetVisualDescendants().OfType<HomePageView>().Count() == 1);
             Assert.False(shell.IsSettingsOpen);
-            Assert.Same(shell.Home, shell.CurrentPage);
+            var homeView = Assert.Single(workspace.GetVisualDescendants().OfType<HomePageView>());
+            Assert.Same(shell.Home, homeView.DataContext);
+            Assert.NotSame(initialHomeView, homeView);
+            Assert.NotSame(initialHomeActivation, shell.Home.CurrentActivationScope);
+            Assert.True(shell.Home.IsActive);
             Assert.True(rail.IsVisible);
             Assert.False(settingsSeparator.IsVisible);
         }
-        finally
-        {
-            window.Close();
-        }
+    });
+
+    [Fact]
+    public Task Settings_round_trip_rebuilds_browser_visuals_and_activation_without_losing_workspace() => RunAsync(async () =>
+    {
+        await using var harness = await CityWindowHarness.StartAsync();
+        var shell = harness.Shell;
+        var navigation = harness.Services.GetRequiredService<DesktopNavigationCoordinator>();
+        var firstPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-detailed.jpg");
+        var secondPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-basic.jpg");
+        var context = new BrowserNavigationContext(
+            new LocalPath(Path.GetDirectoryName(firstPath)!),
+            [
+                new BrowserImageCandidate(new LocalPath(firstPath), Path.GetFileName(firstPath)),
+                new BrowserImageCandidate(new LocalPath(secondPath), Path.GetFileName(secondPath))
+            ]);
+
+        Assert.True(navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Browse, context)));
+        await WaitUntilAsync(() => shell.Browser.State == DesktopContentState.Ready
+            && shell.Browser.CurrentItem is not null
+            && shell.Browser.IsActive);
+        var firstBrowserView = Assert.Single(
+            harness.Window.GetVisualDescendants().OfType<ImageBrowserView>());
+        var firstActivation = shell.Browser.CurrentActivationScope;
+        Assert.NotNull(firstActivation);
+        var expectedItem = shell.Browser.CurrentItem;
+        var expectedWorkspaceId = harness.Services
+            .GetRequiredService<AtomPixCityNavigator>()
+            .CurrentWorkspaceId;
+        Assert.NotNull(expectedWorkspaceId);
+
+        shell.NavigateCommand.Execute(DesktopRoute.Crop);
+        await WaitUntilAsync(() => shell.IsCropActive
+            && shell.Browser.IsCropMode
+            && shell.Crop.ContentState == DesktopContentState.Ready);
+
+        shell.NavigateCommand.Execute(DesktopRoute.Settings);
+        await WaitUntilAsync(() => shell.IsSettingsOpen
+            && harness.Window.GetVisualDescendants().OfType<SettingsPageView>().Count() == 1);
+        Assert.False(shell.Browser.IsActive);
+        Assert.Same(expectedItem, shell.Browser.CurrentItem);
+        Assert.True(shell.Browser.IsCropMode);
+
+        shell.Settings.CloseCommand.Execute(null);
+        await WaitUntilAsync(() => shell.IsCropActive
+            && shell.Browser.IsActive
+            && harness.Window.GetVisualDescendants().OfType<ImageBrowserView>().Count() == 1);
+        var secondBrowserView = Assert.Single(
+            harness.Window.GetVisualDescendants().OfType<ImageBrowserView>());
+        Assert.NotSame(firstBrowserView, secondBrowserView);
+        Assert.Same(shell.Browser, secondBrowserView.DataContext);
+        Assert.NotSame(firstActivation, shell.Browser.CurrentActivationScope);
+        Assert.Same(expectedItem, shell.Browser.CurrentItem);
+        Assert.True(shell.Browser.IsCropMode);
+        Assert.Equal(
+            expectedWorkspaceId,
+            harness.Services.GetRequiredService<AtomPixCityNavigator>().CurrentWorkspaceId);
     });
 
     [Fact]
@@ -294,9 +396,9 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Folder_browser_enters_crop_through_the_shell_with_its_first_image_visible() => RunAsync(async () =>
     {
-        using var services = DesktopCompositionRoot.Build();
-        var shell = services.GetRequiredService<ShellViewModel>();
-        var navigation = services.GetRequiredService<DesktopNavigationCoordinator>();
+        await using var harness = await CityWindowHarness.StartAsync();
+        var shell = harness.Shell;
+        var navigation = harness.Services.GetRequiredService<DesktopNavigationCoordinator>();
         var firstPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-detailed.jpg");
         var secondPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-basic.jpg");
         var context = new BrowserNavigationContext(
@@ -305,9 +407,7 @@ public sealed class DesktopUiAutomationTests
                 new BrowserImageCandidate(new LocalPath(firstPath), Path.GetFileName(firstPath)),
                 new BrowserImageCandidate(new LocalPath(secondPath), Path.GetFileName(secondPath))
             ]);
-        var window = new MainWindow(shell);
-        window.Show();
-        try
+        var window = harness.Window;
         {
             Assert.True(navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Browse, context)));
             await WaitUntilAsync(() => shell.Browser.State == DesktopContentState.Ready && shell.IsBrowserVisible);
@@ -352,10 +452,6 @@ public sealed class DesktopUiAutomationTests
             using var secondCropFrame = window.CaptureRenderedFrame();
             await WaitUntilAsync(() => cropCanvas.ImageSource is not null);
             Assert.Same(shell.Browser.Items[1].GalleryItem, gallery.SelectedItem);
-        }
-        finally
-        {
-            window.Close();
         }
     });
 
@@ -835,6 +931,101 @@ public sealed class DesktopUiAutomationTests
             Task.FromResult(DesktopSelectionResult.Canceled());
         public Task<DesktopSelectionResult> PickFolderAsync(CancellationToken cancellationToken) =>
             Task.FromResult(DesktopSelectionResult.Canceled());
+    }
+
+    private sealed class CityWindowHarness : IAsyncDisposable
+    {
+        private readonly IPresentationRuntime _runtime;
+        private readonly WindowSession _session;
+        private readonly IDisposable _outletRegistration;
+        private readonly AtomPixCityNavigator _navigator;
+
+        private CityWindowHarness(
+            DesktopServiceHost services,
+            IPresentationRuntime runtime,
+            WindowSession session,
+            IDisposable outletRegistration,
+            AtomPixCityNavigator navigator,
+            ShellViewModel shell,
+            MainWindow window)
+        {
+            Services = services;
+            _runtime = runtime;
+            _session = session;
+            _outletRegistration = outletRegistration;
+            _navigator = navigator;
+            Shell = shell;
+            Window = window;
+        }
+
+        public DesktopServiceHost Services { get; }
+
+        public ShellViewModel Shell { get; }
+
+        public MainWindow Window { get; }
+
+        public static async Task<CityWindowHarness> StartAsync()
+        {
+            var services = DesktopCompositionRoot.Build();
+            try
+            {
+                var runtime = services.GetRequiredService<IPresentationRuntime>();
+                await runtime.StartAsync(services.ApplicationHost.HostScope);
+                var shell = services.GetRequiredService<ShellViewModel>();
+                var window = services.GetRequiredService<MainWindow>();
+                var session = runtime.RegisterWindow(window, $"test-{Guid.NewGuid():N}");
+                var outletRegistration = window.RegisterPrimaryOutlet(session);
+                var navigator = services.GetRequiredService<AtomPixCityNavigator>();
+                await shell.AttachCompositionAsync(session);
+                navigator.Attach(session.GetOutlet("primary"));
+                if (!await navigator.PresentAsync(
+                        new DesktopNavigationRequest(DesktopRoute.Browse),
+                        shell.Home))
+                {
+                    throw new InvalidOperationException(
+                        $"The initial City route was not presented: " +
+                        $"{navigator.LastResult?.Status} / {navigator.LastResult?.Message}",
+                        navigator.LastResult?.Exception);
+                }
+
+                window.Show();
+                return new CityWindowHarness(
+                    services,
+                    runtime,
+                    session,
+                    outletRegistration,
+                    navigator,
+                    shell,
+                    window);
+            }
+            catch
+            {
+                try
+                {
+                    services.Dispose();
+                }
+                catch
+                {
+                    // Preserve the startup failure; it is the actionable test result.
+                }
+                throw;
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await _session.DisposeAsync();
+            }
+            finally
+            {
+                _navigator.Dispose();
+                _outletRegistration.Dispose();
+                await _runtime.StopAsync();
+                Services.Dispose();
+            }
+        }
     }
 
 }

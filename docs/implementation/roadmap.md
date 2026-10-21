@@ -8,7 +8,7 @@
 >
 > 变更规则：调整实现顺序、阶段边界或阶段验收要求时，应先更新本文档。
 
-> 时间语义：Phase 0–7 保留 2026-06-26 首轮 Headless 建设顺序与验收事实；其中出现的内嵌 Resize、旧结果字段或旧目录行为只描述当时代码。现行目标契约以 Product、Modules 与本文 Phase 8 为准，不得用历史实现反向覆盖正式设计。
+> 时间语义：Phase 0–7 保留 2026-06-26 首轮 Headless 建设顺序与验收事实；其中出现的内嵌 Resize、旧结果字段或旧目录行为只描述当时代码。Phase 8 记录已完成的 Desktop 基线，Phase 9 是 2026-10-21 City 迁移目标；不得用历史实现反向覆盖正式设计。
 
 ## 1. 总原则
 
@@ -37,6 +37,7 @@ Phase 5: Workflows + Workflows.Tests
 Phase 6: Headless 业务场景测试
 Phase 7: 发布验证
 Phase 8: Desktop / UI 规划与实现
+Phase 9: AtomUI.City 迁移
 ```
 
 `Phase 8` 明确放在最后，不在底层 headless 能力稳定前展开。
@@ -415,3 +416,26 @@ Desktop 首次落地时固定经过验证的 AtomUI/Avalonia 包版本，只注�
 截至 2026-08-26，本阶段功能施工、Desktop 交互闭环、ImageGallery/Shell 迁移和工程发布门禁均已贯通。图标轨、走廊统一批量输入、普通左右操作工作区、Crop 安全工作区和双列连续滚动设置页已接入生产组合根；旧宽 NavMenu、覆盖式 Drawer、设置 Overlay、独立批量来源页面和旧 UIA 导航口径已经清理。单张与批量处理复用同一个工具 View：批量运行只在原 Footer 增量显示进度和取消，终态由窗口级 Message/Notification 反馈并可打开批量结果 Dialog，不再跳转到第二套批量页。Avalonia/AtomUI 真实无头渲染与输入自动化、2000 项批处理、10000 行虚拟化、16MP 并发预览和日志压力测试均为可执行门禁；CI 对 Windows/Linux/macOS 构建并在原生 Runner 生成自包含单文件归档、校验文件和启动烟测。多 DPI 和发行主体的平台签名/公证仍属于发布验收与外部凭据工作，不得把密钥写入源码；屏幕阅读器和全页面纯键盘巡检不属于当前版本需求。
 
 2026-08-23 冻结、并于 2026-08-25 完成 Phase 8 技术重构：图片浏览器基础设施已迁移到 `AtomUI.Labs.Controls.ImageGallery`，Shell 已取消沉浸式标题栏和覆盖式 Drawer，改为独立标题栏、无工具时全宽 ImageGallery、有工具时左侧工作区与约 `380 px` 右侧处理面板并列。在正式 NuGet 发布前，继续使用复制到 AtomPix 仓库内、固定版本和 SHA-256 的本地 nupkg；禁止跨仓库 ProjectReference 或绝对路径 restore。供应链与许可门禁、版本/主题兼容、Desktop item/source adapter、Shell 两列布局、行为/压力回归和旧画廊清理均已进入生产实现，细则见 `docs/modules/desktop/atomui-labs-imagegallery-migration.md`。
+
+## 12. Phase 9: AtomUI.City 迁移
+
+本阶段的设计入口是 `docs/iterations/features/with-city-migration-matrix.md` 和 `with-city-decision-register.md`。迁移不得改变 Phase 8 的产品交互与视觉结构。
+
+施工顺序固定为：
+
+```text
+City Public API/Release gate
+-> CommandExecutionDomain
+-> Routing-Presentation coordinator + conditional restore
+-> ViewModel composition Release Verified
+-> 固定新 City SHA，并生成同 SHA Build package
+-> AtomPix Host + AppSettings State
+-> Routing/Presentation + BrowserWorkspace
+-> MVVM/Command + Localization
+-> 删除 Recent 与旧基础设施双栈
+-> published functional + 五平台 publish + release compliance
+```
+
+City 前置能力未完成时，AtomPix 只允许维护文档和可逆验证，不实现临时框架替代。每个施工单元从决策登记表的 `Blocked/Not Started` 转为 `Verified` 时，必须附真实测试或发布证据；高层矩阵字符不能作为完成依据。
+
+截至 2026-10-21，City 前置 gate、固定 SHA/Build package、AtomPix Host、AppSettings State、Routing/Presentation、Browser workspace、命令执行域和可复现 Windows published functional 已完成并具有 Release 证据。当前施工点是 AtomPix MVVM ownership map 最终收口与 Localization；最终 Release 仍受第三方许可证、Notice/对应源码和 SBOM gate 阻塞。实时状态以决策登记表为准。

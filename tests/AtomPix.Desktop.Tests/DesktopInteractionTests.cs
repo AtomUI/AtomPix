@@ -281,13 +281,13 @@ public sealed class DesktopInteractionTests
         var dialogs = new TestDialogs();
         var viewModel = CreateSettings(store, dialogs);
         await viewModel.LoadAsync();
-        viewModel.RecentMaxCount = 7;
+        viewModel.SubfolderName = "Unsaved_Draft";
 
         var canLeave = await viewModel.TryLeaveAsync();
 
         Assert.True(canLeave);
         Assert.False(viewModel.IsDirty);
-        Assert.Equal(20, viewModel.RecentMaxCount);
+        Assert.Equal("AtomPix_Output", viewModel.SubfolderName);
         Assert.Equal(0, store.SaveCount);
     }
 
@@ -1020,38 +1020,6 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
-    public async Task Recent_missing_item_is_retained_and_relocated_only_after_replacement_validates()
-    {
-        var stale = new LocalPath(Path.Combine(Path.GetTempPath(), "stale.jpg"));
-        var replacement = new LocalPath(Path.Combine(Path.GetTempPath(), "replacement.jpg"));
-        var processor = new TestImageProcessor(replacement);
-        processor.UnavailablePaths.Add(stale.Value);
-        var recentStore = new TestRecentItemsStore([
-            new RecentItem(stale, RecentItemKind.File, DateTimeOffset.UtcNow.AddMinutes(-1))
-        ]);
-        var navigation = new DesktopNavigationCoordinator();
-        DesktopNavigationRequest? requested = null;
-        navigation.NavigationRequested += (_, request) => requested = request;
-        var viewModel = CreateHome(
-            new TestPicker(DesktopSelectionResult.Selected(replacement.Value)),
-            processor,
-            navigation,
-            new TestFileSystem([replacement]),
-            recentStore);
-        await viewModel.LoadRecentAsync();
-        var staleItem = Assert.Single(viewModel.RecentItems);
-
-        await viewModel.OpenRecentCommand.ExecuteAsync(staleItem);
-        Assert.True(staleItem.IsUnavailable);
-        Assert.Contains(recentStore.Items, item => item.Path == stale);
-
-        await viewModel.RelocateRecentCommand.ExecuteAsync(staleItem);
-        Assert.DoesNotContain(recentStore.Items, item => item.Path == stale);
-        Assert.Contains(recentStore.Items, item => item.Path == replacement);
-        Assert.Equal(replacement, Assert.IsType<BrowserNavigationContext>(requested?.Context).PreferredPath);
-    }
-
-    [Fact]
     public async Task Home_drop_directory_reuses_folder_workflow_and_keeps_browser_semantics()
     {
         var directory = new LocalPath(Path.Combine(Path.GetTempPath(), "drop-folder"));
@@ -1344,8 +1312,11 @@ public sealed class DesktopInteractionTests
                                    && editor.IsContentReady);
         var drawer = Assert.IsType<ToolDrawerSessionViewModel>(shell.DrawerContent);
 
+        Assert.True(drawer.CanStartBatch);
+        Assert.True(drawer.StartBatchCommand.CanExecute(null));
         await drawer.StartBatchCommand.ExecuteAsync();
 
+        Assert.True(batch.HasResult, batch.ErrorMessage ?? batch.DraftError ?? "Batch command did not produce a result.");
         Assert.Equal(2, processor.CompressCallCount);
         Assert.True(batch.HasResult);
         Assert.DoesNotContain(feedback.Messages, message => message.Contains("当前批量处理配置无效", StringComparison.Ordinal));
@@ -1486,6 +1457,84 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
+    public void Browser_navigation_sessions_are_single_use_and_missing_keys_are_rejected()
+    {
+        var store = new BrowserNavigationSessionStore();
+        var context = new BrowserNavigationContext(null, []);
+        var key = store.Add(context);
+
+        Assert.True(store.TryConsume(key, out var consumed));
+        Assert.Same(context, consumed);
+        Assert.False(store.TryConsume(key, out _));
+        Assert.False(store.TryConsume(Guid.NewGuid(), out _));
+        Assert.Equal(0, store.Count);
+    }
+
+    [Fact]
+    public void Browser_navigation_sessions_reject_expired_entries()
+    {
+        var now = DateTimeOffset.Parse("2026-10-21T08:00:00+08:00");
+        var store = new BrowserNavigationSessionStore(
+            capacity: 2,
+            sessionLifetime: TimeSpan.FromMinutes(2),
+            utcNow: () => now);
+        var key = store.Add(new BrowserNavigationContext(null, []));
+
+        now = now.AddMinutes(3);
+
+        Assert.False(store.TryConsume(key, out _));
+        Assert.Equal(0, store.Count);
+    }
+
+    [Fact]
+    public void Browser_navigation_sessions_evict_the_oldest_entry_at_capacity()
+    {
+        var now = DateTimeOffset.Parse("2026-10-21T08:00:00+08:00");
+        var store = new BrowserNavigationSessionStore(
+            capacity: 2,
+            sessionLifetime: TimeSpan.FromMinutes(2),
+            utcNow: () => now);
+        var first = store.Add(new BrowserNavigationContext(null, []));
+        now = now.AddSeconds(1);
+        var second = store.Add(new BrowserNavigationContext(null, []));
+        now = now.AddSeconds(1);
+        var third = store.Add(new BrowserNavigationContext(null, []));
+
+        Assert.False(store.TryConsume(first, out _));
+        Assert.True(store.TryConsume(second, out _));
+        Assert.True(store.TryConsume(third, out _));
+        Assert.Equal(0, store.Count);
+    }
+
+    [Fact]
+    public async Task Browser_selection_and_next_commands_share_latest_wins_execution_domain()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "domain-1.jpg"));
+        var delayed = new LocalPath(Path.Combine(Path.GetTempPath(), "domain-2.jpg"));
+        var latest = new LocalPath(Path.Combine(Path.GetTempPath(), "domain-3.jpg"));
+        var processor = new TestImageProcessor(first);
+        processor.ProbeGates[delayed.Value] = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var browser = CreateBrowser(processor);
+        await browser.LoadAsync(new BrowserNavigationContext(
+            null,
+            [
+                new BrowserImageCandidate(first, "domain-1.jpg"),
+                new BrowserImageCandidate(delayed, "domain-2.jpg"),
+                new BrowserImageCandidate(latest, "domain-3.jpg")
+            ]));
+
+        var selection = browser.SelectItemCommand.ExecuteAsync(browser.Items[1]);
+        await WaitUntilAsync(() => processor.ProbeCallCount == 2);
+        var next = browser.NextCommand.ExecuteAsync();
+
+        await next;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => selection);
+        Assert.Equal(latest, browser.CurrentItem!.Path);
+        Assert.Equal(DesktopContentState.Ready, browser.State);
+    }
+
+    [Fact]
     public async Task Output_policy_directory_picker_cancel_preserves_existing_draft()
     {
         var editor = new OutputPolicyEditorViewModel(new TestPicker(DesktopSelectionResult.Canceled()));
@@ -1562,7 +1611,7 @@ public sealed class DesktopInteractionTests
         var store = new FailingSaveSettingsStore(AppSettings.Default);
         var viewModel = CreateSettings(store);
         await viewModel.LoadAsync();
-        viewModel.RecentMaxCount = 7;
+        viewModel.SubfolderName = "Unsaved_Draft";
 
         await viewModel.SaveCommand.ExecuteAsync();
 
@@ -1723,11 +1772,8 @@ public sealed class DesktopInteractionTests
         IDesktopPickerService picker,
         IImageProcessor processor,
         DesktopNavigationCoordinator navigation,
-        IFileSystemService? fileSystem = null,
-        TestRecentItemsStore? recentStore = null)
+        IFileSystemService? fileSystem = null)
     {
-        var settings = new TestSettingsStore();
-        recentStore ??= new TestRecentItemsStore();
         var effectiveFileSystem = fileSystem ?? new TestFileSystem([]);
         return new HomePageViewModel(
             picker,
@@ -1735,12 +1781,6 @@ public sealed class DesktopInteractionTests
             new OpenImageWorkflow(processor),
             new OpenFolderWorkflow(effectiveFileSystem, processor),
             navigation,
-            new LoadSettingsWorkflow(settings),
-            new AtomPix.Workflows.RecentItems.LoadRecentItemsWorkflow(recentStore),
-            new AtomPix.Workflows.RecentItems.AddRecentItemWorkflow(recentStore),
-            new AtomPix.Workflows.RecentItems.RemoveRecentItemWorkflow(recentStore),
-            new AtomPix.Workflows.RecentItems.ClearRecentItemsWorkflow(recentStore),
-            new TestDialogs(),
             new TestClipboard());
     }
 
@@ -2050,24 +2090,6 @@ public sealed class DesktopInteractionTests
                 "Synthetic settings save failure.")));
     }
 
-    private sealed class TestRecentItemsStore : IRecentItemsStore
-    {
-        private IReadOnlyList<RecentItem> _items;
-
-        public TestRecentItemsStore(IReadOnlyList<RecentItem>? items = null) => _items = items?.ToArray() ?? [];
-
-        public IReadOnlyList<RecentItem> Items => _items;
-
-        public Task<OperationResult<IReadOnlyList<RecentItem>>> LoadAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(OperationResult<IReadOnlyList<RecentItem>>.Success(_items));
-
-        public Task<OperationResult> SaveAsync(IReadOnlyList<RecentItem> items, CancellationToken cancellationToken)
-        {
-            _items = items.ToArray();
-            return Task.FromResult(OperationResult.Success());
-        }
-    }
-
     private sealed class TestFileSystem : IFileSystemService
     {
         private readonly List<LocalPath> _files;
@@ -2166,6 +2188,8 @@ public sealed class DesktopInteractionTests
 
         public Dictionary<string, TaskCompletionSource> PreviewGates { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        public Dictionary<string, TaskCompletionSource> ProbeGates { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         public ImageCompressRequest? LastCompressRequest { get; private set; }
 
         public ImageConvertRequest? LastConvertRequest { get; private set; }
@@ -2208,19 +2232,34 @@ public sealed class DesktopInteractionTests
                 10_000,
                 100_000_000));
 
-        public Task<OperationResult<ImageProbeResult>> ProbeAsync(
+        public async Task<OperationResult<ImageProbeResult>> ProbeAsync(
             ImageProbeRequest request,
             CancellationToken cancellationToken)
         {
             ProbeCallCount++;
+            if (ProbeGates.TryGetValue(request.InputPath.Value, out var gate))
+            {
+                await gate.Task.WaitAsync(cancellationToken);
+            }
             if (UnavailablePaths.Contains(request.InputPath.Value))
             {
-                return Task.FromResult(OperationResult<ImageProbeResult>.Failure(new AtomPixError(
+                return OperationResult<ImageProbeResult>.Failure(new AtomPixError(
                     AtomPixErrorCode.InputFileNotFound,
                     AtomPixErrorCategory.FileSystem,
-                    "Missing test image.")));
+                    "Missing test image."));
             }
-            return Task.FromResult(OperationResult<ImageProbeResult>.Success(_probe with { }));
+            return OperationResult<ImageProbeResult>.Success(new ImageProbeResult(
+                request.InputPath,
+                _probe.Format,
+                _probe.Width,
+                _probe.Height,
+                _probe.FileSizeBytes,
+                _probe.HasAlphaChannel,
+                _probe.HasTransparency,
+                _probe.IsAnimated,
+                _probe.FrameCount,
+                _probe.HasMetadata,
+                _probe.HasColorProfile));
         }
 
         public async Task<OperationResult<ImagePreviewResult>> CreatePreviewAsync(

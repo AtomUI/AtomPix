@@ -4,15 +4,26 @@
     <OutputType>WinExe</OutputType>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationIcon>Assets\Branding\AtomPix.ico</ApplicationIcon>
+    <AtomUICityManifestIntermediateOutputPath>$(BaseIntermediateOutputPath)AtomUI.City\manifests\</AtomUICityManifestIntermediateOutputPath>
+    <AtomUICityBuildDiagnosticsOutputPath>$(BaseIntermediateOutputPath)AtomUI.City\diagnostics\</AtomUICityBuildDiagnosticsOutputPath>
+    <AtomUICityLocalizationIntermediateOutputPath>$(BaseIntermediateOutputPath)AtomUI.City\localization\$(Configuration)\$(TargetFramework)\</AtomUICityLocalizationIntermediateOutputPath>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="AtomUI.City.Mvvm" />
+    <Using Include="CommunityToolkit.Mvvm.ComponentModel" />
+    <Using Include="CommunityToolkit.Mvvm.Input" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="AtomUI.Desktop.Controls" />
     <PackageReference Include="AtomUI.Desktop.Controls.ColorPicker" />
-    <PackageReference Include="AtomUI.Fonts.AlibabaSans" />
     <PackageReference Include="AtomUI.Icons.AntDesign" />
     <PackageReference Include="AtomUI.Labs.Controls.ImageGallery" />
+    <PackageReference Include="AtomUI.City.Build"
+                      PrivateAssets="all"
+                      IncludeAssets="build;buildTransitive;analyzers" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
@@ -20,12 +31,29 @@
     <ProjectReference Include="..\AtomPix.Imaging.Magick\AtomPix.Imaging.Magick.csproj" />
     <ProjectReference Include="..\AtomPix.Infrastructure\AtomPix.Infrastructure.csproj" />
     <ProjectReference Include="..\AtomPix.Workflows\AtomPix.Workflows.csproj" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.Core\AtomUI.City.Core.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.Mvvm\AtomUI.City.Mvvm.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.Routing\AtomUI.City.Routing.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.Presentation\AtomUI.City.Presentation.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.Localization\AtomUI.City.Localization.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
   </ItemGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\Branding\*.png" />
     <AvaloniaResource Include="Assets\Branding\*.ico" />
     <AvaloniaResource Include="Assets\Themes\*.theme.xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AtomUICityResx Update="$(MSBuildProjectDirectory)\Localization\**\Resources.resx"
+                    Scope="Module"
+                    ScopeId="atompix.desktop"
+                    Version="0.1.0" />
   </ItemGroup>
 
   <Target Name="RejectForbiddenAtomUIDataGridPackage" BeforeTargets="PrepareForBuild">

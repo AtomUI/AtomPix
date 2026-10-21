@@ -2,6 +2,7 @@ namespace AtomPix.Desktop.ViewModels;
 
 using AtomPix.Core.Output;
 using AtomPix.Desktop.Platform;
+using AtomUI.City.Presentation;
 
 public sealed class OutputPolicyEditorViewModel : ObservableObject
 {
@@ -20,7 +21,8 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
     public OutputPolicyEditorViewModel(
         IDesktopPickerService picker,
         Action? draftChanged = null,
-        Action<string>? feedbackRequested = null)
+        Action<string>? feedbackRequested = null,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _draftChanged = draftChanged ?? (() => { });
@@ -46,11 +48,12 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
         _selectedLocation = Locations[0];
         _selectedNaming = NamingModes[1];
         _selectedOverwrite = OverwritePolicies[0];
-        ChooseDirectoryCommand = new AsyncCommand(ChooseDirectoryAsync);
-        InsertNameTokenCommand = new RelayCommand<object?>(_ => CustomFileNamePattern += "{name}");
-        InsertIndexTokenCommand = new RelayCommand<object?>(
-            _ => CustomFileNamePattern += "{index}",
-            _ => !CustomFileNamePattern.Contains("{index}", StringComparison.Ordinal));
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        ChooseDirectoryCommand = commands.CreateAsync(ChooseDirectoryAsync);
+        InsertNameTokenCommand = commands.Create(() => CustomFileNamePattern += "{name}");
+        InsertIndexTokenCommand = commands.Create(
+            () => CustomFileNamePattern += "{index}",
+            () => !CustomFileNamePattern.Contains("{index}", StringComparison.Ordinal));
     }
 
     public IReadOnlyList<DesktopChoiceOption<OutputLocationMode>> Locations { get; }
@@ -201,9 +204,9 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
     }
     public bool HasPickerError => !string.IsNullOrWhiteSpace(PickerError);
 
-    public AsyncCommand ChooseDirectoryCommand { get; }
-    public RelayCommand<object?> InsertNameTokenCommand { get; }
-    public RelayCommand<object?> InsertIndexTokenCommand { get; }
+    public IAsyncRelayCommand ChooseDirectoryCommand { get; }
+    public IRelayCommand InsertNameTokenCommand { get; }
+    public IRelayCommand InsertIndexTokenCommand { get; }
 
     public void Apply(OutputPolicy policy)
     {

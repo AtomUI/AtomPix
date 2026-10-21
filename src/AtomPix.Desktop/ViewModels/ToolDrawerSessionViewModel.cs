@@ -3,12 +3,13 @@ namespace AtomPix.Desktop.ViewModels;
 using AtomPix.Desktop.Navigation;
 using System.ComponentModel;
 using System.Windows.Input;
+using AtomUI.City.Presentation;
 
 /// <summary>
 /// Keeps one tool editor mounted while projecting single or batch execution into
 /// the same footer. Batch is an execution mode, never a second content page.
 /// </summary>
-public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
 {
     private readonly DesktopNavigationCoordinator _navigation;
     private readonly Func<CancellationToken, Task<bool>> _prepareBatch;
@@ -24,7 +25,8 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
         int itemCount,
         Func<CancellationToken, Task<bool>> prepareBatch,
         Action synchronizeSingleFromBatch,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IUiCommandFactory? commandFactory = null)
     {
         SingleContent = singleContent ?? throw new ArgumentNullException(nameof(singleContent));
         _singleActions = singleContent as IToolEditorActions
@@ -35,7 +37,10 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
         _prepareBatch = prepareBatch ?? throw new ArgumentNullException(nameof(prepareBatch));
         _synchronizeSingleFromBatch = synchronizeSingleFromBatch ?? throw new ArgumentNullException(nameof(synchronizeSingleFromBatch));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        StartBatchCommand = new AsyncCommand(StartBatchAsync, () => CanStartBatch);
+        StartBatchCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance).CreateAsync(
+            StartBatchAsync,
+            () => CanStartBatch,
+            activationOwner: HeadlessUiCommandFactory.ResolveActivationOwner(commandFactory, this));
         _navigation.NavigationLockChanged += HandleNavigationLockChanged;
         BatchContent.PropertyChanged += HandleBatchPropertyChanged;
         if (_singleNotifier is not null) _singleNotifier.PropertyChanged += HandleSinglePropertyChanged;
@@ -87,7 +92,7 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
     }
 
     public bool IsProcessing => IsSingleProcessing || IsBatchProcessing;
-    public AsyncCommand StartBatchCommand { get; }
+    public IAsyncRelayCommand StartBatchCommand { get; }
 
     public void RequestCancellation()
     {
@@ -104,7 +109,7 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
     public void UpdateItemCount(int value) => ItemCount = Math.Max(0, value);
     public void SynchronizeDraftFromBatch() => _synchronizeSingleFromBatch();
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         _navigation.NavigationLockChanged -= HandleNavigationLockChanged;
         BatchContent.PropertyChanged -= HandleBatchPropertyChanged;
@@ -120,7 +125,8 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
         {
             if (!await _prepareBatch(cancellationToken)) return;
             IsPreparingBatch = false;
-            await BatchContent.StartCommand.ExecuteAsync(cancellationToken);
+            using var cancellationRegistration = cancellationToken.Register(BatchContent.StartCommand.Cancel);
+            await BatchContent.StartCommand.ExecuteAsync(null);
         }
         finally
         {

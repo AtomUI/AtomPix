@@ -8,8 +8,16 @@ using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Desktop.ViewModels;
 using AtomPix.Workflows.Images;
+using AtomUI.City.Presentation;
 
-public sealed class ShellViewModel : ObservableObject, IDisposable
+public enum PrimaryWorkspaceKind
+{
+    Home,
+    Browser,
+    Settings,
+}
+
+public sealed class ShellViewModel : ViewModelBase
 {
     private readonly DesktopNavigationCoordinator _navigation;
     private readonly HomePageViewModel _home;
@@ -22,8 +30,10 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     private readonly SettingsPageViewModel _settings;
     private readonly IDesktopDialogService _dialogs;
     private readonly IDesktopFeedbackService _feedback;
-    private object _currentPage;
-    private object _pageBeforeSettings;
+    private readonly AtomPixCityNavigator? _cityNavigator;
+    private readonly IUiCommandFactory _commandFactory;
+    private PrimaryWorkspaceKind _primaryWorkspace = PrimaryWorkspaceKind.Home;
+    private PrimaryWorkspaceKind _workspaceBeforeSettings = PrimaryWorkspaceKind.Home;
     private object? _drawerContent;
     private DesktopRoute _currentRoute = DesktopRoute.Browse;
     private DesktopRoute _routeBeforeSettings = DesktopRoute.Browse;
@@ -36,6 +46,8 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     private bool _isNavigationPending;
     private int _navigationRevision;
     private ToolDrawerSessionViewModel? _toolSession;
+    private ViewModelCompositionLease? _compositionRoot;
+    private ViewModelCompositionLease? _toolComposition;
 
     public ShellViewModel(
         DesktopNavigationCoordinator navigation,
@@ -48,7 +60,9 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         BatchTaskViewModel batch,
         SettingsPageViewModel settings,
         IDesktopDialogService dialogs,
-        IDesktopFeedbackService feedback)
+        IDesktopFeedbackService feedback,
+        AtomPixCityNavigator? cityNavigator = null,
+        IUiCommandFactory? commandFactory = null)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         _home = home ?? throw new ArgumentNullException(nameof(home));
@@ -61,12 +75,18 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _feedback = feedback ?? throw new ArgumentNullException(nameof(feedback));
-        _currentPage = _home;
-        _pageBeforeSettings = _home;
-
-        NavigateCommand = new RelayCommand<DesktopRoute>(route => _ = NavigateAsync(route), CanNavigateTo);
-        CloseDrawerCommand = new RelayCommand<object?>(_ => CloseToolDrawer(), _ => !IsForegroundTaskActive);
-        CloseSettingsCommand = new RelayCommand<object?>(_ => _ = CloseSettingsPageAsync(), _ => IsSettingsOpen && !IsForegroundTaskActive);
+        _cityNavigator = cityNavigator;
+        _commandFactory = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        NavigateCommand = _commandFactory.CreateAsync<DesktopRoute>(
+            (route, _) => NavigateAsync(route),
+            CanNavigateTo,
+            activationOwner: activationOwner);
+        CloseDrawerCommand = _commandFactory.Create(CloseToolDrawer, () => !IsForegroundTaskActive);
+        CloseSettingsCommand = _commandFactory.CreateAsync(
+            _ => CloseSettingsPageAsync(),
+            () => IsSettingsOpen && !IsForegroundTaskActive,
+            activationOwner: activationOwner);
 
         _navigation.NavigationRequested += HandleNavigationRequested;
         _navigation.NavigationLockChanged += HandleNavigationLockChanged;
@@ -106,12 +126,12 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    public object CurrentPage
+    public PrimaryWorkspaceKind PrimaryWorkspace
     {
-        get => _currentPage;
+        get => _primaryWorkspace;
         private set
         {
-            if (!SetProperty(ref _currentPage, value)) return;
+            if (!SetProperty(ref _primaryWorkspace, value)) return;
             OnPropertyChanged(nameof(IsHomeVisible));
             OnPropertyChanged(nameof(IsBrowserVisible));
             OnPropertyChanged(nameof(IsSettingsOpen));
@@ -148,6 +168,8 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
             if (value) return;
             DrawerContent = null;
             DrawerTitle = string.Empty;
+            var toolComposition = Interlocked.Exchange(ref _toolComposition, null);
+            toolComposition?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _toolSession?.Dispose();
             _toolSession = null;
             _browser.SetCropMode(false);
@@ -161,13 +183,13 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _isBatchResultOpen, value);
     }
 
-    public bool IsHomeVisible => ReferenceEquals(CurrentPage, _home);
-    public bool IsBrowserVisible => ReferenceEquals(CurrentPage, _browser);
+    public bool IsHomeVisible => PrimaryWorkspace == PrimaryWorkspaceKind.Home;
+    public bool IsBrowserVisible => PrimaryWorkspace == PrimaryWorkspaceKind.Browser;
     public bool IsCompressActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Compress;
     public bool IsConvertActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Convert;
     public bool IsCropActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Crop;
     public bool IsResizeActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Resize;
-    public bool IsSettingsOpen => CurrentRoute == DesktopRoute.Settings && ReferenceEquals(CurrentPage, _settings);
+    public bool IsSettingsOpen => PrimaryWorkspace == PrimaryWorkspaceKind.Settings;
     public bool IsSettingsActive => IsSettingsOpen;
     public bool IsPrimaryNavigationVisible => !IsSettingsOpen;
     public bool IsToolPanelVisible => IsToolDrawerOpen && !IsSettingsOpen;
@@ -195,7 +217,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     private bool CanNavigateTo(DesktopRoute route)
     {
         if (!CanNavigate) return false;
-        if (!ReferenceEquals(CurrentPage, _browser)) return true;
+        if (!IsBrowserVisible) return true;
         return route switch
         {
             DesktopRoute.Compress => _browser.CanCompress,
@@ -206,9 +228,9 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         };
     }
 
-    public RelayCommand<DesktopRoute> NavigateCommand { get; }
-    public RelayCommand<object?> CloseDrawerCommand { get; }
-    public RelayCommand<object?> CloseSettingsCommand { get; }
+    public IAsyncRelayCommand<DesktopRoute> NavigateCommand { get; }
+    public IRelayCommand CloseDrawerCommand { get; }
+    public IAsyncRelayCommand CloseSettingsCommand { get; }
 
     public void SetForegroundTaskActive(bool value) => _navigation.SetNavigationLocked(value);
 
@@ -220,7 +242,37 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void Dispose()
+    internal async Task AttachCompositionAsync(
+        WindowSession session,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (_compositionRoot is not null)
+        {
+            throw new InvalidOperationException("The Shell ViewModel composition is already attached.");
+        }
+
+        var root = await session.ViewModels.AttachRootAsync(
+            "shell",
+            ViewModelLease.Borrowed(this),
+            cancellationToken);
+        try
+        {
+            await root.AttachChildAsync("compress-editor", ViewModelLease.Borrowed(_compress), cancellationToken);
+            await root.AttachChildAsync("convert-editor", ViewModelLease.Borrowed(_convert), cancellationToken);
+            await root.AttachChildAsync("resize-editor", ViewModelLease.Borrowed(_resize), cancellationToken);
+            await root.AttachChildAsync("crop-editor", ViewModelLease.Borrowed(_crop), cancellationToken);
+            await root.AttachChildAsync("batch-task", ViewModelLease.Borrowed(_batch), cancellationToken);
+            _compositionRoot = root;
+        }
+        catch
+        {
+            await root.DisposeAsync();
+            throw;
+        }
+    }
+
+    protected override void OnDisposed()
     {
         _navigation.NavigationRequested -= HandleNavigationRequested;
         _navigation.NavigationLockChanged -= HandleNavigationLockChanged;
@@ -234,6 +286,8 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         UnsubscribeOperationFeedback(_resize.ResultFeedback);
         UnsubscribeOperationFeedback(_crop.ResultFeedback);
         _toolSession?.Dispose();
+        _toolComposition = null;
+        _compositionRoot = null;
         DetachBatchItems(_batch.Items);
         _browser.Dispose();
         _compress.Dispose();
@@ -312,6 +366,8 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
 
     private async Task HandleNavigationRequestedAsync(DesktopNavigationRequest request)
     {
+        var previousWorkspace = PrimaryWorkspace;
+        var previousRoute = CurrentRoute;
         if (IsSettingsOpen && request.Route != DesktopRoute.Settings
             && !await _settings.TryLeaveAsync())
         {
@@ -323,7 +379,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
             case DesktopRoute.Browse when request.Context is BrowserNavigationContext browserContext:
                 CloseToolDrawer();
                 CurrentRoute = DesktopRoute.Browse;
-                CurrentPage = _browser;
+                PrimaryWorkspace = PrimaryWorkspaceKind.Browser;
                 await _browser.LoadAsync(browserContext);
                 break;
 
@@ -331,15 +387,15 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 CloseToolDrawer();
                 _browser.EndSession();
                 CurrentRoute = DesktopRoute.Browse;
-                CurrentPage = _home;
+                PrimaryWorkspace = PrimaryWorkspaceKind.Home;
                 break;
 
             case DesktopRoute.Settings:
                 _routeBeforeSettings = CurrentRoute;
-                _pageBeforeSettings = CurrentPage;
+                _workspaceBeforeSettings = PrimaryWorkspace;
                 await _settings.LoadAsync();
                 CurrentRoute = DesktopRoute.Settings;
-                CurrentPage = _settings;
+                PrimaryWorkspace = PrimaryWorkspaceKind.Settings;
                 break;
 
             case DesktopRoute.Batch:
@@ -351,7 +407,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 {
                     CloseToolDrawer();
                     CurrentRoute = DesktopRoute.Browse;
-                    CurrentPage = _browser;
+                    PrimaryWorkspace = PrimaryWorkspaceKind.Browser;
                     await _browser.LoadAsync(browserToolContext.Browser);
                     if (_browser.TryCreateCurrentContext(out var loadedContext) && CanNavigateTo(request.Route))
                     {
@@ -369,6 +425,21 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         }
 
         RefreshResultAvailability();
+        if (_cityNavigator is { IsAttached: true }
+            && (previousWorkspace != PrimaryWorkspace
+                || request.Context is BrowserNavigationContext or BrowserToolNavigationContext))
+        {
+            var presented = await _cityNavigator.PresentAsync(request, ResolvePrimaryViewModel());
+            if (!presented)
+            {
+                PrimaryWorkspace = previousWorkspace;
+                CurrentRoute = previousRoute;
+                _feedback.ShowMessage(
+                    "页面切换未能完成，已保留先前界面。",
+                    DesktopFeedbackSeverity.Error);
+                return;
+            }
+        }
         NavigationRevision++;
     }
 
@@ -380,8 +451,22 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         if (!IsSettingsOpen || IsForegroundTaskActive) return;
         if (!await _settings.TryLeaveAsync()) return;
 
-        CurrentPage = _pageBeforeSettings;
+        PrimaryWorkspace = _workspaceBeforeSettings;
         CurrentRoute = _routeBeforeSettings;
+        if (_cityNavigator is { IsAttached: true })
+        {
+            var presented = PrimaryWorkspace == PrimaryWorkspaceKind.Browser
+                ? await _cityNavigator.ResumeBrowserAsync(_browser)
+                : await _cityNavigator.PresentAsync(
+                    new DesktopNavigationRequest(DesktopRoute.Browse),
+                    _home);
+            if (!presented)
+            {
+                PrimaryWorkspace = PrimaryWorkspaceKind.Settings;
+                CurrentRoute = DesktopRoute.Settings;
+                return;
+            }
+        }
         RefreshResultAvailability();
         NavigationRevision++;
     }
@@ -394,9 +479,9 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (!ReferenceEquals(CurrentPage, _browser))
+        if (!IsBrowserVisible)
         {
-            CurrentPage = _browser;
+            PrimaryWorkspace = PrimaryWorkspaceKind.Browser;
             var item = new BrowserImageCandidate(context!.InputPath, Path.GetFileName(context.InputPath.Value));
             await _browser.LoadAsync(new BrowserNavigationContext(null, [item], context.InputPath, context.Probe));
         }
@@ -426,6 +511,11 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         _browser.SetCropMode(route == DesktopRoute.Crop, route == DesktopRoute.Crop ? _crop : null);
 
         _browser.ResetBatchStatuses();
+        var previousToolComposition = Interlocked.Exchange(ref _toolComposition, null);
+        if (previousToolComposition is not null)
+        {
+            await previousToolComposition.DisposeAsync();
+        }
         _toolSession?.Dispose();
         _toolSession = null;
         if (route != DesktopRoute.Crop)
@@ -441,7 +531,14 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 _browser.Items.Count,
                 cancellationToken => PrepareBatchForToolAsync(route, editorContent, cancellationToken),
                 () => SynchronizeSingleDraftFromBatch(editorContent),
-                _navigation);
+                _navigation,
+                _commandFactory);
+            if (_compositionRoot is not null)
+            {
+                _toolComposition = await _compositionRoot.AttachChildAsync(
+                    "tool-drawer",
+                    ViewModelLease.Borrowed(_toolSession));
+            }
             content = _toolSession;
         }
         OpenDrawer(route, BuildDrawerTitle(route), content);
@@ -669,6 +766,14 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         && !string.IsNullOrWhiteSpace(right)
         && string.Equals(Path.GetFullPath(left), Path.GetFullPath(right),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private object ResolvePrimaryViewModel() => PrimaryWorkspace switch
+    {
+        PrimaryWorkspaceKind.Home => _home,
+        PrimaryWorkspaceKind.Browser => _browser,
+        PrimaryWorkspaceKind.Settings => _settings,
+        _ => throw new ArgumentOutOfRangeException(nameof(PrimaryWorkspace), PrimaryWorkspace, null),
+    };
 
     private void HandleBatchItemsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {

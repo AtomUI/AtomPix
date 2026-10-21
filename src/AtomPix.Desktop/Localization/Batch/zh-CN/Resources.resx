@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="Batch.Action.Start" xml:space="preserve">
+    <value>批量处理</value>
+  </data>
+</root>

@@ -10,6 +10,8 @@ using AtomPix.Core.Resize;
 using AtomPix.Core.Settings;
 using AtomPix.Desktop.Platform;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
+using AtomUI.City.State;
 
 public enum SettingsSection
 {
@@ -19,7 +21,7 @@ public enum SettingsSection
     About
 }
 
-public sealed class SettingsPageViewModel : ObservableObject, IDisposable
+public sealed class SettingsPageViewModel : ViewModelBase
 {
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly SaveSettingsWorkflow _saveSettings;
@@ -27,8 +29,11 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
     private readonly IAppPathProvider _paths;
+    private readonly IAtomPixApplicationState? _applicationState;
+    private readonly IDesktopDispatcher? _dispatcher;
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private CancellationTokenSource? _loadCancellation;
+    private IStateSubscription? _settingsSubscription;
     private AppSettings? _originalSettings;
     private bool _isApplying;
     private bool _isLoaded;
@@ -52,8 +57,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     private DesktopChoiceOption<OverwritePolicy> _selectedOverwritePolicy;
     private DesktopChoiceOption<ThemeMode> _selectedTheme;
     private DesktopChoiceOption<string?> _selectedLanguage;
-    private bool _recentEnabled = true;
-    private decimal _recentMaxCount = 20;
 
     public SettingsPageViewModel(
         LoadSettingsWorkflow loadSettings,
@@ -62,7 +65,10 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         IDesktopPickerService picker,
         IDesktopLauncherService launcher,
         IAppPathProvider paths,
-        IDesktopClipboardService clipboard)
+        IDesktopClipboardService clipboard,
+        IUiCommandFactory? commandFactory = null,
+        IAtomPixApplicationState? applicationState = null,
+        IDesktopDispatcher? dispatcher = null)
     {
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _saveSettings = saveSettings ?? throw new ArgumentNullException(nameof(saveSettings));
@@ -70,7 +76,11 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
-        Diagnostic = new DiagnosticErrorViewModel(clipboard);
+        _applicationState = applicationState;
+        _dispatcher = dispatcher;
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Diagnostic = new DiagnosticErrorViewModel(clipboard, commands);
 
         CompressionModes =
         [
@@ -117,16 +127,16 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         _selectedTheme = Themes[0];
         _selectedLanguage = Languages[0];
 
-        SelectSectionCommand = new RelayCommand<SettingsSection>(section =>
+        SelectSectionCommand = commands.Create<SettingsSection>(section =>
         {
             SelectedSection = section;
             SectionNavigationRequested?.Invoke(section);
         }, _ => !IsSaving);
-        CloseCommand = new RelayCommand<object?>(_ => CloseRequested?.Invoke(this, EventArgs.Empty), _ => !IsSaving);
-        SaveCommand = new AsyncCommand(SaveAsync, () => CanSave);
-        RestoreDefaultsCommand = new AsyncCommand(RestoreDefaultsAsync, () => !IsSaving);
-        ChooseOutputDirectoryCommand = new AsyncCommand(ChooseOutputDirectoryAsync, () => IsReady && !IsSaving);
-        OpenSettingsDirectoryCommand = new AsyncCommand(OpenSettingsDirectoryAsync, () => !IsSaving);
+        CloseCommand = commands.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty), () => !IsSaving);
+        SaveCommand = commands.CreateAsync(SaveAsync, () => CanSave, activationOwner: activationOwner);
+        RestoreDefaultsCommand = commands.CreateAsync(RestoreDefaultsAsync, () => !IsSaving, activationOwner: activationOwner);
+        ChooseOutputDirectoryCommand = commands.CreateAsync(ChooseOutputDirectoryAsync, () => IsReady && !IsSaving, activationOwner: activationOwner);
+        OpenSettingsDirectoryCommand = commands.CreateAsync(OpenSettingsDirectoryAsync, () => !IsSaving, activationOwner: activationOwner);
     }
 
     public IReadOnlyList<DesktopChoiceOption<CompressionMode>> CompressionModes { get; }
@@ -256,18 +266,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         set { if (value is not null && SetProperty(ref _selectedLanguage, value)) DraftChanged(); }
     }
 
-    public bool RecentEnabled
-    {
-        get => _recentEnabled;
-        set { if (SetProperty(ref _recentEnabled, value)) DraftChanged(); }
-    }
-
-    public decimal RecentMaxCount
-    {
-        get => _recentMaxCount;
-        set { if (SetProperty(ref _recentMaxCount, value)) DraftChanged(); }
-    }
-
     public bool IsLoaded { get => _isLoaded; private set { if (SetProperty(ref _isLoaded, value)) NotifyState(); } }
     public bool IsLoading { get => _isLoading; private set { if (SetProperty(ref _isLoading, value)) NotifyState(); } }
     public bool IsSaving { get => _isSaving; private set { if (SetProperty(ref _isSaving, value)) NotifyState(); } }
@@ -311,12 +309,12 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     public string PlatformText => $"{RuntimeInformation.OSDescription} · {RuntimeInformation.ProcessArchitecture}";
     public string ImageEngineText => "图像引擎：ImageMagick（Magick.NET）";
 
-    public RelayCommand<SettingsSection> SelectSectionCommand { get; }
-    public RelayCommand<object?> CloseCommand { get; }
-    public AsyncCommand SaveCommand { get; }
-    public AsyncCommand RestoreDefaultsCommand { get; }
-    public AsyncCommand ChooseOutputDirectoryCommand { get; }
-    public AsyncCommand OpenSettingsDirectoryCommand { get; }
+    public IRelayCommand<SettingsSection> SelectSectionCommand { get; }
+    public IRelayCommand CloseCommand { get; }
+    public IAsyncRelayCommand SaveCommand { get; }
+    public IAsyncRelayCommand RestoreDefaultsCommand { get; }
+    public IAsyncRelayCommand ChooseOutputDirectoryCommand { get; }
+    public IAsyncRelayCommand OpenSettingsDirectoryCommand { get; }
     public DiagnosticErrorViewModel Diagnostic { get; }
 
     public event Action<SettingsSection>? SectionNavigationRequested;
@@ -370,12 +368,38 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         return Task.FromResult(!IsDirty || DiscardAndLeave());
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
+        Interlocked.Exchange(ref _settingsSubscription, null)?.Dispose();
         var cancellation = Interlocked.Exchange(ref _loadCancellation, null);
         if (cancellation is null) return;
         cancellation.Cancel();
         cancellation.Dispose();
+    }
+
+    protected override ValueTask OnActivatedAsync(
+        ActivationContext context,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_applicationState is not null)
+        {
+            _settingsSubscription = _applicationState.AppSettings.Observe(args =>
+            {
+                void Apply() => ApplyApplicationState(args.NewValue);
+                if (_dispatcher is null) Apply();
+                else _dispatcher.Post(Apply);
+            });
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    protected override ValueTask OnDeactivatedAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Exchange(ref _settingsSubscription, null)?.Dispose();
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.CompletedTask;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken)
@@ -408,6 +432,24 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         finally
         {
             IsSaving = false;
+        }
+    }
+
+    private void ApplyApplicationState(AppSettingsState state)
+    {
+        switch (state)
+        {
+            case AppSettingsState.Ready ready when !IsDirty || IsSaving:
+                _originalSettings = ready.Value;
+                ApplySettings(ready.Value, dirty: false);
+                IsLoaded = true;
+                ErrorMessage = null;
+                Diagnostic.Clear();
+                break;
+            case AppSettingsState.Faulted faulted when !IsLoaded:
+                ErrorMessage = DesktopErrorText.FromWorkflow(faulted.Error);
+                Diagnostic.Set(faulted.Error);
+                break;
         }
     }
 
@@ -481,8 +523,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             SelectedOverwritePolicy = OverwritePolicies.First(option => option.Value == settings.DefaultOutputPolicy.OverwritePolicy);
             SelectedTheme = Themes.First(option => option.Value == settings.ThemeMode);
             SelectedLanguage = Languages.FirstOrDefault(option => option.Value == settings.Language) ?? Languages[0];
-            RecentEnabled = settings.RecentItems.Enabled;
-            RecentMaxCount = settings.RecentItems.MaxCount;
         }
         finally
         {
@@ -505,8 +545,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             if (ConversionUsesQuality
                 && (ConversionQuality is < 1 or > 100 || ConversionQuality != decimal.Truncate(ConversionQuality)))
                 throw new ArgumentOutOfRangeException(nameof(ConversionQuality));
-            if (RecentMaxCount < 1 || RecentMaxCount != decimal.Truncate(RecentMaxCount))
-                throw new ArgumentOutOfRangeException(nameof(RecentMaxCount));
 
             var metadata = RemoveMetadata ? MetadataPolicy.Remove : MetadataPolicy.Preserve;
             var compression = SelectedCompressionMode.Value switch
@@ -536,7 +574,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             };
             var naming = new OutputNamingPolicy(OutputNamingMode.CustomPattern, null, FileNamePattern.Trim());
             var output = new OutputPolicy(location, naming, SelectedOverwritePolicy.Value);
-            var recent = new RecentItemsSettings(RecentEnabled, decimal.ToInt32(RecentMaxCount));
             settings = new AppSettings(
                 compression,
                 conversion,
@@ -544,7 +581,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
                 output,
                 SelectedTheme.Value,
                 SelectedLanguage.Value,
-                recent);
+                _originalSettings?.RecentItems ?? AppSettings.Default.RecentItems);
             return true;
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException or InvalidOperationException)
@@ -555,7 +592,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
                 _ when string.IsNullOrWhiteSpace(FileNamePattern) => "默认文件名格式不能为空。",
                 _ when SelectedCompressionMode.Value == CompressionMode.Custom && (CustomCompressionQuality is < 1 or > 100 || CustomCompressionQuality != decimal.Truncate(CustomCompressionQuality)) => "自定义压缩质量必须是 1 到 100 的整数。",
                 _ when ConversionUsesQuality && (ConversionQuality is < 1 or > 100 || ConversionQuality != decimal.Truncate(ConversionQuality)) => "转换质量必须是 1 到 100 的整数。",
-                _ when RecentMaxCount < 1 || RecentMaxCount != decimal.Truncate(RecentMaxCount) => "最近记录最大条数必须是正整数。",
                 _ => "设置草稿包含无效值，请检查输出位置和文件名格式。"
             };
             return false;

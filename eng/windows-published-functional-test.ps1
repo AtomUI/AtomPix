@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string] $CaseRoot = ".artifacts/trim-validation/gui-cases-20260827",
+    [string] $CaseRoot = "",
+    [string] $FixtureManifest = "eng/published-functional-fixtures.json",
     [ValidateSet("", "settings-persistence", "browser-controls", "compress-single", "compress-batch", "convert-single-alpha-to-jpeg", "convert-batch-webp", "resize-single-pixel", "resize-batch-percentage", "crop-single-custom")]
     [string] $Only = "",
     [ValidateRange(20, 180)]
@@ -115,16 +116,58 @@ public static class AtomPixPublishedTestMouse
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $executable = Join-Path $repoRoot ".artifacts/publish/win-x64/AtomPix.Desktop.exe"
-$caseRootPath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $CaseRoot))
-$resultRoot = Join-Path $repoRoot ".artifacts/trim-validation/results"
-$appDataRoot = Join-Path $repoRoot ".artifacts/trim-validation/appdata"
-$reportPath = Join-Path $repoRoot ".artifacts/trim-validation/published-functional-results.json"
-$tracePath = Join-Path $repoRoot ".artifacts/trim-validation/published-functional-trace.log"
-New-Item -ItemType Directory -Force -Path $resultRoot, $appDataRoot | Out-Null
-Set-Content -LiteralPath $tracePath -Value "START $(Get-Date -Format O) Only=$Only" -Encoding utf8
-
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw "Missing published executable: $executable" }
-if (-not (Test-Path -LiteralPath $caseRootPath -PathType Container)) { throw "Missing GUI case root: $caseRootPath" }
+$startedAtUtc = [DateTimeOffset]::UtcNow
+$runId = "{0}-{1}-{2}" -f $startedAtUtc.ToString("yyyyMMddTHHmmssfffZ"), $PID, ([Guid]::NewGuid().ToString("N").Substring(0, 8))
+$runRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ".artifacts/published-functional/$runId"))
+$resultRoot = Join-Path $runRoot "results"
+$appDataRoot = Join-Path $runRoot "appdata"
+$reportPath = Join-Path $runRoot "published-functional-results.json"
+$tracePath = Join-Path $runRoot "published-functional-trace.log"
+New-Item -ItemType Directory -Force -Path $runRoot, $resultRoot, $appDataRoot | Out-Null
+
+$fixtureManifestPath = $null
+if ([string]::IsNullOrWhiteSpace($CaseRoot)) {
+    $fixtureManifestPath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $FixtureManifest))
+    if (-not (Test-Path -LiteralPath $fixtureManifestPath -PathType Leaf)) {
+        throw "Missing published functional fixture manifest: $fixtureManifestPath"
+    }
+
+    $caseRootPath = [System.IO.Path]::GetFullPath((Join-Path $runRoot "cases"))
+    New-Item -ItemType Directory -Force -Path $caseRootPath | Out-Null
+    $manifest = Get-Content -LiteralPath $fixtureManifestPath -Raw | ConvertFrom-Json
+    if ($manifest.schemaVersion -ne 1 -or @($manifest.files).Count -eq 0) {
+        throw "Unsupported or empty published functional fixture manifest."
+    }
+
+    foreach ($fixture in $manifest.files) {
+        $source = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$fixture.source)))
+        if ((-not $source.StartsWith(
+                $repoRoot + [System.IO.Path]::DirectorySeparatorChar,
+                [System.StringComparison]::OrdinalIgnoreCase)) -or
+            (-not (Test-Path -LiteralPath $source -PathType Leaf))) {
+            throw "Fixture source is missing or outside the repository: $source"
+        }
+        $actualHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualHash -ne ([string]$fixture.sha256).ToLowerInvariant()) {
+            throw "Fixture hash mismatch for '$source'. Expected $($fixture.sha256), actual $actualHash."
+        }
+
+        $target = [System.IO.Path]::GetFullPath((Join-Path $caseRootPath ([string]$fixture.target)))
+        if (-not $target.StartsWith($caseRootPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Fixture target escapes the isolated case root: $target"
+        }
+        New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+        Copy-Item -LiteralPath $source -Destination $target -Force
+    }
+} else {
+    $caseRootPath = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $CaseRoot))
+    if (-not (Test-Path -LiteralPath $caseRootPath -PathType Container)) {
+        throw "Missing GUI case root: $caseRootPath"
+    }
+}
+
+Set-Content -LiteralPath $tracePath -Value "START $($startedAtUtc.ToString('O')) RunId=$runId Only=$Only" -Encoding utf8
 
 $results = [System.Collections.Generic.List[object]]::new()
 
@@ -180,6 +223,19 @@ function Wait-Element($root, [string] $name, $controlType = $null, [int] $second
         if ($null -ne $element) { return $element }
         Start-Sleep -Milliseconds 150
     }
+    $available = [System.Collections.Generic.List[string]]::new()
+    try {
+        foreach ($candidate in $root.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.Condition]::TrueCondition)) {
+            try {
+                if (-not [string]::IsNullOrWhiteSpace($candidate.Current.Name)) {
+                    $available.Add("$($candidate.Current.ControlType.ProgrammaticName):$($candidate.Current.Name)")
+                }
+            } catch { }
+        }
+    } catch { }
+    Add-Trace "missing-element name=$name available=$($available -join '|')"
     throw "Timed out waiting for '$name'."
 }
 
@@ -232,14 +288,31 @@ function Click-Segment($root, [string] $name, [int] $index, [int] $count) {
 
 function Click-SegmentOption($root, [string] $listName, [string] $optionName) {
     $list = Wait-Element $root $listName ([System.Windows.Automation.ControlType]::List)
-    $condition = [System.Windows.Automation.AndCondition]::new(@(
-        [System.Windows.Automation.PropertyCondition]::new(
-            [System.Windows.Automation.AutomationElement]::NameProperty, $optionName),
-        [System.Windows.Automation.PropertyCondition]::new(
-            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-            [System.Windows.Automation.ControlType]::Text)))
+    $condition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty, $optionName)
     $option = $list.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
     if ($null -eq $option) { throw "Option '$optionName' is missing from '$listName'." }
+
+    $candidate = $option
+    while ($null -ne $candidate -and -not $candidate.Equals($list)) {
+        $pattern = $null
+        if ($candidate.TryGetCurrentPattern(
+                [System.Windows.Automation.SelectionItemPattern]::Pattern,
+                [ref] $pattern)) {
+            $pattern.Select()
+            Start-Sleep -Milliseconds 300
+            return
+        }
+        if ($candidate.TryGetCurrentPattern(
+                [System.Windows.Automation.InvokePattern]::Pattern,
+                [ref] $pattern)) {
+            $pattern.Invoke()
+            Start-Sleep -Milliseconds 300
+            return
+        }
+        $candidate = [System.Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($candidate)
+    }
+
     Click-Element $option
     Start-Sleep -Milliseconds 300
 }
@@ -283,9 +356,15 @@ function Set-Toggle($root, [string] $name, [bool] $checked) {
 function Start-AtomPix([string] $scenario) {
     Add-Trace "$scenario process-start"
     $scenarioAppData = Join-Path $appDataRoot $scenario
-    New-Item -ItemType Directory -Force -Path $scenarioAppData | Out-Null
+    $atomPixAppData = Join-Path $scenarioAppData "AtomPix"
+    $atomPixTemp = Join-Path $scenarioAppData "Temp"
+    New-Item -ItemType Directory -Force -Path $scenarioAppData, $atomPixAppData, $atomPixTemp | Out-Null
     $process = Start-Process -FilePath $executable -WorkingDirectory (Split-Path $executable) -PassThru `
-        -Environment @{ LOCALAPPDATA = $scenarioAppData }
+        -Environment @{
+            LOCALAPPDATA = $scenarioAppData
+            ATOMPIX_APPDATA_DIRECTORY = $atomPixAppData
+            ATOMPIX_TEMP_DIRECTORY = $atomPixTemp
+        }
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(20)
     while ($process.MainWindowHandle -eq [IntPtr]::Zero -and [DateTimeOffset]::UtcNow -lt $deadline) {
         if ($process.HasExited) { throw "AtomPix exited during '$scenario' with code $($process.ExitCode)." }
@@ -294,6 +373,7 @@ function Start-AtomPix([string] $scenario) {
     }
     if ($process.MainWindowHandle -eq [IntPtr]::Zero) { throw "AtomPix main window did not appear for '$scenario'." }
     $script:CurrentMainWindowHandle = $process.MainWindowHandle
+    $script:CurrentAppData = $atomPixAppData
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
     Add-Trace "$scenario main-window-ready"
     return [pscustomobject]@{ Process = $process; Root = $root; AppData = $scenarioAppData }
@@ -301,41 +381,66 @@ function Start-AtomPix([string] $scenario) {
 
 function Stop-AtomPix($session) {
     if ($null -ne $session -and -not $session.Process.HasExited) {
-        Stop-Process -Id $session.Process.Id -Force
-        $session.Process.WaitForExit()
+        $closedNormally = $false
+        try {
+            $pattern = $session.Root.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern)
+            $pattern.Close()
+            $closedNormally = $session.Process.WaitForExit(10000)
+        } catch {
+            Add-Trace "normal-close failed scenario=$($session.AppData) error=$($_.Exception.Message)"
+        }
+        if (-not $closedNormally -and -not $session.Process.HasExited) {
+            Stop-Process -Id $session.Process.Id -Force
+            $session.Process.WaitForExit()
+            throw "AtomPix did not close normally within 10 seconds; forced cleanup was required."
+        }
     }
 }
 
+function Wait-ButtonEnabled($root, [string] $name, [int] $seconds = 10) {
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($seconds)
+    while ([DateTimeOffset]::UtcNow -lt $deadline) {
+        $button = Find-ElementSnapshot $root $name ([System.Windows.Automation.ControlType]::Button)
+        if ($null -ne $button -and $button.Current.IsEnabled) { return $button }
+        Start-Sleep -Milliseconds 150
+    }
+    throw "Button '$name' did not become enabled."
+}
+
 function Open-Folder($session, [string] $folder) {
-    Add-Trace "open-folder begin $folder"
-    Invoke-Button $session.Root "打开文件夹"
-    Start-Sleep -Seconds 1
-    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
-    $dialogHandle = [IntPtr]::Zero
-    while ($dialogHandle -eq [IntPtr]::Zero -and [DateTimeOffset]::UtcNow -lt $deadline) {
-        $dialogHandle = [AtomPixPublishedTestMouse]::GetEnabledPopup($session.Process.MainWindowHandle)
-        if ($dialogHandle -eq $session.Process.MainWindowHandle) { $dialogHandle = [IntPtr]::Zero }
-        if ($dialogHandle -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        Add-Trace "open-folder begin attempt=$attempt path=$folder"
+        Invoke-Button $session.Root "打开文件夹"
+        Start-Sleep -Seconds 1
+        $deadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
+        $dialogHandle = [IntPtr]::Zero
+        while ($dialogHandle -eq [IntPtr]::Zero -and [DateTimeOffset]::UtcNow -lt $deadline) {
+            $dialogHandle = [AtomPixPublishedTestMouse]::GetEnabledPopup($session.Process.MainWindowHandle)
+            if ($dialogHandle -eq $session.Process.MainWindowHandle) { $dialogHandle = [IntPtr]::Zero }
+            if ($dialogHandle -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
+        }
+        if ($dialogHandle -eq [IntPtr]::Zero) {
+            Capture-Desktop "folder-picker-missing.png"
+            throw "Native folder picker did not appear."
+        }
+        [AtomPixPublishedTestMouse]::SetForegroundWindow($dialogHandle) | Out-Null
+        [AtomPixPublishedTestMouse]::FocusAddressBar()
+        Start-Sleep -Milliseconds 250
+        [AtomPixPublishedTestMouse]::SelectAll()
+        [AtomPixPublishedTestMouse]::SendUnicodeText($folder)
+        Start-Sleep -Milliseconds 300
+        [AtomPixPublishedTestMouse]::PressEnter()
+        Start-Sleep -Seconds 2
+        if (-not [AtomPixPublishedTestMouse]::SubmitNativeDialog($dialogHandle)) {
+            throw "Unable to submit the native folder picker."
+        }
+        Wait-NativeWindowGone $dialogHandle "打开图片文件夹" 20
+        Start-Sleep -Seconds 7
+        $session.Root = [System.Windows.Automation.AutomationElement]::FromHandle($session.Process.MainWindowHandle)
+        $null = Wait-Element $session.Root "压缩体积" ([System.Windows.Automation.ControlType]::Button)
+        Add-Trace "open-folder completed attempt=$attempt path=$folder"
+        return
     }
-    if ($dialogHandle -eq [IntPtr]::Zero) {
-        Capture-Desktop "folder-picker-missing.png"
-        throw "Native folder picker did not appear."
-    }
-    [AtomPixPublishedTestMouse]::SetForegroundWindow($dialogHandle) | Out-Null
-    [AtomPixPublishedTestMouse]::FocusAddressBar()
-    Start-Sleep -Milliseconds 250
-    [AtomPixPublishedTestMouse]::SendUnicodeText($folder)
-    Start-Sleep -Seconds 2
-    [AtomPixPublishedTestMouse]::PressEnter()
-    Start-Sleep -Seconds 2
-    if (-not [AtomPixPublishedTestMouse]::SubmitNativeDialog($dialogHandle)) {
-        throw "Unable to submit the native folder picker."
-    }
-    Wait-NativeWindowGone $dialogHandle "打开图片文件夹" 20
-    Start-Sleep -Seconds 7
-    $session.Root = [System.Windows.Automation.AutomationElement]::FromHandle($session.Process.MainWindowHandle)
-    $null = Wait-Element $session.Root "压缩体积" ([System.Windows.Automation.ControlType]::Button)
-    Add-Trace "open-folder completed $folder"
 }
 
 function Open-SingleImage($session, [string] $folder) {
@@ -365,7 +470,7 @@ function Open-SingleImage($session, [string] $folder) {
 }
 
 function Wait-Output([string] $folder, [int] $minimumCount, [string] $extension = "*") {
-    $settingsPath = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "AtomPix/settings.json"
+    $settingsPath = Join-Path $script:CurrentAppData "settings.json"
     $output = Join-Path $folder "AtomPix_Output"
     if (Test-Path -LiteralPath $settingsPath) {
         $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
@@ -440,12 +545,12 @@ Run-Scenario "settings-persistence" {
     try {
         $session = Start-AtomPix "settings"
         Invoke-Button $session.Root "设置"
-        Start-Sleep -Milliseconds 800
-        $originalQuality = (Wait-Element $session.Root "默认压缩质量数值").GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).Current.Value
-        $originalConversionQuality = (Wait-Element $session.Root "默认转换质量数值").GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).Current.Value
-        $testQuality = if ($originalQuality -eq 72) { 71 } else { 72 }
-        $testConversionQuality = if ($originalConversionQuality -eq 83) { 82 } else { 83 }
+        $null = Wait-Element $session.Root "默认压缩模式" ([System.Windows.Automation.ControlType]::List)
+        Click-SegmentOption $session.Root "默认压缩模式" "自定义"
+        $testQuality = 72
+        $testConversionQuality = 83
         Set-Range $session.Root "默认压缩质量数值" $testQuality
+        Set-Toggle $session.Root "默认移除拍摄信息与位置数据" $false
         Invoke-Button $session.Root "转换配置"
         Start-Sleep -Milliseconds 350
         Set-Range $session.Root "默认转换质量数值" $testConversionQuality
@@ -453,8 +558,9 @@ Run-Scenario "settings-persistence" {
             Invoke-Button $session.Root $section
             Start-Sleep -Milliseconds 250
         }
-        Invoke-Button $session.Root "保存设置"
-        $settingsPath = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "AtomPix/settings.json"
+        $saveButton = Wait-ButtonEnabled $session.Root "保存设置"
+        $saveButton.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+        $settingsPath = Join-Path $script:CurrentAppData "settings.json"
         $deadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
         while (-not (Test-Path -LiteralPath $settingsPath) -and [DateTimeOffset]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
         if (-not (Test-Path -LiteralPath $settingsPath)) { throw "Settings JSON was not persisted." }
@@ -465,14 +571,8 @@ Run-Scenario "settings-persistence" {
         $quality = (Wait-Element $session.Root "默认压缩质量数值").GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).Current.Value
         $conversionQuality = (Wait-Element $session.Root "默认转换质量数值").GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).Current.Value
         if ($quality -ne $testQuality -or $conversionQuality -ne $testConversionQuality) { throw "Saved settings were not restored after restart." }
-        Set-Range $session.Root "默认压缩质量数值" $originalQuality
-        Invoke-Button $session.Root "转换配置"
-        Start-Sleep -Milliseconds 350
-        Set-Range $session.Root "默认转换质量数值" $originalConversionQuality
-        Invoke-Button $session.Root "保存设置"
-        Start-Sleep -Milliseconds 700
         Invoke-Button $session.Root "返回设置前页面"
-        Add-Result "settings-persistence" "PASSED" "All four settings sections, save, restart reload, test-value rollback, and return passed."
+        Add-Result "settings-persistence" "PASSED" "All four settings sections, save, isolated restart reload, and return passed."
     } finally { Stop-AtomPix $session }
 }
 
@@ -506,7 +606,8 @@ Run-Scenario "compress-single" {
         Open-Tool $session "压缩体积"
         Add-Trace "compress-single panel-open"
         Capture-Desktop "compress-single-panel.png"
-        Set-Range $session.Root "自定义压缩质量" 68
+        Click-SegmentOption $session.Root "压缩模式" "自定义"
+        Set-Range $session.Root "自定义压缩质量数值" 68
         Set-Toggle $session.Root "移除拍摄信息与位置数据" $true
         Add-Trace "compress-single configured"
         Invoke-Button $session.Root "单张处理"
@@ -635,7 +736,24 @@ Run-Scenario "crop-single-custom" {
     } finally { Stop-AtomPix $session }
 }
 
-$results | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $reportPath -Encoding utf8NoBOM
+$manifestHash = if ($null -eq $fixtureManifestPath) { $null } else {
+    (Get-FileHash -LiteralPath $fixtureManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+[ordered]@{
+    schemaVersion = 1
+    runId = $runId
+    startedAtUtc = $startedAtUtc.ToString("O")
+    completedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
+    executable = [ordered]@{
+        path = $executable
+        sha256 = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    fixtureManifest = if ($null -eq $fixtureManifestPath) { $null } else {
+        [ordered]@{ path = $fixtureManifestPath; sha256 = $manifestHash }
+    }
+    caseRoot = $caseRootPath
+    cases = @($results)
+} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $reportPath -Encoding utf8NoBOM
 $failed = @($results | Where-Object Status -eq "FAILED")
 Write-Host "Published GUI functional cases: $($results.Count - $failed.Count)/$($results.Count) passed. Report: $reportPath"
 if ($failed.Count -gt 0) { throw "$($failed.Count) published GUI functional case(s) failed." }

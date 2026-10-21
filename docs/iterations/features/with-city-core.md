@@ -1,6 +1,8 @@
 # AtomPix.Core × AtomUI.City 审计
 
-> 结论：全部 City 能力均不采用
+> 设计状态：Design Frozen；交付状态：边界已验证，迁移后需回归
+>
+> 结论：全部 City 能力均不采用（`APX-CITY-BND-001`）
 
 Core 拥有值对象、图片操作参数、输出规则、Job 业务状态、错误与结果模型。这些语义在没有 UI、Host、路由、网络和插件时仍完整成立。
 

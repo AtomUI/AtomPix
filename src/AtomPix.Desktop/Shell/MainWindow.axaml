@@ -35,8 +35,7 @@
             <Grid Grid.Column="0" MinWidth="0">
                 <ContentControl x:Name="PrimaryWorkspace"
                                 HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch"
-                                Content="{Binding CurrentPage}" />
+                                VerticalContentAlignment="Stretch" />
 
                 <Border x:Name="NavigationRail"
                         AutomationProperties.Name="主功能导航轨"

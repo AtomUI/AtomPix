@@ -1,6 +1,8 @@
 # AtomPix Imaging × AtomUI.City 审计
 
-> 结论：Imaging.Abstractions 与 Imaging.Magick 全部 City 能力均不采用
+> 设计状态：Design Frozen；交付状态：边界已验证，迁移后需回归
+>
+> 结论：Imaging.Abstractions 与 Imaging.Magick 全部 City 能力均不采用（`APX-CITY-BND-002`）
 
 Imaging.Abstractions 定义探测、编码和像素处理端口；Imaging.Magick 实现这些端口、安全提交文件并映射技术错误。两者不拥有应用 Host、导航、共享设置、用户主体或插件生命周期。
 

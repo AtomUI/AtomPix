@@ -13,6 +13,7 @@ using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
 
 public sealed record CropRatioOption(string Label, int? WidthUnits, int? HeightUnits)
 {
@@ -20,7 +21,7 @@ public sealed record CropRatioOption(string Label, int? WidthUnits, int? HeightU
     public override string ToString() => Label;
 }
 
-public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -59,7 +60,8 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         OpenImageWorkflow openImage,
         LoadSettingsWorkflow loadSettings,
         CropImageWorkflow crop,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
@@ -70,7 +72,9 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _crop = crop ?? throw new ArgumentNullException(nameof(crop));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
 
         Ratios =
         [
@@ -81,12 +85,12 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
             new CropRatioOption("1:1", 1, 1)
         ];
         _selectedRatio = Ratios[0];
-        SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
-        CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
-        OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
-        ContinueResizeCommand = new RelayCommand<object?>(_ => ContinueResize(), _ => IsSuccess);
-        CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
+        SelectImageCommand = commands.CreateAsync(SelectImageAsync, () => !IsProcessing, activationOwner: activationOwner);
+        StartCommand = commands.CreateAsync(StartAsync, () => IsContentReady && !IsProcessing, activationOwner: activationOwner);
+        CancelCommand = commands.Create(() => _executionCancellation?.Cancel(), () => IsProcessing);
+        OpenOutputCommand = commands.CreateAsync(OpenOutputAsync, () => IsSuccess, activationOwner: activationOwner);
+        ContinueResizeCommand = commands.Create(ContinueResize, () => IsSuccess);
+        CopyDiagnosticIdCommand = commands.CreateAsync(CopyDiagnosticIdAsync, () => HasDiagnosticId, activationOwner: activationOwner);
     }
 
     public IReadOnlyList<CropRatioOption> Ratios { get; }
@@ -195,12 +199,12 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
     public string ResultDetails => _actualOutputSize is null ? string.Empty : $"实际输出：{_actualOutputSize.Value.Width} × {_actualOutputSize.Value.Height} px";
     public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult);
 
-    public AsyncCommand SelectImageCommand { get; }
-    public AsyncCommand StartCommand { get; }
-    public RelayCommand<object?> CancelCommand { get; }
-    public AsyncCommand OpenOutputCommand { get; }
-    public RelayCommand<object?> ContinueResizeCommand { get; }
-    public AsyncCommand CopyDiagnosticIdCommand { get; }
+    public IAsyncRelayCommand SelectImageCommand { get; }
+    public IAsyncRelayCommand StartCommand { get; }
+    public IRelayCommand CancelCommand { get; }
+    public IAsyncRelayCommand OpenOutputCommand { get; }
+    public IRelayCommand ContinueResizeCommand { get; }
+    public IAsyncRelayCommand CopyDiagnosticIdCommand { get; }
 
     public void RequestCancellation() => _executionCancellation?.Cancel();
 
@@ -278,7 +282,7 @@ public sealed class CropEditorViewModel : ObservableObject, IDisposable, IDeskto
         NotifyResult();
     }
 
-    public void Dispose() { CancelLoad(); _executionCancellation?.Cancel(); _executionCancellation?.Dispose(); }
+    protected override void OnDisposed() { CancelLoad(); _executionCancellation?.Cancel(); _executionCancellation?.Dispose(); }
 
     private async Task SelectImageAsync(CancellationToken cancellationToken)
     {

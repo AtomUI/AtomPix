@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="Errors.SourceOpenFailed" xml:space="preserve">
+    <value>无法打开图片来源</value>
+  </data>
+</root>

@@ -36,6 +36,12 @@ public sealed class DesktopExceptionBoundary : IDisposable
         AppDomain.CurrentDomain.UnhandledException -= HandleFatalException;
     }
 
+    internal void ReportStartupException(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        Report(exception, "DesktopStartupPresentationException", showDialog: true);
+    }
+
     private void HandleDispatcherException(object? sender, DispatcherUnhandledExceptionEventArgs args)
     {
         args.Handled = true;

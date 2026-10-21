@@ -14,6 +14,7 @@ using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
 
 public enum BatchTaskKind
 {
@@ -156,7 +157,7 @@ public sealed record SubmittedBatchSnapshot(
     object ProcessingProfile,
     OutputPolicy OutputPolicy);
 
-public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopDialogService _dialogs;
@@ -216,7 +217,8 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         BatchCompressWorkflow batchCompress,
         BatchConvertWorkflow batchConvert,
         BatchResizeWorkflow batchResize,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
@@ -231,7 +233,9 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         _batchConvert = batchConvert ?? throw new ArgumentNullException(nameof(batchConvert));
         _batchResize = batchResize ?? throw new ArgumentNullException(nameof(batchResize));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, NotifyDraft);
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Output = new OutputPolicyEditorViewModel(_picker, NotifyDraft, commandFactory: commands);
 
         TaskKinds =
         [
@@ -263,25 +267,38 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         _selectedFormat = ConversionFormats[2];
         _selectedResizeMode = ResizeModes[0];
 
-        AddFilesCommand = new AsyncCommand(AddFilesAsync, () => CanEditInputs);
-        AddFolderCommand = new AsyncCommand(AddFolderAsync, () => CanEditInputs);
-        RemoveInputCommand = new RelayCommand<BatchItemViewModel>(RemoveInput, item => item is not null && CanEditInputs);
-        InsertNameTokenCommand = new RelayCommand<object?>(_ => FileNamePattern += "{name}", _ => CanEditDraft);
-        InsertIndexTokenCommand = new RelayCommand<object?>(_ => FileNamePattern += "{index}", _ => CanEditDraft && !FileNamePattern.Contains("{index}", StringComparison.Ordinal));
-        StartCommand = new AsyncCommand(StartAsync, () => CanAttemptStart);
-        CancelCommand = new AsyncCommand(CancelAsync, () => IsProcessing && !IsCanceling);
-        RetryFailedCommand = new RelayCommand<object?>(_ => RecoverFailed(), _ => HasFailedItems && !IsProcessing);
-        ProcessUnfinishedCommand = new RelayCommand<object?>(_ => RecoverUnfinished(), _ => HasUnfinishedItems && !IsProcessing);
-        ProcessSkippedWithAutoRenameCommand = new RelayCommand<object?>(_ => RecoverSkipped(), _ => HasSkippedItems && !IsProcessing);
-        ContinueOtherCommand = new RelayCommand<object?>(_ => ResetToEmptyDraft(), _ => HasResult && !IsProcessing);
-        OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => HasResult && !IsProcessing && !string.IsNullOrWhiteSpace(OutputDirectory));
-        OpenInputDirectoryCommand = new AsyncCommand(OpenInputDirectoryAsync, () => Items.Count > 0 && !IsProcessing);
-        ViewItemDetailsCommand = new AsyncCommand<BatchItemViewModel>(ViewItemDetailsAsync, item => item is { CanViewDetails: true });
-        RelocateInputCommand = new AsyncCommand<BatchItemViewModel>(RelocateInputAsync, item => item is { CanRelocate: true } && !IsProcessing);
-        CopyItemDiagnosticIdCommand = new AsyncCommand<BatchItemViewModel>(CopyItemDiagnosticIdAsync, item => item is { HasDiagnosticId: true });
-        CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
-        UseWhiteCommand = new RelayCommand<object?>(_ => BackgroundHex = "#FFFFFF", _ => CanEditDraft);
-        UseBlackCommand = new RelayCommand<object?>(_ => BackgroundHex = "#000000", _ => CanEditDraft);
+        AddFilesCommand = commands.CreateAsync(AddFilesAsync, () => CanEditInputs, activationOwner: activationOwner);
+        AddFolderCommand = commands.CreateAsync(AddFolderAsync, () => CanEditInputs, activationOwner: activationOwner);
+        RemoveInputCommand = commands.Create<BatchItemViewModel>(
+            item => { if (item is not null) RemoveInput(item); },
+            item => item is not null && CanEditInputs);
+        InsertNameTokenCommand = commands.Create(() => FileNamePattern += "{name}", () => CanEditDraft);
+        InsertIndexTokenCommand = commands.Create(
+            () => FileNamePattern += "{index}",
+            () => CanEditDraft && !FileNamePattern.Contains("{index}", StringComparison.Ordinal));
+        StartCommand = commands.CreateAsync(StartAsync, () => CanAttemptStart, activationOwner: activationOwner);
+        CancelCommand = commands.CreateAsync(CancelAsync, () => IsProcessing && !IsCanceling, activationOwner: activationOwner);
+        RetryFailedCommand = commands.Create(RecoverFailed, () => HasFailedItems && !IsProcessing);
+        ProcessUnfinishedCommand = commands.Create(RecoverUnfinished, () => HasUnfinishedItems && !IsProcessing);
+        ProcessSkippedWithAutoRenameCommand = commands.Create(RecoverSkipped, () => HasSkippedItems && !IsProcessing);
+        ContinueOtherCommand = commands.Create(ResetToEmptyDraft, () => HasResult && !IsProcessing);
+        OpenOutputCommand = commands.CreateAsync(OpenOutputAsync, () => HasResult && !IsProcessing && !string.IsNullOrWhiteSpace(OutputDirectory), activationOwner: activationOwner);
+        OpenInputDirectoryCommand = commands.CreateAsync(OpenInputDirectoryAsync, () => Items.Count > 0 && !IsProcessing, activationOwner: activationOwner);
+        ViewItemDetailsCommand = commands.CreateAsync<BatchItemViewModel>(
+            (item, token) => item is null ? Task.CompletedTask : ViewItemDetailsAsync(item, token),
+            item => item is { CanViewDetails: true },
+            activationOwner: activationOwner);
+        RelocateInputCommand = commands.CreateAsync<BatchItemViewModel>(
+            (item, token) => item is null ? Task.CompletedTask : RelocateInputAsync(item, token),
+            item => item is { CanRelocate: true } && !IsProcessing,
+            activationOwner: activationOwner);
+        CopyItemDiagnosticIdCommand = commands.CreateAsync<BatchItemViewModel>(
+            (item, token) => item is null ? Task.CompletedTask : CopyItemDiagnosticIdAsync(item, token),
+            item => item is { HasDiagnosticId: true },
+            activationOwner: activationOwner);
+        CopyDiagnosticIdCommand = commands.CreateAsync(CopyDiagnosticIdAsync, () => HasDiagnosticId, activationOwner: activationOwner);
+        UseWhiteCommand = commands.Create(() => BackgroundHex = "#FFFFFF", () => CanEditDraft);
+        UseBlackCommand = commands.Create(() => BackgroundHex = "#000000", () => CanEditDraft);
     }
 
     public ObservableCollection<BatchItemViewModel> Items { get; } = [];
@@ -372,25 +389,25 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
     public bool HasAvailableOutput => _lastBatchResult?.Items.Any(item => _outputGuard.FileExists(item.OutputPath)) == true;
     public bool HasMissingOutput => HasResult && _lastBatchResult!.Items.Any(item => item.Status == ImageJobStatus.Succeeded && !_outputGuard.FileExists(item.OutputPath));
 
-    public AsyncCommand AddFilesCommand { get; }
-    public AsyncCommand AddFolderCommand { get; }
-    public RelayCommand<BatchItemViewModel> RemoveInputCommand { get; }
-    public RelayCommand<object?> InsertNameTokenCommand { get; }
-    public RelayCommand<object?> InsertIndexTokenCommand { get; }
-    public AsyncCommand StartCommand { get; }
-    public AsyncCommand CancelCommand { get; }
-    public RelayCommand<object?> RetryFailedCommand { get; }
-    public RelayCommand<object?> ProcessUnfinishedCommand { get; }
-    public RelayCommand<object?> ProcessSkippedWithAutoRenameCommand { get; }
-    public RelayCommand<object?> ContinueOtherCommand { get; }
-    public AsyncCommand OpenOutputCommand { get; }
-    public AsyncCommand OpenInputDirectoryCommand { get; }
-    public AsyncCommand<BatchItemViewModel> ViewItemDetailsCommand { get; }
-    public AsyncCommand<BatchItemViewModel> RelocateInputCommand { get; }
-    public AsyncCommand<BatchItemViewModel> CopyItemDiagnosticIdCommand { get; }
-    public AsyncCommand CopyDiagnosticIdCommand { get; }
-    public RelayCommand<object?> UseWhiteCommand { get; }
-    public RelayCommand<object?> UseBlackCommand { get; }
+    public IAsyncRelayCommand AddFilesCommand { get; }
+    public IAsyncRelayCommand AddFolderCommand { get; }
+    public IRelayCommand<BatchItemViewModel> RemoveInputCommand { get; }
+    public IRelayCommand InsertNameTokenCommand { get; }
+    public IRelayCommand InsertIndexTokenCommand { get; }
+    public IAsyncRelayCommand StartCommand { get; }
+    public IAsyncRelayCommand CancelCommand { get; }
+    public IRelayCommand RetryFailedCommand { get; }
+    public IRelayCommand ProcessUnfinishedCommand { get; }
+    public IRelayCommand ProcessSkippedWithAutoRenameCommand { get; }
+    public IRelayCommand ContinueOtherCommand { get; }
+    public IAsyncRelayCommand OpenOutputCommand { get; }
+    public IAsyncRelayCommand OpenInputDirectoryCommand { get; }
+    public IAsyncRelayCommand<BatchItemViewModel> ViewItemDetailsCommand { get; }
+    public IAsyncRelayCommand<BatchItemViewModel> RelocateInputCommand { get; }
+    public IAsyncRelayCommand<BatchItemViewModel> CopyItemDiagnosticIdCommand { get; }
+    public IAsyncRelayCommand CopyDiagnosticIdCommand { get; }
+    public IRelayCommand UseWhiteCommand { get; }
+    public IRelayCommand UseBlackCommand { get; }
 
     public void RequestCancellation() => _executionCancellation?.Cancel();
 
@@ -502,7 +519,7 @@ public sealed class BatchTaskViewModel : ObservableObject, IDisposable, IDesktop
         NotifyDraft();
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         _executionCancellation?.Cancel();
         _executionCancellation?.Dispose();

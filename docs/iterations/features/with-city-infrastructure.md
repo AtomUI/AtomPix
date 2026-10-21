@@ -1,8 +1,10 @@
 # AtomPix.Infrastructure × AtomUI.City 审计
 
-> 结论：全部 City 能力均不采用
+> 设计状态：Design Frozen；交付状态：边界已验证，迁移后需回归
+>
+> 结论：全部 City 能力均不采用（`APX-CITY-BND-003`）
 
-Infrastructure 实现设置、最近项目、文件系统和日志等现有技术端口。它提供持久化事实，但不拥有运行时共享投影；投影和写入编排属于 Workflows。
+Infrastructure 实现设置、遗留 Recent 文件、文件系统和日志等现有技术端口。它提供持久化事实，但不拥有运行时共享投影；投影和写入编排属于 Workflows。当前产品不再加载或写入 Recent，已有文件不主动删除。
 
 - 不引用 City.State：Store 不发布应用状态，也不持有订阅者。
 - 不引用 City.Core：Infrastructure 没有独立模块生命周期；Desktop Host 通过现有 DI 扩展注册实现。

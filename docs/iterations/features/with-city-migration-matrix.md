@@ -1,99 +1,100 @@
 # AtomPix × AtomUI.City 迁移主矩阵
 
-> 状态：Design Frozen / City Blocked
+> 设计状态：Design Frozen
+>
+> 交付状态：Implementation In Progress；Release Blocked
 >
 > 实施分支：`feature/with-city`
 >
-> City 基线：`e058270f469f23453c7df59029784cb4b53fe414`（`develop`，2026-10-19）
->
-> 基线日期：2026-10-19
+> 当前固定 City SHA：`9097d9d0d8244a864e5b7944ef2bf7ab2be70ae3`（City Release/Public API/package gate 已通过）
 
-本文是 AtomPix City 迁移的治理入口。范围、能力归属、实施状态和验收证据以本文为准；产品行为仍以 `docs/product/` 为准，模块边界仍以 `docs/architecture/` 与 `docs/modules/` 为准。
+本文是 City 迁移的总览仪表盘和导航索引。完整施工合同、blocker 和证据以[逐决策登记表](with-city-decision-register.md)及专项文档为准；产品行为仍以 `docs/product/` 为准，模块边界仍以 `docs/architecture/` 与 `docs/modules/` 为准。
 
-## 1. 治理规则
+## 1. 状态与治理规则
 
-1. City 能力跟随业务事实、状态和生命周期的所有者，不跟随最先调用或展示它的 Desktop。
-2. Desktop 只拥有窗口、路由、View/ViewModel、UI 线程与交互状态；设置和最近项目的共享运行时事实属于 Workflows。
-3. 持久化 Store 始终是设置和最近项目的事实源；City.State 是成功持久化后的只读运行时投影，不是第二套数据库。
-4. 图片处理调用、批处理进度与取消是一次调用内的短生命周期，不升级为 City 后台任务或全局 State。
-5. 一个单元只有在所有权、City 契约、依赖、替代范围、失败语义和测试证据全部明确后才能进入施工。
-6. City 固定提交的必需契约或发布门失败时标记为 `阻`；AtomPix 不修改 City，也不增加框架级临时替代。
+| 标记 | 含义 |
+| --- | --- |
+| `禁` | 架构边界禁止该依赖 |
+| `否` | 产品不需要，明确不采用 |
+| `间` | 只通过 AtomPix facade/上层组合间接消费 |
+| `采` | 设计决定采用，尚未完成实现验证 |
+| `阻` | 已决定采用，但存在明确前置 blocker |
+| `已` | 实现与验收证据均完成 |
 
-状态含义：`定` 表示采用决策和目标设计已冻结、尚未施工；`否` 表示审计后不采用；`适` 表示只通过上层组合或标准合同间接使用；`阻` 表示决定采用但被 City 契约或发布门阻塞；`已` 表示实现和验证均完成。本文不存在开放的 `审-*` 条目。
+`阻` 是交付状态，不代替采用范围、生命周期或失败语义。复杂合同写在专项设计；一项只有在登记表中具有 owner、City contract、implementation、失败语义和 acceptance evidence 后才可施工。高层单字符不构成证据。
 
-## 2. 当前事实与预检证据
+City 能力跟随事实、状态和生命周期 owner，而不是最先展示它的 Desktop。Store 是设置的持久化事实源，City.State 是只读运行时投影。图片处理进度和取消保持调用级，不升级为全局 State。AtomPix 不修改固定 City SHA，也不在本仓库实现框架级临时替代。
 
-- AtomPix 迁移前基线：Release 构建通过；功能与 Headless UI 测试 `398 passed`；压力测试 `4 passed`；漏洞审计未发现易受攻击包；`win-x64` 裁剪发布成功；发布产物 5 秒启动烟测通过。
-- City 使用仓库隔离安装的 SDK `10.0.300` 完成 Release 预检。Core、Mvvm、Routing、State、Localization、Presentation 与 Generators 的主体测试均可构建，相关测试集中已观察到 Mvvm `106`、Routing `168`、State `154`、Localization `96`、Presentation `171`、Generators `206` 通过。
-- City 完整测试未通过：`AtomUI.City.Build.Tests.PackagingReleaseGateTests.PresentationPublicApiGateUsesFrozenBaselineAnalyzersAndPackageValidation` 要求 `PublicAPI.Unshipped.txt` 为空，但该提交公开了 `IUiCommandFactory` 并把签名留在该文件中。
-- City TemplateSmoke 的三项失败中，两项是未先产出本地包，一项是子进程未继承隔离 SDK；它们属于执行环境/顺序问题。公共 API 冻结门失败与顺序无关，并直接命中 AtomPix 的必需命令工厂合同，因此构成阻塞。
-- City 当前声明 Avalonia `12.0.4`，AtomPix 为 `12.1.1`。在公共 API 门修复后，仍须通过 AtomPix 真实项目引用构建确认最终依赖解析；不能仅凭 NuGet 的高版本胜出规则认定兼容。
+## 2. 运行时能力仪表盘
 
-## 3. 主矩阵
-
-### 运行时与交互能力
-
-| AtomPix \\ City | Core | Mvvm | Routing | Presentation | State | EventBus | Localization |
+| AtomPix \ City | Core | Mvvm | Routing | Presentation | State | EventBus | Localization |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Core | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Imaging.Abstractions | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Imaging.Magick | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Infrastructure | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| Workflows | 否 | 否 | 否 | 否 | 定 | 否 | 否 |
-| Desktop | 定 | 阻 | 定 | 阻 | 适 | 否 | 定 |
-| Engineering | 定 | 阻 | 定 | 阻 | 定 | 否 | 定 |
+| Core | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
+| Imaging.Abstractions | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
+| Imaging.Magick | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
+| Infrastructure | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
+| Workflows | 否 | 否 | 否 | 否 | 采 | 否 | 否 |
+| Desktop | 已 | 采 | 已 | 已 | 间 | 否 | 采 |
 
-### 数据、安全与扩展能力
+解释：
 
-| AtomPix \\ City | Data | Security | PluginSystem |
-| --- | --- | --- | --- |
-| Core | 否 | 否 | 否 |
-| Imaging.Abstractions | 否 | 否 | 否 |
-| Imaging.Magick | 否 | 否 | 否 |
-| Infrastructure | 否 | 否 | 否 |
-| Workflows | 否 | 否 | 否 |
-| Desktop | 否 | 否 | 否 |
-| Engineering | 否 | 否 | 否 |
+- Workflows 只为 `AppSettingsState` 直接采用 City.State；Recent 不迁移。
+- Desktop 通过 AtomPix 只读 facade 间接观察 State，不获得 writer。
+- Mvvm 的 City 前置能力已经验证；AtomPix 逐类型 ownership map 仍在收口，因此保持“采”。
+- Routing/Presentation 已使用通用 coordinator、commit receipt 和安全条件恢复能力。
+- EventBus 不采用；显式命令、只读 State 和应用服务足够。
 
-### 工程能力
+## 3. 其他能力仪表盘
 
-| AtomPix \\ City | Build | Generators | Testing | CLI | Templates |
-| --- | --- | --- | --- | --- | --- |
-| Core | 否 | 否 | 否 | 否 | 否 |
-| Imaging.Abstractions | 否 | 否 | 否 | 否 | 否 |
-| Imaging.Magick | 否 | 否 | 否 | 否 | 否 |
-| Infrastructure | 否 | 否 | 否 | 否 | 否 |
-| Workflows | 否 | 否 | 否 | 否 | 否 |
-| Desktop | 阻 | 阻 | 否 | 否 | 否 |
-| Engineering | 阻 | 阻 | 否 | 否 | 否 |
+| 能力 | 状态 | 决议 |
+| --- | --- | --- |
+| Data / Security / PluginSystem | 否 | 当前无远程数据管线、主体权限或插件产品合同 |
+| Build | 已 | 同 SHA 本地 `AtomUI.City.Build` 包、包哈希与 gitlink provenance gate 已通过 |
+| Generators | 已 | 只经 Build 包 analyzer assets 消费，不直接 ProjectReference；当前构建链验证通过 |
+| Testing | 否 | City 测试证明框架；AtomPix 保留自己的 Headless/EXE/发布功能证据 |
+| CLI / Templates | 否 | 不匹配当前产品交付 |
 
-Build/Generators 本身没有发现能力缺口，但它们属于同一 Desktop 编译链；在 Presentation/Mvvm 公共 API 基线恢复前统一标记为阻塞，避免产生不可发布的半迁移状态。
+`Engineering` 不再伪装成 AtomPix 运行时模块；仓库级 Build/CI/Release 状态独立列在本节和决策登记表。
 
-## 4. 已冻结的能力归属
+## 4. 已批准的产品与边界决策
 
-- Workflows 直接引用 City.State，拥有 `AppSettings` 和 `RecentItems` 的共享投影；Desktop 只读消费。
-- Desktop 直接引用 City.Core、Mvvm、Routing、Presentation、Localization、Build、Generators，作为唯一 Host 与 UI 组合根。
-- Core、Imaging 与 Infrastructure 不出现 City 类型；它们继续通过现有端口被 Workflows/Desktop 组合。
-- EventBus 不采用：State 已承载共享事实；窗口内一对一交互继续使用明确的命令、属性通知或应用服务。
-- Data/Security/PluginSystem 不采用：AtomPix 当前没有远程数据管线、应用主体权限或插件产品合同。
-- City.Testing、CLI、Templates 不采用：现有真实 Host、Headless UI、发布脚本与项目结构提供更直接的产品证据。
+- Settings 替换 presentation，不终止 Browser workspace；重建 View/visual tree/activation scope，不回放用户操作。
+- 启动失败按 L1/L2/L3 分级；设置读取失败是可恢复 `Faulted`，结构错误才触发 Host 回滚。
+- City 新增最小 `CommandExecutionDomain`，不预先构建通用调度 policy 系统。
+- 当前版本移除 Recent UI 与运行时读写；兼容字段往返且不主动删除用户历史文件。
+- Settings 保存采用 Store-first、State-second，City snapshot 为 transient。
+- 先在 City 增加 Routing-Presentation 技术协调/条件恢复，再实现 AtomPix 业务导航层。
+- City composition 先完成发布级验证；AtomPix 再按逐 ViewModel ownership map 迁移。
+- runtime 使用固定 SHA ProjectReference；Build/Generators 使用同 SHA 本地 Build 包。
+- 发布功能测试必须从受控 fixture 自给自足、隔离运行并进入 CI/Release。
+- 最终 publish closure 必须完成替代授权、第三方许可证、Notice、源码和 SBOM 闭环。
 
-## 5. 施工解锁条件
+## 5. 当前剩余项
 
-必须同时满足以下条件，矩阵中的 `阻` 才能转为 `定` 并开始源码施工：
+| Blocker | Owner | 解除条件 |
+| --- | --- | --- |
+| AtomPix MVVM ownership 未完全收口 | AtomPix | Home/Settings EntryOwned 与导航意图/前台任务职责拆分完成并补齐逐类型证据 |
+| Localization 内容迁移与发布闭环未完成 | AtomPix | 已接通的 8 catalog/registrar/UI bridge 继续完成生产 key/订阅迁移、硬编码扫描 allowlist 与 trim/single-file locpack 验收 |
+| 发布许可证闭环未完成 | AtomPix/AtomUI | 字体与 Svg 清理、替代授权、Notice/源码/SBOM gate 通过 |
 
-1. 固定一个新的 City `develop` SHA，且不得在 AtomPix 内漂移跟踪分支。
-2. City 官方 Release/Public API 门通过；`IUiCommandFactory` 已进入合法冻结基线或由 City 正式替代合同取代。
-3. City 采用模块的测试、打包与漏洞审计通过；AtomPix 不直接或传递引入已知高危运行时包。
-4. 用 AtomPix 的 Avalonia `12.1.1` 和 .NET `net10.0` 真实项目引用完成还原、构建、Headless 测试与裁剪发布。
-5. 更新本文的 City SHA、证据和矩阵状态后，再按专项文档顺序施工。
+## 6. 解锁和施工顺序
 
-## 6. 专项文档
+1. 已完成：City 四项 framework blocker、Release gate 和固定 SHA。
+2. 已完成：同 SHA Build 包、provenance、State/Host、Routing/Presentation 与发布功能门。
+3. 当前：收口 AtomPix MVVM ownership 和导航/前台任务职责。
+4. 当前：八个 Localization catalog、generated registrar 与 UI bridge 已接通；继续迁移生产文案和订阅，并完成发布闭环。
+5. Release 前：关闭字体/Svg、Notice/源码/SBOM 合规 blocker；只有真实证据存在时才转为 `已`。
+
+## 7. 专项文档
 
 - [Desktop 总体迁移](with-city.md)
+- [逐决策登记表](with-city-decision-register.md)
+- [Routing-Presentation 协调](with-city-routing-presentation.md)
 - [MVVM、命令与生命周期](with-city-mvvm.md)
 - [Workflows State](with-city-workflows.md)
+- [Build、Generators 与 Localization](with-city-build-generators-localization.md)
 - [Core 边界审计](with-city-core.md)
 - [Imaging 边界审计](with-city-imaging.md)
 - [Infrastructure 边界审计](with-city-infrastructure.md)
 - [工程、CI 与验收](with-city-engineering.md)
+- [发布依赖许可证与合规](../../implementation/release-compliance.md)

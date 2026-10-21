@@ -1,23 +1,34 @@
 # AtomPix × City 工程、CI 与验收设计
 
-> 状态：设计冻结 / City Blocked
+> 设计状态：Design Frozen
+>
+> 交付状态：Verified（工程与发布功能门）；整体 Release 仍受 Localization/许可证约束
 
-## 1. 版本与子模块
+## 1. 版本、子模块与包
 
-- City 位于 `external/AtomUI.City`，`.gitmodules` 跟踪 `develop`，但 AtomPix 永远提交精确 gitlink SHA。
-- 当前审计 SHA 为 `e058270f469f23453c7df59029784cb4b53fe414`；该 SHA 未通过 City 公共 API 发布门，不能进入生产引用。
-- CI/Release checkout 必须递归获取子模块，并在构建前验证目录、SHA 和 clean 状态。
-- 更新 City 只能形成独立提交，同时更新主矩阵、兼容性证据和漏洞审计；不得静默前移 gitlink。
+- City 位于 `external/AtomUI.City`；AtomPix 提交精确 gitlink SHA，不在迁移中漂移跟踪分支。
+- 当前固定 SHA 为 `9097d9d0d8244a864e5b7944ef2bf7ab2be70ae3`；City solution、Public API、package、composition、`CommandExecutionDomain` 与 Routing-Presentation release gate 均已通过。
+- CI/Release 递归获取 submodule，并验证目录、SHA 和 clean 状态。
+- runtime 模块使用 `ProjectReference`；构建期只消费同 SHA 生成的本地 `AtomUI.City.Build` 包。完整合同见[接线设计](with-city-build-generators-localization.md)。
+- 每次 City 更新形成独立 AtomPix 提交，同时更新决策登记表、兼容证据、依赖与许可证审计。
 
-## 2. 项目引用与构建
+## 2. City 前置门
 
-解锁后，Workflows 只引用 City.State；Desktop 引用 City Core/Mvvm/Routing/Presentation/Localization/Build/Generators 的源项目。Core、Imaging、Infrastructure 不引用 City。测试项目只按被测合同增加必要引用。
+新 SHA 必须同时满足：
 
-AtomPix 使用 net10.0、Avalonia 12.1.1；City 当前自身使用 SDK 10.0.300、Avalonia 12.0.4。必须用真实 AtomPix 图完成 restore/build/test/publish，并检查 `project.assets.json` 中只有一个可接受的 Avalonia 版本族且无 downgrade warning。
+1. City solution、模块测试、package/release/Public API gate 全部通过。
+2. `IUiCommandFactory` 位于合法 shipped baseline 或由正式替代合同取代。
+3. `CommandExecutionDomain` 完成竞态、取消、activation drain 和 Public API 验证。
+4. Routing-Presentation coordinator、commit receipt 和条件恢复完成故障注入与 release validation。
+5. ViewModel composition 从 `Release Validation Pending` 提升为 `Release Verified`。
+6. 同 SHA `AtomUI.City.Build` 包可由干净环境确定性生成并被 AtomPix 消费。
+7. AtomPix 的 Avalonia `12.1.1`、`net10.0` 真实依赖图无 downgrade、重复资产或不可接受漏洞。
+
+City gate 仍记录 `Microsoft.AspNetCore.SignalR.Common 10.0.8` 的上游告警；AtomPix 2026-10-21 的 14 项目漏洞审计未报告易受攻击包，且该 Data 依赖不在产品 publish closure 中。后续 City SHA 更新仍须重新审计。
 
 ## 3. 自动门禁
 
-迁移前和迁移后均运行：
+迁移前后执行：
 
 ```powershell
 ./eng/verify.ps1 -PublishCurrentPlatform
@@ -26,27 +37,52 @@ AtomPix 使用 net10.0、Avalonia 12.1.1；City 当前自身使用 SDK 10.0.300�
 ./eng/windows-published-functional-test.ps1
 ```
 
-`verify.ps1` 默认不得使用 `-SkipStress` 或 `-SkipAudit`。CI 发布矩阵继续覆盖 `win-x64`、`linux-x64`、`linux-arm64`、`osx-x64`、`osx-arm64`；Windows 增加发布产物 UI 自动化，其余平台至少完成还原、Release 构建、测试、发布和启动烟测。
+`verify.ps1` 默认不得跳过 stress 或 vulnerability audit。Windows published functional 已使用受控 fixture manifest、显式 `ATOMPIX_APPDATA_DIRECTORY`/`ATOMPIX_TEMP_DIRECTORY`、唯一 run root、正常关闭和 JSON/trace 证据，并接入 CI/Release artifact。CI 发布矩阵继续覆盖 `win-x64`、`linux-x64`、`linux-arm64`、`osx-x64`、`osx-arm64`；Windows 额外运行发布产物 UI 自动化与完整功能矩阵。
 
-新增静态边界门：
+静态边界门：
 
-- Core/Imaging/Infrastructure 不含 City ProjectReference 或 namespace。
-- 生产 Desktop 不含旧 ObservableObject/Command/NavigationCoordinator。
-- 不存在未登记的裸 `_ =`、`async void` 或直接根容器构建。
-- 用户可见中文全部来自本地化目录；测试 fixture 与开发注释不计入。
+- Core/Imaging/Infrastructure 不含 City reference 或 namespace。
+- Desktop 不含旧 ObservableObject/Command/NavigationCoordinator 双栈。
+- 无未登记的裸 `_ =`、非事件型 `async void` 或直接根容器构建。
+- 生产 Host/Home/打开来源路径不加载或写入 Recent。
+- 用户可见文本全部来自 catalog；允许清单只覆盖测试、诊断和注释。
+- Decision ID 唯一，`Verified` 有实际证据，`Blocked` 有 owner 和解除条件。
 
-## 4. City 前置门
+## 4. 可复现的 Windows 发布功能测试
 
-每次更新 City SHA 必须先执行 City 官方 Release gate，而不是只挑选通过的项目测试。当前 SHA 的以下事实必须保留在证据中：
+`tests/TestAssets/Images` 是唯一受版本控制的不可变源图片集；新增 manifest 记录 SHA-256、格式、尺寸和透明度要求。默认脚本必须自给自足：
 
-- Build/Public API gate：失败，原因是 `IUiCommandFactory` 仍位于 `PublicAPI.Unshipped.txt`。
-- TemplateSmoke：三项失败，其中本地包顺序和隔离 SDK 继承是环境问题，不替代公共 API 阻塞结论。
-- NuGet restore 对 `Microsoft.AspNetCore.SignalR.Common 10.0.8` 报告高危漏洞；AtomPix 不采用 City.Data，但仍须证明最终运行时依赖图没有带入该包。
+```text
+校验 source manifest
+-> 创建唯一 run root
+-> 每个 case 复制独立 input
+-> 每个 case 建立独立 output / LOCALAPPDATA / results
+-> 启动真实发布版 AtomPix
+-> 驱动 UI 并验证输出、输入 hash、设置和关闭
+-> 生成 JSON / trace；失败保留截图和现场
+```
 
-## 5. 完成定义
+要求：
 
-- 主矩阵无 `阻`、无开放审计项，采用项全部变为 `已`。
-- AtomPix 全量功能、Headless UI、压力、漏洞、裁剪发布和启动烟测通过。
-- Windows 发布功能脚本的全部 case 通过；跨平台发布矩阵通过。
-- 架构、模块、测试、发布和文档一致性快照更新为实际代码事实。
-- 所有旧基础设施删除均有替代合同和测试证据，不保留双栈。
+- 删除对日期型 `.artifacts/trim-validation/gui-cases-*` 的默认依赖；`-CaseRoot` 只作诊断覆盖。
+- 所有设置路径从 `$session.AppData` 计算，不读取测试父进程的 LocalApplicationData。
+- 每 case 开始时 output 为空；验证精确输出数量、格式、尺寸、可解码性、临时文件清理和输入 hash。
+- 场景 ID、配置和断言必须一致；使用语言无关的稳定 `AutomationId`，并另行断言固定 `zh-CN` 的 Name。
+- 优先正常关闭并等待终态；强制 kill 仅为 cleanup，关闭失败写入结果。
+- 本地默认和 CI/Release 都运行全部 case；`-Only` 仅用于诊断。
+- publish 和基础进程 smoke 后运行；失败使 job 失败。JSON/trace 始终上传，失败时增加截图、隔离设置、输入输出和进程诊断。
+
+迁移代表场景包括 Settings 往返 workspace 保留、Routing 成功而 Presentation 失败后的安全恢复、Settings State `Faulted` 恢复、close denial 和四项单张/三项批量真实输出。可可靠故障注入的内部阶段留在 Headless 测试，不把所有内部错误塞进 UIA。
+
+## 5. 发布合规
+
+第三方许可证、替代授权、Notice、对应源码、SBOM 和最终产物闭包遵守[发布依赖许可证与合规设计](../../implementation/release-compliance.md)。字体和 `Svg.Custom` 清理、Magick.Native Notice/源码材料、Partial Trim 产物扫描均为 Release blocker；NativeAOT 保持实验状态。
+
+## 6. 完成定义
+
+- 决策登记表无 `Blocked`/`Not Started`，采用项均有具体实现与证据。
+- City 新固定 SHA 通过全部前置门；AtomPix runtime/build 双通道来源一致。
+- AtomPix 全量功能、Headless UI、stress、vulnerability、发布功能、五平台 publish/smoke 通过。
+- 发布闭包无未知/不兼容许可证，Notice/SBOM/源码访问随每种分发形式提供。
+- 架构、模块、测试、发布和文档一致性快照更新为实际代码事实；历史数字不冒充当前证据。
+- 旧基础设施删除且无长期双栈；每个删除项有替代合同和测试。

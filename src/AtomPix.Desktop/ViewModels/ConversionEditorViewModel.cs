@@ -11,8 +11,9 @@ using AtomPix.Desktop.Platform;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
 
-public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -48,7 +49,8 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         OpenImageWorkflow openImage,
         LoadSettingsWorkflow loadSettings,
         ConvertImageWorkflow convert,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
@@ -59,7 +61,9 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _convert = convert ?? throw new ArgumentNullException(nameof(convert));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
 
         Formats =
         [
@@ -68,14 +72,14 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
             new DesktopChoiceOption<OutputImageFormat>("WebP", OutputImageFormat.WebP)
         ];
         _selectedFormat = Formats[2];
-        SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
-        CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
-        UseWhiteCommand = new RelayCommand<object?>(_ => BackgroundHex = "#FFFFFF", _ => !IsProcessing);
-        UseBlackCommand = new RelayCommand<object?>(_ => BackgroundHex = "#000000", _ => !IsProcessing);
-        OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
-        ContinueResizeCommand = new RelayCommand<object?>(_ => ContinueResize(), _ => IsSuccess);
-        CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
+        SelectImageCommand = commands.CreateAsync(SelectImageAsync, () => !IsProcessing, activationOwner: activationOwner);
+        StartCommand = commands.CreateAsync(StartAsync, () => IsContentReady && !IsProcessing, activationOwner: activationOwner);
+        CancelCommand = commands.Create(() => _executionCancellation?.Cancel(), () => IsProcessing);
+        UseWhiteCommand = commands.Create(() => BackgroundHex = "#FFFFFF", () => !IsProcessing);
+        UseBlackCommand = commands.Create(() => BackgroundHex = "#000000", () => !IsProcessing);
+        OpenOutputCommand = commands.CreateAsync(OpenOutputAsync, () => IsSuccess, activationOwner: activationOwner);
+        ContinueResizeCommand = commands.Create(ContinueResize, () => IsSuccess);
+        CopyDiagnosticIdCommand = commands.CreateAsync(CopyDiagnosticIdAsync, () => HasDiagnosticId, activationOwner: activationOwner);
     }
 
     public IReadOnlyList<DesktopChoiceOption<OutputImageFormat>> Formats { get; }
@@ -172,14 +176,14 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         _ => string.Empty
     };
 
-    public AsyncCommand SelectImageCommand { get; }
-    public AsyncCommand StartCommand { get; }
-    public RelayCommand<object?> CancelCommand { get; }
-    public RelayCommand<object?> UseWhiteCommand { get; }
-    public RelayCommand<object?> UseBlackCommand { get; }
-    public AsyncCommand OpenOutputCommand { get; }
-    public RelayCommand<object?> ContinueResizeCommand { get; }
-    public AsyncCommand CopyDiagnosticIdCommand { get; }
+    public IAsyncRelayCommand SelectImageCommand { get; }
+    public IAsyncRelayCommand StartCommand { get; }
+    public IRelayCommand CancelCommand { get; }
+    public IRelayCommand UseWhiteCommand { get; }
+    public IRelayCommand UseBlackCommand { get; }
+    public IAsyncRelayCommand OpenOutputCommand { get; }
+    public IRelayCommand ContinueResizeCommand { get; }
+    public IAsyncRelayCommand CopyDiagnosticIdCommand { get; }
 
     public void RequestCancellation() => _executionCancellation?.Cancel();
 
@@ -237,7 +241,7 @@ public sealed class ConversionEditorViewModel : ObservableObject, IDisposable, I
         NotifyResult();
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         CancelLoad();
         _executionCancellation?.Cancel();

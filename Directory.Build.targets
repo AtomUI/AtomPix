@@ -1,0 +1,25 @@
+<Project>
+  <Target Name="VerifyAtomUICityProvenance"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(MSBuildProjectName)' == 'AtomPix.Desktop'">
+    <PropertyGroup>
+      <_AtomUICityBuildPackage>$(MSBuildThisFileDirectory)eng\nuget-local\AtomUI.City.Build.$(AtomUICityBuildPackageVersion).nupkg</_AtomUICityBuildPackage>
+    </PropertyGroup>
+
+    <Error Condition="!Exists('$(_AtomUICityBuildPackage)')"
+           Text="The pinned AtomUI.City.Build package is missing: $(_AtomUICityBuildPackage)" />
+    <GetFileHash Files="$(_AtomUICityBuildPackage)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_AtomUICityPackageHash" />
+    </GetFileHash>
+    <Error Condition="'%(_AtomUICityPackageHash.FileHash)' != '$(AtomUICityBuildPackageSha256)'"
+           Text="AtomUI.City.Build package hash mismatch. Expected $(AtomUICityBuildPackageSha256), got %(_AtomUICityPackageHash.FileHash)." />
+
+    <Exec Command="git -C &quot;$(MSBuildThisFileDirectory)external/AtomUI.City&quot; rev-parse HEAD"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" ItemName="_AtomUICityActualCommit" />
+    </Exec>
+    <Error Condition="'@(_AtomUICityActualCommit)' != '$(AtomUICityCommit)'"
+           Text="AtomUI.City runtime source mismatch. Expected $(AtomUICityCommit), got @(_AtomUICityActualCommit)." />
+  </Target>
+</Project>

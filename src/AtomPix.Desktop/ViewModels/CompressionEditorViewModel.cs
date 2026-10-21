@@ -11,8 +11,9 @@ using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
 
-public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -47,7 +48,8 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         OpenImageWorkflow openImage,
         LoadSettingsWorkflow loadSettings,
         CompressImageWorkflow compress,
-        DesktopNavigationCoordinator navigation)
+        DesktopNavigationCoordinator navigation,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
@@ -58,7 +60,9 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _compress = compress ?? throw new ArgumentNullException(nameof(compress));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
 
         Modes =
         [
@@ -70,12 +74,12 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         ];
         _selectedMode = Modes[0];
 
-        SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
-        CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
-        OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
-        ContinueResizeCommand = new RelayCommand<object?>(_ => ContinueResize(), _ => IsSuccess);
-        CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
+        SelectImageCommand = commands.CreateAsync(SelectImageAsync, () => !IsProcessing, activationOwner: activationOwner);
+        StartCommand = commands.CreateAsync(StartAsync, () => IsContentReady && !IsProcessing, activationOwner: activationOwner);
+        CancelCommand = commands.Create(() => _executionCancellation?.Cancel(), () => IsProcessing);
+        OpenOutputCommand = commands.CreateAsync(OpenOutputAsync, () => IsSuccess, activationOwner: activationOwner);
+        ContinueResizeCommand = commands.Create(ContinueResize, () => IsSuccess);
+        CopyDiagnosticIdCommand = commands.CreateAsync(CopyDiagnosticIdAsync, () => HasDiagnosticId, activationOwner: activationOwner);
     }
 
     public IReadOnlyList<DesktopChoiceOption<CompressionMode>> Modes { get; }
@@ -192,12 +196,12 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     public string AppliedQualityText => _appliedQuality is null ? string.Empty : $"实际质量：{_appliedQuality.Value.Value}";
     public bool HasAppliedQuality => _appliedQuality is not null;
 
-    public AsyncCommand SelectImageCommand { get; }
-    public AsyncCommand StartCommand { get; }
-    public RelayCommand<object?> CancelCommand { get; }
-    public AsyncCommand OpenOutputCommand { get; }
-    public RelayCommand<object?> ContinueResizeCommand { get; }
-    public AsyncCommand CopyDiagnosticIdCommand { get; }
+    public IAsyncRelayCommand SelectImageCommand { get; }
+    public IAsyncRelayCommand StartCommand { get; }
+    public IRelayCommand CancelCommand { get; }
+    public IAsyncRelayCommand OpenOutputCommand { get; }
+    public IRelayCommand ContinueResizeCommand { get; }
+    public IAsyncRelayCommand CopyDiagnosticIdCommand { get; }
 
     public void RequestCancellation() => _executionCancellation?.Cancel();
 
@@ -261,7 +265,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         NotifyResult();
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         CancelLoad();
         _executionCancellation?.Cancel();

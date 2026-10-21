@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Validate semantic version tag
         id: version
@@ -58,6 +60,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -75,6 +79,9 @@ jobs:
       - name: Real-process UI automation
         shell: pwsh
         run: ./eng/windows-ui-automation.ps1
+      - name: Published functional matrix
+        shell: pwsh
+        run: ./eng/windows-published-functional-test.ps1
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -82,6 +89,13 @@ jobs:
           path: |
             .artifacts/packages/AtomPix-${{ needs.validate.outputs.version }}-win-x64.zip
             .artifacts/packages/AtomPix-${{ needs.validate.outputs.version }}-win-x64.zip.sha256
+          if-no-files-found: error
+      - name: Upload published functional evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-functional-windows
+          path: .artifacts/published-functional
           if-no-files-found: error
 
   build-macos:
@@ -108,6 +122,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install Apple certificate
         shell: pwsh
         env:
@@ -240,6 +256,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Checkout AtomUITools
         uses: actions/checkout@v4
         with:
@@ -337,6 +355,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: AtomPix-*
           path: .artifacts/downloaded
           merge-multiple: true
       - name: Validate release assets

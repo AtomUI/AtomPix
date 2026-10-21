@@ -1,6 +1,6 @@
 # AtomPix Desktop 交互状态与流转设计
 
-> 文档状态：MVP UI 正式目标基线，新 Shell 布局待实现
+> 文档状态：MVP UI 正式实现基线；City 迁移生命周期覆盖已记录
 >
 > 基线时间：2026-08-23
 >
@@ -34,7 +34,7 @@
 
 ### 2.1 内容加载状态
 
-图片、文件夹、设置和最近记录统一使用以下语义：
+图片、文件夹和设置统一使用以下语义。Recent 已退出当前 UI/运行时目标，不再建立 Desktop `ContentState`：
 
 ```text
 ContentState<T>
@@ -567,7 +567,9 @@ SettingsSaveState = Idle | Saving | Saved | Failed
 - 关于分区使用品牌主视觉与紧凑运行信息两级结构；不提供隐私、许可证、付费权益或本地处理宣传入口。
 - 关于 AtomPix：品牌、版本、图片引擎、Desktop 技术栈与运行平台，只读，不产生 Dirty。
 
-“外观与语言”和“最近记录设置”暂不在设置页面中暴露，首页也不提供最近记录列表或抽屉。现有 `AppSettings` 中未暴露的兼容字段在加载和保存完整快照时必须原样往返，不能被默认值覆盖；内部存储能力的存在不构成当前 UI 功能入口。
+“外观与语言”暂不在设置页面中暴露。Recent/最近项目在当前版本不是隐藏 UI，而是明确退出产品运行时：Home 不提供列表、抽屉、错误态或恢复入口，Host 不加载，成功打开图片或目录后也不写入访问历史。现有 `AppSettings` 中未暴露的兼容字段在加载和保存完整快照时必须原样往返，应用不主动删除既有 `recent-items.json`；内部类型或存储能力的暂时存在不构成当前功能入口。
+
+City 迁移期间，Settings 往返只替换 presentation，不终止 Browser workspace。旧 View、视觉树和 activation scope 离开时释放；Browser/工具对象与用户草稿由 workspace 保留，返回时使用新 View 和新 scope 重新呈现。恢复必须来自会话状态，不得回放用户操作。精确 owner 和 lease 见 [`with-city.md`](../../iterations/features/with-city.md) 与 [`with-city-mvvm.md`](../../iterations/features/with-city-mvvm.md)。
 
 ```mermaid
 flowchart TD
