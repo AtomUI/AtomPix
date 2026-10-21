@@ -3,6 +3,8 @@
 > 文档状态：架构讨论基线
 >
 > 基线时间：2026-06-25
+>
+> 2026-10-21 产品覆盖：Recent 已退出当前 UI 和运行时行为。本文的 `JsonRecentItemsStore` 章节记录遗留文件格式与实现事实，不表示 Host 仍应加载或写入它；City 迁移不建立 Recent State，且不得主动删除用户已有的 `recent-items.json`。
 
 ## 1. 模块定位
 
@@ -369,6 +371,8 @@ Infrastructure 异步方法必须显式支持 `CancellationToken`：
 - Linux 优先使用 `XDG_DATA_HOME/AtomPix`，否则使用 `~/.local/share/AtomPix`。
 
 测试可通过构造函数注入临时目录，避免污染真实用户目录。
+
+发布产物和跨进程自动化还可显式设置 `ATOMPIX_APPDATA_DIRECTORY` 与 `ATOMPIX_TEMP_DIRECTORY`。两者必须是绝对路径；未设置时仍使用上述平台默认值。该入口用于为每个测试 case 建立真正隔离的子进程目录，因为 Windows `SpecialFolder.LocalApplicationData` 不保证随父进程临时覆盖 `LOCALAPPDATA`。生产发布不得默认设置这两个变量。
 
 ### 9.6 图片引擎私有临时目录
 

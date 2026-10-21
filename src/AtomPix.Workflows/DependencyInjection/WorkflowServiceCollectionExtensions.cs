@@ -2,7 +2,6 @@ namespace AtomPix.Workflows.DependencyInjection;
 
 using Microsoft.Extensions.DependencyInjection;
 using AtomPix.Workflows.Images;
-using AtomPix.Workflows.RecentItems;
 using AtomPix.Workflows.Settings;
 
 public static class WorkflowServiceCollectionExtensions
@@ -30,12 +29,13 @@ public static class WorkflowServiceCollectionExtensions
         services.AddTransient<BatchCompressWithDefaultSettingsWorkflow>();
         services.AddTransient<BatchConvertWithDefaultSettingsWorkflow>();
         services.AddTransient<BatchResizeWithDefaultSettingsWorkflow>();
-        services.AddTransient<LoadSettingsWorkflow>();
-        services.AddTransient<SaveSettingsWorkflow>();
-        services.AddTransient<AddRecentItemWorkflow>();
-        services.AddTransient<LoadRecentItemsWorkflow>();
-        services.AddTransient<RemoveRecentItemWorkflow>();
-        services.AddTransient<ClearRecentItemsWorkflow>();
+        services.AddSingleton<AppSettingsStateCoordinator>();
+        services.AddSingleton<IAtomPixApplicationState>(provider =>
+            provider.GetRequiredService<AppSettingsStateCoordinator>());
+        services.AddTransient(provider => LoadSettingsWorkflow.ForApplicationState(
+            provider.GetRequiredService<AppSettingsStateCoordinator>()));
+        services.AddTransient(provider => SaveSettingsWorkflow.ForApplicationState(
+            provider.GetRequiredService<AppSettingsStateCoordinator>()));
         return services;
     }
 }

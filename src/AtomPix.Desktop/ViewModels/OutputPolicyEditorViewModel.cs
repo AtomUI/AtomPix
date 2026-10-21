@@ -1,11 +1,14 @@
 namespace AtomPix.Desktop.ViewModels;
 
 using AtomPix.Core.Output;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Platform;
+using AtomUI.City.Presentation;
 
 public sealed class OutputPolicyEditorViewModel : ObservableObject
 {
     private readonly IDesktopPickerService _picker;
+    private readonly IAtomPixLocalizedText _text;
     private readonly Action _draftChanged;
     private readonly Action<string>? _feedbackRequested;
     private DesktopChoiceOption<OutputLocationMode> _selectedLocation;
@@ -19,38 +22,42 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
 
     public OutputPolicyEditorViewModel(
         IDesktopPickerService picker,
+        IAtomPixLocalizedText text,
         Action? draftChanged = null,
-        Action<string>? feedbackRequested = null)
+        Action<string>? feedbackRequested = null,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         _draftChanged = draftChanged ?? (() => { });
         _feedbackRequested = feedbackRequested;
         Locations =
         [
-            new("原图旁子目录", OutputLocationMode.Subfolder),
-            new("原图目录", OutputLocationMode.SameAsInput),
-            new("自定义目录", OutputLocationMode.CustomDirectory)
+            new(_text.GetString("Common.Option.OutputLocation.SubfolderShort"), OutputLocationMode.Subfolder),
+            new(_text.GetString("Common.Option.OutputLocation.SameAsInputShort"), OutputLocationMode.SameAsInput),
+            new(_text.GetString("Common.Option.OutputLocation.CustomDirectory"), OutputLocationMode.CustomDirectory)
         ];
         OverwritePolicies =
         [
-            new("自动重命名", OverwritePolicy.AutoRename),
-            new("跳过已有文件", OverwritePolicy.Skip),
-            new("覆盖已有输出", OverwritePolicy.Overwrite)
+            new(_text.GetString("Common.Option.Overwrite.AutoRename"), OverwritePolicy.AutoRename),
+            new(_text.GetString("Common.Option.Overwrite.Skip"), OverwritePolicy.Skip),
+            new(_text.GetString("Common.Option.Overwrite.Overwrite"), OverwritePolicy.Overwrite)
         ];
         NamingModes =
         [
-            new("保留原文件名", OutputNamingMode.KeepOriginalName),
-            new("添加后缀", OutputNamingMode.AppendSuffix),
-            new("自定义格式", OutputNamingMode.CustomPattern)
+            new(_text.GetString("Common.Option.Naming.KeepOriginal"), OutputNamingMode.KeepOriginalName),
+            new(_text.GetString("Common.Option.Naming.AppendSuffix"), OutputNamingMode.AppendSuffix),
+            new(_text.GetString("Common.Option.Naming.CustomPattern"), OutputNamingMode.CustomPattern)
         ];
         _selectedLocation = Locations[0];
         _selectedNaming = NamingModes[1];
         _selectedOverwrite = OverwritePolicies[0];
-        ChooseDirectoryCommand = new AsyncCommand(ChooseDirectoryAsync);
-        InsertNameTokenCommand = new RelayCommand<object?>(_ => CustomFileNamePattern += "{name}");
-        InsertIndexTokenCommand = new RelayCommand<object?>(
-            _ => CustomFileNamePattern += "{index}",
-            _ => !CustomFileNamePattern.Contains("{index}", StringComparison.Ordinal));
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        ChooseDirectoryCommand = commands.CreateAsync(ChooseDirectoryAsync);
+        InsertNameTokenCommand = commands.Create(() => CustomFileNamePattern += "{name}");
+        InsertIndexTokenCommand = commands.Create(
+            () => CustomFileNamePattern += "{index}",
+            () => !CustomFileNamePattern.Contains("{index}", StringComparison.Ordinal));
     }
 
     public IReadOnlyList<DesktopChoiceOption<OutputLocationMode>> Locations { get; }
@@ -181,16 +188,18 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
     public bool IsCustomPattern => SelectedNaming.Value == OutputNamingMode.CustomPattern;
     public string NamingPreview => ExpandNamingPreview(FileNamePattern);
     public string SubfolderDestinationHint => string.IsNullOrWhiteSpace(SubfolderName)
-        ? "图片将保存到：每张原图所在目录 / …"
-        : $"图片将保存到：每张原图所在目录 / {SubfolderName.Trim()}";
-    public string ChooseDirectoryLabel => string.IsNullOrWhiteSpace(CustomDirectory) ? "选择" : "更改";
+        ? _text.GetString("Common.Output.SubfolderDestinationEmptyHint")
+        : _text.Format("Common.Output.SubfolderDestinationHint", SubfolderName.Trim());
+    public string ChooseDirectoryLabel => string.IsNullOrWhiteSpace(CustomDirectory)
+        ? _text.GetString("Common.Action.Choose")
+        : _text.GetString("Common.Action.Change");
     public bool IsValid => TryBuild(out _, out _);
     public string? ValidationError { get { TryBuild(out _, out var error); return error; } }
     public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationError);
     public string LocationSummary => SelectedLocation.Value switch
     {
-        OutputLocationMode.SameAsInput => "与原图相同目录",
-        OutputLocationMode.Subfolder => $"原图旁 / {SubfolderName}",
+        OutputLocationMode.SameAsInput => _text.GetString("Common.Option.OutputLocation.SameAsInputLong"),
+        OutputLocationMode.Subfolder => _text.Format("Common.Output.LocationSummary.Subfolder", SubfolderName),
         OutputLocationMode.CustomDirectory => CustomDirectory,
         _ => string.Empty
     };
@@ -201,9 +210,9 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
     }
     public bool HasPickerError => !string.IsNullOrWhiteSpace(PickerError);
 
-    public AsyncCommand ChooseDirectoryCommand { get; }
-    public RelayCommand<object?> InsertNameTokenCommand { get; }
-    public RelayCommand<object?> InsertIndexTokenCommand { get; }
+    public IAsyncRelayCommand ChooseDirectoryCommand { get; }
+    public IRelayCommand InsertNameTokenCommand { get; }
+    public IRelayCommand InsertIndexTokenCommand { get; }
 
     public void Apply(OutputPolicy policy)
     {
@@ -268,11 +277,11 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
         {
             error = SelectedLocation.Value switch
             {
-                OutputLocationMode.Subfolder when string.IsNullOrWhiteSpace(SubfolderName) => "输出子目录名称不能为空。",
-                OutputLocationMode.CustomDirectory when string.IsNullOrWhiteSpace(CustomDirectory) => "请选择自定义输出目录。",
-                _ when SelectedNaming.Value == OutputNamingMode.AppendSuffix && string.IsNullOrWhiteSpace(FileNameSuffix) => "文件名后缀不能为空。",
-                _ when SelectedNaming.Value == OutputNamingMode.CustomPattern && string.IsNullOrWhiteSpace(CustomFileNamePattern) => "文件名格式不能为空。",
-                _ => "文件名格式无效，只能使用 {name} 与 {index} 占位符，且不能包含路径字符。"
+                OutputLocationMode.Subfolder when string.IsNullOrWhiteSpace(SubfolderName) => _text.GetString("Common.Validation.Output.SubfolderRequired"),
+                OutputLocationMode.CustomDirectory when string.IsNullOrWhiteSpace(CustomDirectory) => _text.GetString("Common.Validation.Output.CustomDirectoryRequired"),
+                _ when SelectedNaming.Value == OutputNamingMode.AppendSuffix && string.IsNullOrWhiteSpace(FileNameSuffix) => _text.GetString("Common.Validation.Output.SuffixRequired"),
+                _ when SelectedNaming.Value == OutputNamingMode.CustomPattern && string.IsNullOrWhiteSpace(CustomFileNamePattern) => _text.GetString("Common.Validation.Output.PatternRequired"),
+                _ => _text.GetString("Common.Validation.Output.PatternInvalid")
             };
             return false;
         }
@@ -289,7 +298,7 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
 
         if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1)
         {
-            PickerError = DesktopErrorText.FromPicker(selection.ErrorMessage);
+            PickerError = DesktopErrorText.FromPicker(selection.ErrorMessage, _text);
             _feedbackRequested?.Invoke(PickerError);
             return;
         }
@@ -318,7 +327,7 @@ public sealed class OutputPolicyEditorViewModel : ObservableObject
         _draftChanged();
     }
 
-    private static string ExpandNamingPreview(string pattern) => pattern
-        .Replace("{name}", "示例图片", StringComparison.Ordinal)
+    private string ExpandNamingPreview(string pattern) => pattern
+        .Replace("{name}", _text.GetString("Common.Output.ExampleImageName"), StringComparison.Ordinal)
         .Replace("{index}", "001", StringComparison.Ordinal);
 }

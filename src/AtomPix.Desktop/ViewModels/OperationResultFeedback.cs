@@ -2,6 +2,7 @@ namespace AtomPix.Desktop.ViewModels;
 
 using AtomPix.Core.Jobs;
 using AtomPix.Core.Output;
+using AtomPix.Desktop.Localization;
 
 public enum OperationFeedbackSeverity
 {
@@ -16,10 +17,16 @@ public enum OperationFeedbackSeverity
 /// </summary>
 public sealed class OperationResultFeedback : ObservableObject
 {
+    private readonly IAtomPixLocalizedText _text;
     private bool _isVisible;
     private string _message = string.Empty;
     private OperationFeedbackSeverity _severity;
     private int _generation;
+
+    public OperationResultFeedback(IAtomPixLocalizedText text)
+    {
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+    }
 
     public bool IsVisible
     {
@@ -70,12 +77,12 @@ public sealed class OperationResultFeedback : ObservableObject
         var primary = result.Status switch
         {
             ImageJobStatus.Succeeded when disposition == OutputWriteDisposition.AutoRenamed =>
-                $"{completedLabel}；目标已存在，已自动保存为 {fileName}",
+                _text.Format("Common.Result.AutoRenamed", completedLabel, fileName),
             ImageJobStatus.Succeeded when disposition == OutputWriteDisposition.Overwritten =>
-                $"{completedLabel}；已覆盖已有输出 {fileName}",
-            ImageJobStatus.Succeeded => $"{completedLabel}；已保存为 {fileName}",
-            ImageJobStatus.Skipped => "未生成新文件；目标文件已存在，已按设置跳过",
-            ImageJobStatus.Canceled => "任务已取消；未生成新文件",
+                _text.Format("Common.Result.Overwritten", completedLabel, fileName),
+            ImageJobStatus.Succeeded => _text.Format("Common.Result.Saved", completedLabel, fileName),
+            ImageJobStatus.Skipped => _text.GetString("Common.Result.SkippedExisting"),
+            ImageJobStatus.Canceled => _text.GetString("Common.Result.CanceledNoOutput"),
             _ => string.Empty
         };
 
@@ -89,7 +96,7 @@ public sealed class OperationResultFeedback : ObservableObject
     public void ShowCanceled()
     {
         Severity = OperationFeedbackSeverity.Information;
-        Message = "任务已取消；未生成新文件";
+        Message = _text.GetString("Common.Result.CanceledNoOutput");
         IsVisible = true;
         Generation++;
     }

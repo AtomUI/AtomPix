@@ -1,5 +1,6 @@
 namespace AtomPix.Desktop.Platform;
 
+using AtomPix.Desktop.Localization;
 using AtomPix.Infrastructure.Diagnostics;
 using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
@@ -9,15 +10,18 @@ public sealed class DesktopExceptionBoundary : IDisposable
     private const string DetachedPopupTargetMessage = "Target control is not attached to the visual tree";
     private readonly ILogger<DesktopExceptionBoundary> _logger;
     private readonly IDesktopDialogService _dialogs;
+    private readonly IAtomPixLocalizedText _text;
     private int _attached;
     private int _dialogVisible;
 
     public DesktopExceptionBoundary(
         ILogger<DesktopExceptionBoundary> logger,
-        IDesktopDialogService dialogs)
+        IDesktopDialogService dialogs,
+        IAtomPixLocalizedText text)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
     }
 
     public void Attach()
@@ -34,6 +38,12 @@ public sealed class DesktopExceptionBoundary : IDisposable
         Dispatcher.UIThread.UnhandledException -= HandleDispatcherException;
         TaskScheduler.UnobservedTaskException -= HandleUnobservedTaskException;
         AppDomain.CurrentDomain.UnhandledException -= HandleFatalException;
+    }
+
+    internal void ReportStartupException(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        Report(exception, "DesktopStartupPresentationException", showDialog: true);
     }
 
     private void HandleDispatcherException(object? sender, DispatcherUnhandledExceptionEventArgs args)
@@ -110,8 +120,8 @@ public sealed class DesktopExceptionBoundary : IDisposable
         try
         {
             await _dialogs.ShowErrorAsync(
-                "AtomPix 遇到未预期错误",
-                $"当前操作未能完成。诊断编号：{diagnosticId}\n\n该编号只用于定位本机日志，不包含图片路径或日志原文。",
+                _text.GetString("Errors.Unexpected.Title"),
+                _text.Format("Errors.Unexpected.Message", diagnosticId),
                 CancellationToken.None);
         }
         catch (Exception exception)

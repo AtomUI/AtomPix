@@ -110,9 +110,11 @@ function Assert-No-BrandLogoTakeover([IntPtr] $WindowHandle) {
 }
 
 # This gate verifies the published Win32 process and its UI Automation surface.
-# The settings action is invoked through UI Automation so the real AtomUI overlay
-# composition is covered in addition to deterministic Headless pointer tests.
-$process = Start-Process -FilePath $executable -WorkingDirectory $directory -WindowStyle Hidden -PassThru
+# The settings action is invoked through UI Automation so the real City route
+# presentation is covered in addition to deterministic Headless pointer tests.
+# A hidden top-level Win32 window does not reliably publish MainWindowHandle or
+# a usable UIA tree, so this gate must launch the test window normally.
+$process = Start-Process -FilePath $executable -WorkingDirectory $directory -PassThru
 try {
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
     $handle = [IntPtr]::Zero

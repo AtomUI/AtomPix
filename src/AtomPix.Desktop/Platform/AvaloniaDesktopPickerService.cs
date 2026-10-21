@@ -1,15 +1,23 @@
 namespace AtomPix.Desktop.Platform;
 
+using AtomPix.Desktop.Localization;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform.Storage;
 
 public sealed class AvaloniaDesktopPickerService : IDesktopPickerService
 {
-    private static readonly FilePickerFileType SupportedImages = new("AtomPix 支持的图片")
+    private readonly IAtomPixLocalizedText _text;
+    private readonly FilePickerFileType _supportedImages;
+
+    public AvaloniaDesktopPickerService(IAtomPixLocalizedText text)
     {
-        Patterns = ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.tif", "*.tiff"]
-    };
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        _supportedImages = new FilePickerFileType(_text.GetString("Common.Picker.SupportedImages"))
+        {
+            Patterns = ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.gif", "*.tif", "*.tiff"]
+        };
+    }
 
     public Task<DesktopSelectionResult> PickSingleImageAsync(CancellationToken cancellationToken) =>
         PickFilesAsync(allowMultiple: false, cancellationToken);
@@ -22,14 +30,14 @@ public sealed class AvaloniaDesktopPickerService : IDesktopPickerService
         var storage = ResolveStorageProvider();
         if (storage is null)
         {
-            return DesktopSelectionResult.Unavailable("当前窗口不支持目录选择。");
+            return DesktopSelectionResult.Unavailable(_text.GetString("Common.Picker.FolderUnavailable"));
         }
 
         try
         {
             var folders = await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = "打开图片文件夹",
+                Title = _text.GetString("Common.Picker.OpenImageFolder"),
                 AllowMultiple = false
             });
             cancellationToken.ThrowIfCancellationRequested();
@@ -41,27 +49,27 @@ public sealed class AvaloniaDesktopPickerService : IDesktopPickerService
         }
         catch
         {
-            return DesktopSelectionResult.Failed("无法打开系统目录选择器。");
+            return DesktopSelectionResult.Failed(_text.GetString("Common.Picker.FolderFailed"));
         }
     }
 
-    private static async Task<DesktopSelectionResult> PickFilesAsync(
+    private async Task<DesktopSelectionResult> PickFilesAsync(
         bool allowMultiple,
         CancellationToken cancellationToken)
     {
         var storage = ResolveStorageProvider();
         if (storage is null)
         {
-            return DesktopSelectionResult.Unavailable("当前窗口不支持文件选择。");
+            return DesktopSelectionResult.Unavailable(_text.GetString("Common.Picker.FileUnavailable"));
         }
 
         try
         {
             var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = allowMultiple ? "添加图片" : "打开图片",
+                Title = _text.GetString(allowMultiple ? "Common.Picker.AddImages" : "Common.Picker.OpenImage"),
                 AllowMultiple = allowMultiple,
-                FileTypeFilter = [SupportedImages]
+                FileTypeFilter = [_supportedImages]
             });
             cancellationToken.ThrowIfCancellationRequested();
             return ToResult(files);
@@ -72,7 +80,7 @@ public sealed class AvaloniaDesktopPickerService : IDesktopPickerService
         }
         catch
         {
-            return DesktopSelectionResult.Failed("无法打开系统文件选择器。");
+            return DesktopSelectionResult.Failed(_text.GetString("Common.Picker.FileFailed"));
         }
     }
 

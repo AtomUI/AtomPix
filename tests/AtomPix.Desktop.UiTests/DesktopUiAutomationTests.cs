@@ -1,9 +1,11 @@
 namespace AtomPix.Desktop.UiTests;
 
+using System.Globalization;
 using AtomPix.Core.Ports;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Desktop.Composition;
 using AtomPix.Desktop.Controls;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Desktop.Shell;
@@ -12,6 +14,8 @@ using AtomPix.Desktop.Views;
 using AtomPix.Workflows.Settings;
 using AtomPix.Workflows.Images;
 using AtomUI.Labs.Controls.ImageGallery;
+using AtomUI.City.Localization;
+using AtomUI.City.Presentation;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -30,15 +34,66 @@ public sealed class DesktopUiAutomationTests
             AvaloniaTestIsolationLevel.PerAssembly));
 
     [Fact]
+    public Task Generated_localization_catalogs_register_and_resolve_through_city_runtime() => RunAsync(async () =>
+    {
+        await using (var harness = await CityWindowHarness.StartAsync())
+        {
+            var registry = harness.Services.GetRequiredService<LanguagePackageRegistry>();
+            var descriptors = registry.Descriptors
+                .Where(descriptor => descriptor.ScopeId == AtomPixLocalization.ModuleId)
+                .ToArray();
+
+            Assert.Equal(8, descriptors.Length);
+            Assert.All(descriptors, descriptor => Assert.Equal("zh-CN", descriptor.Culture.Name));
+            Assert.Equal(
+                new[] { "zh-CN" },
+                AtomUI.City.Generated.GeneratedLocalizationManifest.SupportedCultures);
+            Assert.Equal(407, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
+
+            var localization = harness.Services.GetRequiredService<ILocalizationService>();
+            var presentationBridge = harness.Services.GetRequiredService<IPresentationLocalizationBridge>();
+            Assert.IsType<AvaloniaPresentationLocalizationBridge>(presentationBridge);
+            var projection = harness.Services.GetRequiredService<IAtomPixLocalizedText>();
+            Assert.Same(projection, LocalizationHost.Current);
+            Assert.Equal("设置", projection.GetString(
+                AtomUI.City.Generated.GeneratedLocalizationManifest.Keys.Shell_Navigation_Settings));
+            Assert.Equal("轻巧、专注的图片处理工具", projection.GetString("Settings.About.Tagline"));
+            Assert.Equal("图片集预览器", projection.GetString("Browser.Automation.Gallery"));
+            Assert.Equal("开始剪裁", projection.GetString("Tools.Crop.StartAction"));
+
+            var presentationResult = await presentationBridge.ApplyCultureAsync(
+                localization.CultureState.Value);
+            Assert.True(presentationResult.Succeeded);
+            Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentCulture?.Name);
+            Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentUICulture?.Name);
+
+            var context = new LocalizationLookupContext(moduleId: AtomPixLocalization.ModuleId);
+            using var scope = localization.ActivateScope(context);
+            var title = await localization.GetStringAsync(
+                AtomUI.City.Generated.GeneratedLocalizationManifest.Keys.Settings_Title,
+                context);
+
+            Assert.False(title.IsMissing);
+            Assert.Equal("设置", title.Value);
+            Assert.Equal("zh-CN", title.Culture.Name);
+        }
+
+        Assert.Null(LocalizationHost.Current);
+    });
+
+    [Fact]
     public Task Shell_uses_a_non_immersive_primary_workspace_and_normal_right_tool_panel() => RunAsync(async () =>
     {
-        using var services = DesktopCompositionRoot.Build();
-        var shell = services.GetRequiredService<ShellViewModel>();
-        var window = new MainWindow(shell);
-        window.Show();
-        try
+        await using var harness = await CityWindowHarness.StartAsync();
+        var shell = harness.Shell;
+        var window = harness.Window;
         {
             using var frame = window.CaptureRenderedFrame();
+            var initialHomeView = Assert.Single(
+                window.GetVisualDescendants().OfType<HomePageView>());
+            var initialHome = shell.Home;
+            var initialHomeActivation = shell.Home.CurrentActivationScope;
+            Assert.NotNull(initialHomeActivation);
             Assert.NotNull(frame);
             Assert.Equal(1180, window.Width);
             Assert.Equal(760, window.Height);
@@ -61,13 +116,20 @@ public sealed class DesktopUiAutomationTests
             Assert.Null(window.FindControl<Border>("ImmersiveTitleBarScrim"));
             Assert.Null(window.FindControl<Control>("BrowserBackdropViewport"));
 
-            var settingsButton = rail.GetLogicalDescendants()
+            var railButtons = rail.GetLogicalDescendants()
                 .OfType<AtomUI.Desktop.Controls.Button>()
-                .Single(button => AutomationProperties.GetName(button) == "设置");
+                .ToArray();
+            var settingsButton = railButtons
+                .SingleOrDefault(button => AutomationProperties.GetName(button) == "设置");
+            Assert.True(
+                settingsButton is not null,
+                $"Settings automation name was not localized. Actual names: {string.Join(" | ", railButtons.Select(AutomationProperties.GetName))}");
+            Assert.NotNull(settingsButton);
             Assert.Equal(DesktopRoute.Settings, Assert.IsType<DesktopRoute>(settingsButton.CommandParameter));
             Assert.NotNull(settingsButton.Command);
             Assert.True(settingsButton.Command.CanExecute(settingsButton.CommandParameter));
-            await shell.Settings.LoadAsync();
+            var settingsEntry = shell.Settings;
+            await settingsEntry.LoadAsync();
             var clickPoint = settingsButton.TranslatePoint(
                 new Point(settingsButton.Bounds.Width / 2, settingsButton.Bounds.Height / 2),
                 window);
@@ -75,9 +137,11 @@ public sealed class DesktopUiAutomationTests
             window.MouseMove(clickPoint.Value, RawInputModifiers.None);
             window.MouseDown(clickPoint.Value, MouseButton.Left, RawInputModifiers.None);
             window.MouseUp(clickPoint.Value, MouseButton.Left, RawInputModifiers.None);
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await WaitUntilAsync(() => shell.IsSettingsOpen
+                && workspace.GetVisualDescendants().OfType<SettingsPageView>().Count() == 1);
             Assert.True(shell.IsSettingsOpen);
-            Assert.Same(shell.Settings, shell.CurrentPage);
+            Assert.True(initialHome.IsDisposed);
+            Assert.False(initialHome.IsActive);
             Assert.False(rail.IsVisible);
             Assert.False(panel.IsVisible);
             var settingsSeparator = Assert.IsType<Border>(window.FindControl<Border>("SettingsTitleBarSeparator"));
@@ -93,16 +157,76 @@ public sealed class DesktopUiAutomationTests
             Assert.True(Assert.IsType<StackPanel>(settingsView.FindControl<StackPanel>("AboutSettingsSection")).IsVisible);
 
             shell.Settings.CloseCommand.Execute(null);
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await WaitUntilAsync(() => !shell.IsSettingsOpen
+                && workspace.GetVisualDescendants().OfType<HomePageView>().Count() == 1);
             Assert.False(shell.IsSettingsOpen);
-            Assert.Same(shell.Home, shell.CurrentPage);
+            var homeView = Assert.Single(workspace.GetVisualDescendants().OfType<HomePageView>());
+            Assert.Same(shell.Home, homeView.DataContext);
+            Assert.NotSame(initialHome, shell.Home);
+            Assert.NotSame(initialHomeView, homeView);
+            Assert.NotSame(initialHomeActivation, shell.Home.CurrentActivationScope);
+            Assert.True(shell.Home.IsActive);
+            Assert.True(settingsEntry.IsDisposed);
             Assert.True(rail.IsVisible);
             Assert.False(settingsSeparator.IsVisible);
         }
-        finally
-        {
-            window.Close();
-        }
+    });
+
+    [Fact]
+    public Task Settings_round_trip_rebuilds_browser_visuals_and_activation_without_losing_workspace() => RunAsync(async () =>
+    {
+        await using var harness = await CityWindowHarness.StartAsync();
+        var shell = harness.Shell;
+        var navigation = harness.Services.GetRequiredService<DesktopNavigationIntentHub>();
+        var firstPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-detailed.jpg");
+        var secondPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-basic.jpg");
+        var context = new BrowserNavigationContext(
+            new LocalPath(Path.GetDirectoryName(firstPath)!),
+            [
+                new BrowserImageCandidate(new LocalPath(firstPath), Path.GetFileName(firstPath)),
+                new BrowserImageCandidate(new LocalPath(secondPath), Path.GetFileName(secondPath))
+            ]);
+
+        Assert.True(navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Browse, context)));
+        await WaitUntilAsync(() => shell.Browser.State == DesktopContentState.Ready
+            && shell.Browser.CurrentItem is not null
+            && shell.Browser.IsActive);
+        var firstBrowserView = Assert.Single(
+            harness.Window.GetVisualDescendants().OfType<ImageBrowserView>());
+        var firstActivation = shell.Browser.CurrentActivationScope;
+        Assert.NotNull(firstActivation);
+        var expectedItem = shell.Browser.CurrentItem;
+        var expectedWorkspaceId = harness.Services
+            .GetRequiredService<AtomPixCityNavigator>()
+            .CurrentWorkspaceId;
+        Assert.NotNull(expectedWorkspaceId);
+
+        shell.NavigateCommand.Execute(DesktopRoute.Crop);
+        await WaitUntilAsync(() => shell.IsCropActive
+            && shell.Browser.IsCropMode
+            && shell.Crop.ContentState == DesktopContentState.Ready);
+
+        shell.NavigateCommand.Execute(DesktopRoute.Settings);
+        await WaitUntilAsync(() => shell.IsSettingsOpen
+            && harness.Window.GetVisualDescendants().OfType<SettingsPageView>().Count() == 1);
+        Assert.False(shell.Browser.IsActive);
+        Assert.Same(expectedItem, shell.Browser.CurrentItem);
+        Assert.True(shell.Browser.IsCropMode);
+
+        shell.Settings.CloseCommand.Execute(null);
+        await WaitUntilAsync(() => shell.IsCropActive
+            && shell.Browser.IsActive
+            && harness.Window.GetVisualDescendants().OfType<ImageBrowserView>().Count() == 1);
+        var secondBrowserView = Assert.Single(
+            harness.Window.GetVisualDescendants().OfType<ImageBrowserView>());
+        Assert.NotSame(firstBrowserView, secondBrowserView);
+        Assert.Same(shell.Browser, secondBrowserView.DataContext);
+        Assert.NotSame(firstActivation, shell.Browser.CurrentActivationScope);
+        Assert.Same(expectedItem, shell.Browser.CurrentItem);
+        Assert.True(shell.Browser.IsCropMode);
+        Assert.Equal(
+            expectedWorkspaceId,
+            harness.Services.GetRequiredService<AtomPixCityNavigator>().CurrentWorkspaceId);
     });
 
     [Fact]
@@ -117,33 +241,27 @@ public sealed class DesktopUiAutomationTests
     });
 
     [Fact]
-    public Task Navigation_rail_preserves_the_six_icon_only_actions_without_hover_chrome() => RunAsync(() =>
+    public Task Navigation_rail_preserves_the_six_icon_only_actions_without_hover_chrome() => RunAsync(async () =>
     {
-        var window = new MainWindow();
-        window.Show();
-        try
+        await using var harness = await CityWindowHarness.StartAsync();
+        var window = harness.Window;
+        using var frame = window.CaptureRenderedFrame();
+        var rail = Assert.IsType<Border>(window.FindControl<Border>("NavigationRail"));
+        var buttons = rail.GetLogicalDescendants().OfType<AtomUI.Desktop.Controls.Button>().ToArray();
+        Assert.Equal(
+            new[] { "返回首页", "压缩体积", "转换格式", "调整尺寸", "剪裁尺寸", "设置" },
+            buttons.Select(AutomationProperties.GetName).ToArray());
+        Assert.All(buttons, button =>
         {
-            using var frame = window.CaptureRenderedFrame();
-            var rail = Assert.IsType<Border>(window.FindControl<Border>("NavigationRail"));
-            var buttons = rail.GetLogicalDescendants().OfType<AtomUI.Desktop.Controls.Button>().ToArray();
-            Assert.Equal(
-                new[] { "返回首页", "压缩体积", "转换格式", "调整尺寸", "剪裁尺寸", "设置" },
-                buttons.Select(AutomationProperties.GetName).ToArray());
-            Assert.All(buttons, button =>
-            {
-                Assert.Equal(new Thickness(0), button.BorderThickness);
-                Assert.Equal(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(button.Background).Color);
-            });
-        }
-        finally
-        {
-            window.Close();
-        }
+            Assert.Equal(new Thickness(0), button.BorderThickness);
+            Assert.Equal(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(button.Background).Color);
+        });
     });
 
     [Fact]
     public Task Image_browser_hosts_the_official_labs_gallery_and_crop_resource_surface() => RunAsync(() =>
     {
+        using var services = DesktopCompositionRoot.Build();
         var view = new ImageBrowserView();
         var window = Show(view);
         try
@@ -294,9 +412,9 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Folder_browser_enters_crop_through_the_shell_with_its_first_image_visible() => RunAsync(async () =>
     {
-        using var services = DesktopCompositionRoot.Build();
-        var shell = services.GetRequiredService<ShellViewModel>();
-        var navigation = services.GetRequiredService<DesktopNavigationCoordinator>();
+        await using var harness = await CityWindowHarness.StartAsync();
+        var shell = harness.Shell;
+        var navigation = harness.Services.GetRequiredService<DesktopNavigationIntentHub>();
         var firstPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-detailed.jpg");
         var secondPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-basic.jpg");
         var context = new BrowserNavigationContext(
@@ -305,9 +423,7 @@ public sealed class DesktopUiAutomationTests
                 new BrowserImageCandidate(new LocalPath(firstPath), Path.GetFileName(firstPath)),
                 new BrowserImageCandidate(new LocalPath(secondPath), Path.GetFileName(secondPath))
             ]);
-        var window = new MainWindow(shell);
-        window.Show();
-        try
+        var window = harness.Window;
         {
             Assert.True(navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Browse, context)));
             await WaitUntilAsync(() => shell.Browser.State == DesktopContentState.Ready && shell.IsBrowserVisible);
@@ -353,15 +469,12 @@ public sealed class DesktopUiAutomationTests
             await WaitUntilAsync(() => cropCanvas.ImageSource is not null);
             Assert.Same(shell.Browser.Items[1].GalleryItem, gallery.SelectedItem);
         }
-        finally
-        {
-            window.Close();
-        }
     });
 
     [Fact]
     public Task Processing_editors_use_cardless_inspectors_with_consistent_primary_actions() => RunAsync(() =>
     {
+        using var services = DesktopCompositionRoot.Build();
         (Control Editor, int ExpectedActions)[] editors =
         [
             (new CompressionEditorView(), 0),
@@ -545,7 +658,9 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Output_directory_uses_atomui_inputs_and_aligns_custom_input_with_picker_button() => RunAsync(() =>
     {
-        var viewModel = new OutputPolicyEditorViewModel(new CanceledPicker());
+        using var services = DesktopCompositionRoot.Build();
+        var viewModel = new OutputPolicyEditorViewModel(
+            new CanceledPicker(), services.GetRequiredService<IAtomPixLocalizedText>());
         viewModel.SelectedLocation = viewModel.Locations.Single(
             option => option.Value == AtomPix.Core.Output.OutputLocationMode.CustomDirectory);
         viewModel.CustomDirectory = @"D:\Pictures\AtomPix";
@@ -628,6 +743,7 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Crop_canvas_receives_real_keyboard_input_with_one_and_ten_pixel_steps() => RunAsync(() =>
     {
+        using var services = DesktopCompositionRoot.Build();
         var canvas = new CropCanvas
         {
             Width = 480,
@@ -668,7 +784,8 @@ public sealed class DesktopUiAutomationTests
             services.GetRequiredService<IDesktopPickerService>(),
             services.GetRequiredService<IDesktopLauncherService>(),
             services.GetRequiredService<IAppPathProvider>(),
-            services.GetRequiredService<IDesktopClipboardService>());
+            services.GetRequiredService<IDesktopClipboardService>(),
+            services.GetRequiredService<IAtomPixLocalizedText>());
         var view = new SettingsPageView { DataContext = settings };
         var window = new AtomUI.Desktop.Controls.Window
         {
@@ -835,6 +952,101 @@ public sealed class DesktopUiAutomationTests
             Task.FromResult(DesktopSelectionResult.Canceled());
         public Task<DesktopSelectionResult> PickFolderAsync(CancellationToken cancellationToken) =>
             Task.FromResult(DesktopSelectionResult.Canceled());
+    }
+
+    private sealed class CityWindowHarness : IAsyncDisposable
+    {
+        private readonly IPresentationRuntime _runtime;
+        private readonly WindowSession _session;
+        private readonly IDisposable _outletRegistration;
+        private readonly AtomPixCityNavigator _navigator;
+
+        private CityWindowHarness(
+            DesktopServiceHost services,
+            IPresentationRuntime runtime,
+            WindowSession session,
+            IDisposable outletRegistration,
+            AtomPixCityNavigator navigator,
+            ShellViewModel shell,
+            MainWindow window)
+        {
+            Services = services;
+            _runtime = runtime;
+            _session = session;
+            _outletRegistration = outletRegistration;
+            _navigator = navigator;
+            Shell = shell;
+            Window = window;
+        }
+
+        public DesktopServiceHost Services { get; }
+
+        public ShellViewModel Shell { get; }
+
+        public MainWindow Window { get; }
+
+        public static async Task<CityWindowHarness> StartAsync()
+        {
+            var services = DesktopCompositionRoot.Build();
+            try
+            {
+                var runtime = services.GetRequiredService<IPresentationRuntime>();
+                await runtime.StartAsync(services.ApplicationHost.HostScope);
+                var shell = services.GetRequiredService<ShellViewModel>();
+                var window = services.GetRequiredService<MainWindow>();
+                var session = runtime.RegisterWindow(window, $"test-{Guid.NewGuid():N}");
+                var outletRegistration = window.RegisterPrimaryOutlet(session);
+                var navigator = services.GetRequiredService<AtomPixCityNavigator>();
+                await shell.AttachCompositionAsync(session);
+                navigator.Attach(session.GetOutlet("primary"));
+                if (!await navigator.PresentAsync(
+                        new DesktopNavigationRequest(DesktopRoute.Browse),
+                        shell.Home))
+                {
+                    throw new InvalidOperationException(
+                        $"The initial City route was not presented: " +
+                        $"{navigator.LastResult?.Status} / {navigator.LastResult?.Message}",
+                        navigator.LastResult?.Exception);
+                }
+
+                window.Show();
+                return new CityWindowHarness(
+                    services,
+                    runtime,
+                    session,
+                    outletRegistration,
+                    navigator,
+                    shell,
+                    window);
+            }
+            catch
+            {
+                try
+                {
+                    services.Dispose();
+                }
+                catch
+                {
+                    // Preserve the startup failure; it is the actionable test result.
+                }
+                throw;
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await _session.DisposeAsync();
+            }
+            finally
+            {
+                _navigator.Dispose();
+                _outletRegistration.Dispose();
+                await _runtime.StopAsync();
+                Services.Dispose();
+            }
+        }
     }
 
 }

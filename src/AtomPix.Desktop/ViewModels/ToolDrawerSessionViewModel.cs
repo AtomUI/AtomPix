@@ -1,16 +1,19 @@
 namespace AtomPix.Desktop.ViewModels;
 
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using System.ComponentModel;
 using System.Windows.Input;
+using AtomUI.City.Presentation;
 
 /// <summary>
 /// Keeps one tool editor mounted while projecting single or batch execution into
 /// the same footer. Batch is an execution mode, never a second content page.
 /// </summary>
-public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
 {
-    private readonly DesktopNavigationCoordinator _navigation;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
+    private readonly IAtomPixLocalizedText _text;
     private readonly Func<CancellationToken, Task<bool>> _prepareBatch;
     private readonly Action _synchronizeSingleFromBatch;
     private readonly IToolEditorActions _singleActions;
@@ -24,19 +27,25 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
         int itemCount,
         Func<CancellationToken, Task<bool>> prepareBatch,
         Action synchronizeSingleFromBatch,
-        DesktopNavigationCoordinator navigation)
+        IDesktopForegroundTaskGate foregroundTasks,
+        IAtomPixLocalizedText text,
+        IUiCommandFactory? commandFactory = null)
     {
         SingleContent = singleContent ?? throw new ArgumentNullException(nameof(singleContent));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         _singleActions = singleContent as IToolEditorActions
-            ?? throw new ArgumentException("工具编辑器必须公开统一操作契约。", nameof(singleContent));
+            ?? throw new ArgumentException(_text.GetString("Tools.Diagnostic.EditorContractRequired"), nameof(singleContent));
         _singleNotifier = singleContent as INotifyPropertyChanged;
         BatchContent = batchContent ?? throw new ArgumentNullException(nameof(batchContent));
         _itemCount = itemCount;
         _prepareBatch = prepareBatch ?? throw new ArgumentNullException(nameof(prepareBatch));
         _synchronizeSingleFromBatch = synchronizeSingleFromBatch ?? throw new ArgumentNullException(nameof(synchronizeSingleFromBatch));
-        _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        StartBatchCommand = new AsyncCommand(StartBatchAsync, () => CanStartBatch);
-        _navigation.NavigationLockChanged += HandleNavigationLockChanged;
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
+        StartBatchCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance).CreateAsync(
+            StartBatchAsync,
+            () => CanStartBatch,
+            activationOwner: HeadlessUiCommandFactory.ResolveActivationOwner(commandFactory, this));
+        _foregroundTasks.ForegroundTaskStateChanged += HandleForegroundTaskStateChanged;
         BatchContent.PropertyChanged += HandleBatchPropertyChanged;
         if (_singleNotifier is not null) _singleNotifier.PropertyChanged += HandleSinglePropertyChanged;
         _singleActions.StartActionCommand.CanExecuteChanged += HandleSingleCanExecuteChanged;
@@ -59,7 +68,7 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
     public bool HasBatchOption => ItemCount > 1;
     public int SingleActionColumnSpan => HasBatchOption ? 1 : 2;
     public string SingleActionLabel => _singleActions.StartActionLabel;
-    public string BatchActionLabel => "批量处理";
+    public string BatchActionLabel => _text.GetString("Batch.Action.Start");
     public ICommand SingleStartCommand => _singleActions.StartActionCommand;
     public ICommand SingleCancelCommand => _singleActions.CancelActionCommand;
     public ICommand BatchCancelCommand => BatchContent.CancelCommand;
@@ -71,10 +80,12 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
     public bool CanStartBatch =>
         HasBatchOption
         && IsIdle
-        && !_navigation.IsNavigationLocked
+        && !_foregroundTasks.IsForegroundTaskActive
         && _singleActions.StartActionCommand.CanExecute(null);
     public double BatchProgressRatio => BatchContent.ProgressRatio;
-    public string BatchProgressSummary => IsPreparingBatch ? $"正在准备 {ItemCount} 张图片" : BatchContent.ProgressSummary;
+    public string BatchProgressSummary => IsPreparingBatch
+        ? _text.Format("Batch.Progress.Preparing", ItemCount)
+        : BatchContent.ProgressSummary;
 
     public bool IsPreparingBatch
     {
@@ -87,7 +98,7 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
     }
 
     public bool IsProcessing => IsSingleProcessing || IsBatchProcessing;
-    public AsyncCommand StartBatchCommand { get; }
+    public IAsyncRelayCommand StartBatchCommand { get; }
 
     public void RequestCancellation()
     {
@@ -104,9 +115,9 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
     public void UpdateItemCount(int value) => ItemCount = Math.Max(0, value);
     public void SynchronizeDraftFromBatch() => _synchronizeSingleFromBatch();
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
-        _navigation.NavigationLockChanged -= HandleNavigationLockChanged;
+        _foregroundTasks.ForegroundTaskStateChanged -= HandleForegroundTaskStateChanged;
         BatchContent.PropertyChanged -= HandleBatchPropertyChanged;
         if (_singleNotifier is not null) _singleNotifier.PropertyChanged -= HandleSinglePropertyChanged;
         _singleActions.StartActionCommand.CanExecuteChanged -= HandleSingleCanExecuteChanged;
@@ -120,7 +131,8 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
         {
             if (!await _prepareBatch(cancellationToken)) return;
             IsPreparingBatch = false;
-            await BatchContent.StartCommand.ExecuteAsync(cancellationToken);
+            using var cancellationRegistration = cancellationToken.Register(BatchContent.StartCommand.Cancel);
+            await BatchContent.StartCommand.ExecuteAsync(null);
         }
         finally
         {
@@ -128,7 +140,7 @@ public sealed class ToolDrawerSessionViewModel : ObservableObject, IDisposable, 
         }
     }
 
-    private void HandleNavigationLockChanged(object? sender, bool value) => NotifyState();
+    private void HandleForegroundTaskStateChanged(object? sender, bool value) => NotifyState();
 
     private void HandleSinglePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

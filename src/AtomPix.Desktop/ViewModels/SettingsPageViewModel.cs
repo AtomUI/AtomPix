@@ -8,8 +8,11 @@ using AtomPix.Core.Output;
 using AtomPix.Core.Ports;
 using AtomPix.Core.Resize;
 using AtomPix.Core.Settings;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Platform;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
+using AtomUI.City.State;
 
 public enum SettingsSection
 {
@@ -19,7 +22,7 @@ public enum SettingsSection
     About
 }
 
-public sealed class SettingsPageViewModel : ObservableObject, IDisposable
+public sealed class SettingsPageViewModel : ViewModelBase
 {
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly SaveSettingsWorkflow _saveSettings;
@@ -27,8 +30,12 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
     private readonly IAppPathProvider _paths;
+    private readonly IAtomPixLocalizedText _text;
+    private readonly IAtomPixApplicationState? _applicationState;
+    private readonly IDesktopDispatcher? _dispatcher;
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private CancellationTokenSource? _loadCancellation;
+    private IStateSubscription? _settingsSubscription;
     private AppSettings? _originalSettings;
     private bool _isApplying;
     private bool _isLoaded;
@@ -37,6 +44,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     private bool _isDirty;
     private string? _errorMessage;
     private string? _saveMessage;
+    private bool _isSaveMessageSuccess;
     private SettingsSection _selectedSection;
     private DesktopChoiceOption<CompressionMode> _selectedCompressionMode;
     private decimal _customCompressionQuality = 80;
@@ -52,8 +60,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     private DesktopChoiceOption<OverwritePolicy> _selectedOverwritePolicy;
     private DesktopChoiceOption<ThemeMode> _selectedTheme;
     private DesktopChoiceOption<string?> _selectedLanguage;
-    private bool _recentEnabled = true;
-    private decimal _recentMaxCount = 20;
 
     public SettingsPageViewModel(
         LoadSettingsWorkflow loadSettings,
@@ -62,7 +68,11 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         IDesktopPickerService picker,
         IDesktopLauncherService launcher,
         IAppPathProvider paths,
-        IDesktopClipboardService clipboard)
+        IDesktopClipboardService clipboard,
+        IAtomPixLocalizedText text,
+        IUiCommandFactory? commandFactory = null,
+        IAtomPixApplicationState? applicationState = null,
+        IDesktopDispatcher? dispatcher = null)
     {
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _saveSettings = saveSettings ?? throw new ArgumentNullException(nameof(saveSettings));
@@ -70,15 +80,20 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
-        Diagnostic = new DiagnosticErrorViewModel(clipboard);
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        _applicationState = applicationState;
+        _dispatcher = dispatcher;
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Diagnostic = new DiagnosticErrorViewModel(clipboard, commands);
 
         CompressionModes =
         [
-            new("智能", CompressionMode.Smart),
-            new("高质量", CompressionMode.HighQuality),
-            new("平衡", CompressionMode.Balanced),
-            new("极限", CompressionMode.Maximum),
-            new("自定义", CompressionMode.Custom)
+            new(_text.GetString("Common.Option.Compression.Smart"), CompressionMode.Smart),
+            new(_text.GetString("Common.Option.Compression.HighQuality"), CompressionMode.HighQuality),
+            new(_text.GetString("Common.Option.Compression.Balanced"), CompressionMode.Balanced),
+            new(_text.GetString("Common.Option.Compression.Maximum"), CompressionMode.Maximum),
+            new(_text.GetString("Common.Option.Compression.Custom"), CompressionMode.Custom)
         ];
         ConversionFormats =
         [
@@ -88,26 +103,26 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         ];
         OutputLocations =
         [
-            new("原图旁的输出子目录", OutputLocationMode.Subfolder),
-            new("与原图相同目录", OutputLocationMode.SameAsInput),
-            new("自定义目录", OutputLocationMode.CustomDirectory)
+            new(_text.GetString("Common.Option.OutputLocation.SubfolderLong"), OutputLocationMode.Subfolder),
+            new(_text.GetString("Common.Option.OutputLocation.SameAsInputLong"), OutputLocationMode.SameAsInput),
+            new(_text.GetString("Common.Option.OutputLocation.CustomDirectory"), OutputLocationMode.CustomDirectory)
         ];
         OverwritePolicies =
         [
-            new("自动重命名", OverwritePolicy.AutoRename),
-            new("跳过已有文件", OverwritePolicy.Skip),
-            new("覆盖已有输出", OverwritePolicy.Overwrite)
+            new(_text.GetString("Common.Option.Overwrite.AutoRename"), OverwritePolicy.AutoRename),
+            new(_text.GetString("Common.Option.Overwrite.Skip"), OverwritePolicy.Skip),
+            new(_text.GetString("Common.Option.Overwrite.Overwrite"), OverwritePolicy.Overwrite)
         ];
         Themes =
         [
-            new("跟随系统", ThemeMode.System),
-            new("浅色", ThemeMode.Light),
-            new("深色", ThemeMode.Dark)
+            new(_text.GetString("Settings.Option.Theme.System"), ThemeMode.System),
+            new(_text.GetString("Settings.Option.Theme.Light"), ThemeMode.Light),
+            new(_text.GetString("Settings.Option.Theme.Dark"), ThemeMode.Dark)
         ];
         Languages =
         [
-            new("跟随系统", null),
-            new("简体中文", "zh-CN")
+            new(_text.GetString("Settings.Option.Language.System"), null),
+            new(_text.GetString("Settings.Option.Language.ChineseSimplified"), "zh-CN")
         ];
 
         _selectedCompressionMode = CompressionModes[0];
@@ -117,16 +132,16 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         _selectedTheme = Themes[0];
         _selectedLanguage = Languages[0];
 
-        SelectSectionCommand = new RelayCommand<SettingsSection>(section =>
+        SelectSectionCommand = commands.Create<SettingsSection>(section =>
         {
             SelectedSection = section;
             SectionNavigationRequested?.Invoke(section);
         }, _ => !IsSaving);
-        CloseCommand = new RelayCommand<object?>(_ => CloseRequested?.Invoke(this, EventArgs.Empty), _ => !IsSaving);
-        SaveCommand = new AsyncCommand(SaveAsync, () => CanSave);
-        RestoreDefaultsCommand = new AsyncCommand(RestoreDefaultsAsync, () => !IsSaving);
-        ChooseOutputDirectoryCommand = new AsyncCommand(ChooseOutputDirectoryAsync, () => IsReady && !IsSaving);
-        OpenSettingsDirectoryCommand = new AsyncCommand(OpenSettingsDirectoryAsync, () => !IsSaving);
+        CloseCommand = commands.Create(() => CloseRequested?.Invoke(this, EventArgs.Empty), () => !IsSaving);
+        SaveCommand = commands.CreateAsync(SaveAsync, () => CanSave, activationOwner: activationOwner);
+        RestoreDefaultsCommand = commands.CreateAsync(RestoreDefaultsAsync, () => !IsSaving, activationOwner: activationOwner);
+        ChooseOutputDirectoryCommand = commands.CreateAsync(ChooseOutputDirectoryAsync, () => IsReady && !IsSaving, activationOwner: activationOwner);
+        OpenSettingsDirectoryCommand = commands.CreateAsync(OpenSettingsDirectoryAsync, () => !IsSaving, activationOwner: activationOwner);
     }
 
     public IReadOnlyList<DesktopChoiceOption<CompressionMode>> CompressionModes { get; }
@@ -256,18 +271,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         set { if (value is not null && SetProperty(ref _selectedLanguage, value)) DraftChanged(); }
     }
 
-    public bool RecentEnabled
-    {
-        get => _recentEnabled;
-        set { if (SetProperty(ref _recentEnabled, value)) DraftChanged(); }
-    }
-
-    public decimal RecentMaxCount
-    {
-        get => _recentMaxCount;
-        set { if (SetProperty(ref _recentMaxCount, value)) DraftChanged(); }
-    }
-
     public bool IsLoaded { get => _isLoaded; private set { if (SetProperty(ref _isLoaded, value)) NotifyState(); } }
     public bool IsLoading { get => _isLoading; private set { if (SetProperty(ref _isLoading, value)) NotifyState(); } }
     public bool IsSaving { get => _isSaving; private set { if (SetProperty(ref _isSaving, value)) NotifyState(); } }
@@ -295,28 +298,31 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     public string? DraftError { get { TryBuildSettings(out _, out var error); return error; } }
     public string? ErrorMessage { get => _errorMessage; private set { if (SetProperty(ref _errorMessage, value)) NotifyState(); } }
     public string? SaveMessage { get => _saveMessage; private set { if (SetProperty(ref _saveMessage, value)) OnPropertyChanged(nameof(HasSaveMessage)); } }
+    public bool IsSaveMessageSuccess { get => _isSaveMessageSuccess; private set => SetProperty(ref _isSaveMessageSuccess, value); }
     public string SectionTitle => SelectedSection switch
     {
-        SettingsSection.Compression => "压缩配置",
-        SettingsSection.Conversion => "转换配置",
-        SettingsSection.Output => "输出配置",
-        SettingsSection.About => "关于 AtomPix",
+        SettingsSection.Compression => _text.GetString("Settings.Section.Compression"),
+        SettingsSection.Conversion => _text.GetString("Settings.Section.Conversion"),
+        SettingsSection.Output => _text.GetString("Settings.Section.Output"),
+        SettingsSection.About => _text.GetString("Settings.Section.About"),
         _ => string.Empty
     };
-    public string SameFormatSummary => $"Resize/Crop：有损质量 {_sameFormatQuality.Value} · 元数据跟随公共开关 · ICC 保留";
+    public string SameFormatSummary => _text.Format("Settings.Dynamic.SameFormatSummary", _sameFormatQuality.Value);
     public string SubfolderDestinationHint =>
-        $"图片将保存到：每张原图所在目录 / {(string.IsNullOrWhiteSpace(SubfolderName) ? "AtomPix_Output" : SubfolderName.Trim())}";
-    public string VersionText => $"AtomPix {Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "开发版本"}";
+        _text.Format("Common.Output.SubfolderDestinationHint", string.IsNullOrWhiteSpace(SubfolderName) ? "AtomPix_Output" : SubfolderName.Trim());
+    public string VersionText => _text.Format(
+        "Settings.Dynamic.Version",
+        Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? _text.GetString("Settings.Dynamic.DevelopmentVersion"));
     public string RuntimeText => $".NET {Environment.Version.ToString(3)} · Avalonia {typeof(Avalonia.Application).Assembly.GetName().Version?.ToString(3)} · AtomUI {typeof(AtomUI.Desktop.Controls.Button).Assembly.GetName().Version?.ToString(3)}";
     public string PlatformText => $"{RuntimeInformation.OSDescription} · {RuntimeInformation.ProcessArchitecture}";
-    public string ImageEngineText => "图像引擎：ImageMagick（Magick.NET）";
+    public string ImageEngineText => _text.GetString("Settings.Dynamic.ImageEngine");
 
-    public RelayCommand<SettingsSection> SelectSectionCommand { get; }
-    public RelayCommand<object?> CloseCommand { get; }
-    public AsyncCommand SaveCommand { get; }
-    public AsyncCommand RestoreDefaultsCommand { get; }
-    public AsyncCommand ChooseOutputDirectoryCommand { get; }
-    public AsyncCommand OpenSettingsDirectoryCommand { get; }
+    public IRelayCommand<SettingsSection> SelectSectionCommand { get; }
+    public IRelayCommand CloseCommand { get; }
+    public IAsyncRelayCommand SaveCommand { get; }
+    public IAsyncRelayCommand RestoreDefaultsCommand { get; }
+    public IAsyncRelayCommand ChooseOutputDirectoryCommand { get; }
+    public IAsyncRelayCommand OpenSettingsDirectoryCommand { get; }
     public DiagnosticErrorViewModel Diagnostic { get; }
 
     public event Action<SettingsSection>? SectionNavigationRequested;
@@ -339,6 +345,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             IsLoading = true;
             ErrorMessage = null;
             Diagnostic.Clear();
+            IsSaveMessageSuccess = false;
             SaveMessage = null;
 
             var result = await _loadSettings.ExecuteAsync(new LoadSettingsRequest(), loadCancellation.Token);
@@ -346,7 +353,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
 
             if (!result.Succeeded)
             {
-                ErrorMessage = DesktopErrorText.FromWorkflow(result.Error);
+                ErrorMessage = DesktopErrorText.FromWorkflow(result.Error, _text);
                 Diagnostic.Set(result.Error);
                 return;
             }
@@ -370,12 +377,38 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         return Task.FromResult(!IsDirty || DiscardAndLeave());
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
+        Interlocked.Exchange(ref _settingsSubscription, null)?.Dispose();
         var cancellation = Interlocked.Exchange(ref _loadCancellation, null);
         if (cancellation is null) return;
         cancellation.Cancel();
         cancellation.Dispose();
+    }
+
+    protected override ValueTask OnActivatedAsync(
+        ActivationContext context,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_applicationState is not null)
+        {
+            _settingsSubscription = _applicationState.AppSettings.Observe(args =>
+            {
+                void Apply() => ApplyApplicationState(args.NewValue);
+                if (_dispatcher is null) Apply();
+                else _dispatcher.Post(Apply);
+            });
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    protected override ValueTask OnDeactivatedAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Exchange(ref _settingsSubscription, null)?.Dispose();
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.CompletedTask;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken)
@@ -389,20 +422,22 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         IsSaving = true;
         ErrorMessage = null;
         Diagnostic.Clear();
+        IsSaveMessageSuccess = false;
         SaveMessage = null;
         try
         {
             var result = await _saveSettings.ExecuteAsync(new SaveSettingsRequest(draft!), cancellationToken);
             if (!result.Succeeded)
             {
-                ErrorMessage = DesktopErrorText.FromWorkflow(result.Error);
+                ErrorMessage = DesktopErrorText.FromWorkflow(result.Error, _text);
                 Diagnostic.Set(result.Error);
                 return false;
             }
 
             _originalSettings = draft;
             IsDirty = false;
-            SaveMessage = $"设置已保存 · {DateTime.Now:HH:mm}";
+            IsSaveMessageSuccess = true;
+            SaveMessage = _text.Format("Settings.Message.Saved", DateTime.Now);
             return true;
         }
         finally
@@ -411,13 +446,31 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void ApplyApplicationState(AppSettingsState state)
+    {
+        switch (state)
+        {
+            case AppSettingsState.Ready ready when !IsDirty || IsSaving:
+                _originalSettings = ready.Value;
+                ApplySettings(ready.Value, dirty: false);
+                IsLoaded = true;
+                ErrorMessage = null;
+                Diagnostic.Clear();
+                break;
+            case AppSettingsState.Faulted faulted when !IsLoaded:
+                ErrorMessage = DesktopErrorText.FromWorkflow(faulted.Error, _text);
+                Diagnostic.Set(faulted.Error);
+                break;
+        }
+    }
+
     private async Task RestoreDefaultsAsync(CancellationToken cancellationToken)
     {
         var confirmed = await _dialogs.ConfirmAsync(
-            "恢复默认设置？",
-            "默认值只会替换当前草稿；点击“保存设置”后才会写入磁盘。",
-            "恢复默认",
-            "取消",
+            _text.GetString("Settings.Dialog.RestoreDefaults.Title"),
+            _text.GetString("Settings.Dialog.RestoreDefaults.Message"),
+            _text.GetString("Settings.Action.RestoreDefaults"),
+            _text.GetString("Common.Action.Cancel"),
             cancellationToken);
         if (!confirmed) return;
 
@@ -425,7 +478,8 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         IsLoaded = true;
         ErrorMessage = null;
         Diagnostic.Clear();
-        SaveMessage = "已恢复为默认草稿，尚未保存。";
+        IsSaveMessageSuccess = false;
+        SaveMessage = _text.GetString("Settings.Message.DefaultDraftRestored");
     }
 
     private async Task ChooseOutputDirectoryAsync(CancellationToken cancellationToken)
@@ -437,7 +491,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         }
         else if (selected.Status is DesktopSelectionStatus.Unavailable or DesktopSelectionStatus.Failed)
         {
-            ErrorMessage = DesktopErrorText.FromPicker(selected.ErrorMessage);
+            ErrorMessage = DesktopErrorText.FromPicker(selected.ErrorMessage, _text);
             Diagnostic.Clear();
         }
     }
@@ -446,7 +500,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     {
         if (!await _launcher.OpenDirectoryAsync(_paths.AppDataDirectory.Value, cancellationToken))
         {
-            ErrorMessage = "无法打开设置目录。";
+            ErrorMessage = _text.GetString("Settings.Error.OpenDirectoryFailed");
             Diagnostic.Clear();
         }
     }
@@ -457,6 +511,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
         else IsDirty = false;
         ErrorMessage = null;
         Diagnostic.Clear();
+        IsSaveMessageSuccess = false;
         SaveMessage = null;
         return true;
     }
@@ -481,8 +536,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             SelectedOverwritePolicy = OverwritePolicies.First(option => option.Value == settings.DefaultOutputPolicy.OverwritePolicy);
             SelectedTheme = Themes.First(option => option.Value == settings.ThemeMode);
             SelectedLanguage = Languages.FirstOrDefault(option => option.Value == settings.Language) ?? Languages[0];
-            RecentEnabled = settings.RecentItems.Enabled;
-            RecentMaxCount = settings.RecentItems.MaxCount;
         }
         finally
         {
@@ -505,8 +558,6 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
             if (ConversionUsesQuality
                 && (ConversionQuality is < 1 or > 100 || ConversionQuality != decimal.Truncate(ConversionQuality)))
                 throw new ArgumentOutOfRangeException(nameof(ConversionQuality));
-            if (RecentMaxCount < 1 || RecentMaxCount != decimal.Truncate(RecentMaxCount))
-                throw new ArgumentOutOfRangeException(nameof(RecentMaxCount));
 
             var metadata = RemoveMetadata ? MetadataPolicy.Remove : MetadataPolicy.Preserve;
             var compression = SelectedCompressionMode.Value switch
@@ -516,7 +567,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
                 CompressionMode.Balanced => new CompressionProfile(CompressionMode.Balanced, new ImageQuality(80), metadata),
                 CompressionMode.Maximum => new CompressionProfile(CompressionMode.Maximum, new ImageQuality(65), metadata),
                 CompressionMode.Custom => new CompressionProfile(CompressionMode.Custom, new ImageQuality(decimal.ToInt32(CustomCompressionQuality)), metadata),
-                _ => throw new InvalidOperationException("不支持的压缩模式。")
+                _ => throw new InvalidOperationException(_text.GetString("Settings.Diagnostic.UnsupportedCompressionMode"))
             };
             var conversionQuality = ConversionUsesQuality
                 ? new ImageQuality(decimal.ToInt32(ConversionQuality))
@@ -532,11 +583,10 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
                 OutputLocationMode.SameAsInput => new OutputLocationPolicy(OutputLocationMode.SameAsInput, null, null),
                 OutputLocationMode.Subfolder => new OutputLocationPolicy(OutputLocationMode.Subfolder, null, SubfolderName.Trim()),
                 OutputLocationMode.CustomDirectory => new OutputLocationPolicy(OutputLocationMode.CustomDirectory, CustomOutputDirectory.Trim(), null),
-                _ => throw new InvalidOperationException("不支持的输出位置。")
+                _ => throw new InvalidOperationException(_text.GetString("Settings.Diagnostic.UnsupportedOutputLocation"))
             };
             var naming = new OutputNamingPolicy(OutputNamingMode.CustomPattern, null, FileNamePattern.Trim());
             var output = new OutputPolicy(location, naming, SelectedOverwritePolicy.Value);
-            var recent = new RecentItemsSettings(RecentEnabled, decimal.ToInt32(RecentMaxCount));
             settings = new AppSettings(
                 compression,
                 conversion,
@@ -544,19 +594,18 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
                 output,
                 SelectedTheme.Value,
                 SelectedLanguage.Value,
-                recent);
+                _originalSettings?.RecentItems ?? AppSettings.Default.RecentItems);
             return true;
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException or InvalidOperationException)
         {
             error = exception switch
             {
-                FormatException => "透明背景色必须使用 #RRGGBB 格式。",
-                _ when string.IsNullOrWhiteSpace(FileNamePattern) => "默认文件名格式不能为空。",
-                _ when SelectedCompressionMode.Value == CompressionMode.Custom && (CustomCompressionQuality is < 1 or > 100 || CustomCompressionQuality != decimal.Truncate(CustomCompressionQuality)) => "自定义压缩质量必须是 1 到 100 的整数。",
-                _ when ConversionUsesQuality && (ConversionQuality is < 1 or > 100 || ConversionQuality != decimal.Truncate(ConversionQuality)) => "转换质量必须是 1 到 100 的整数。",
-                _ when RecentMaxCount < 1 || RecentMaxCount != decimal.Truncate(RecentMaxCount) => "最近记录最大条数必须是正整数。",
-                _ => "设置草稿包含无效值，请检查输出位置和文件名格式。"
+                FormatException => _text.GetString("Settings.Validation.BackgroundColor"),
+                _ when string.IsNullOrWhiteSpace(FileNamePattern) => _text.GetString("Settings.Validation.FileNamePatternRequired"),
+                _ when SelectedCompressionMode.Value == CompressionMode.Custom && (CustomCompressionQuality is < 1 or > 100 || CustomCompressionQuality != decimal.Truncate(CustomCompressionQuality)) => _text.GetString("Settings.Validation.CompressionQuality"),
+                _ when ConversionUsesQuality && (ConversionQuality is < 1 or > 100 || ConversionQuality != decimal.Truncate(ConversionQuality)) => _text.GetString("Settings.Validation.ConversionQuality"),
+                _ => _text.GetString("Settings.Validation.InvalidDraft")
             };
             return false;
         }
@@ -566,6 +615,7 @@ public sealed class SettingsPageViewModel : ObservableObject, IDisposable
     {
         if (_isApplying) return;
         IsDirty = true;
+        IsSaveMessageSuccess = false;
         SaveMessage = null;
         NotifyDraft();
     }

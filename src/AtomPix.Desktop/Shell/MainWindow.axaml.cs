@@ -9,6 +9,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using AtomUI.City.Presentation;
 
 public sealed partial class MainWindow : AtomUI.Desktop.Controls.Window
 {
@@ -22,6 +23,14 @@ public sealed partial class MainWindow : AtomUI.Desktop.Controls.Window
     private WindowTitleBar? _titleBar;
 
     internal WindowTitleBar? ConfiguredTitleBar => _titleBar;
+
+    internal IDisposable RegisterPrimaryOutlet(WindowSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var target = this.FindControl<ContentControl>("PrimaryWorkspace")
+            ?? throw new InvalidOperationException("The primary workspace outlet target is missing.");
+        return session.RegisterOutlet("primary", new AvaloniaRouteOutletTarget(target));
+    }
 
     public MainWindow()
     {
@@ -114,7 +123,7 @@ public sealed partial class MainWindow : AtomUI.Desktop.Controls.Window
         {
             _feedback.ShowMessage(
                 settings.SaveMessage,
-                settings.SaveMessage.StartsWith("设置已保存", StringComparison.Ordinal)
+                settings.IsSaveMessageSuccess
                     ? DesktopFeedbackSeverity.Success
                     : DesktopFeedbackSeverity.Information);
         }

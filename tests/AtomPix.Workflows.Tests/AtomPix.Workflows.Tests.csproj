@@ -25,6 +25,8 @@
     <ProjectReference Include="..\..\src\AtomPix.Imaging.Abstractions\AtomPix.Imaging.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\AtomPix.Infrastructure\AtomPix.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\AtomPix.Imaging.Magick\AtomPix.Imaging.Magick.csproj" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.State\AtomUI.City.State.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,6 @@
 # AtomPix Desktop 的 AtomUI 组件映射与实现基线
 
-> 文档状态：正式目标设计，ImageGallery 与新 Shell 布局待实现
+> 文档状态：正式实现基线；City 迁移与发布合规覆盖已记录
 >
 > 基线时间：2026-08-23
 
@@ -22,6 +22,7 @@
 | 颜色选择包 | `AtomUI.Desktop.Controls.ColorPicker` | MVP 必需，用于 JPEG 透明区域铺底色。 |
 | 图片画廊目标包 | `AtomUI.Labs.Controls.ImageGallery 6.0.8` | 正式目标设计，待迁移；过渡期从已核对 nupkg 复制到 AtomPix 仓库内本地 NuGet 源，不引用外部源码项目。 |
 | DataGrid 包 | `AtomUI.Desktop.Controls.DataGrid` | 明确禁止引用、注册或复制其实现；批量明细使用主桌面包中的 `ListView`。 |
+| 字体包 | `AtomUI.Fonts.AlibabaSans` | 正式发布目标移除；在归档明确允许嵌入和再次分发的原始授权前，改用 SIL OFL 字体或系统字体。 |
 
 `out-lib/AtomUI` 是不会提交的源码核对副本，不得成为 `AtomPix.Desktop.csproj` 的相对 `ProjectReference`，也不得从中复制内部控件源码或私有模板。AtomUI 正式组件继续通过公共包源消费；AtomUI.Labs ImageGallery 在正式发布前只允许使用仓库内、固定版本且校验哈希的本地 nupkg。两者都不得形成跨仓库 ProjectReference。
 
@@ -59,7 +60,7 @@ Application.Initialize
   -> UseAtomUI
        -> WithDefaultCultureInfo
        -> WithDefaultTheme / WithInitialTheme
-       -> UseAlibabaSansFont
+       -> 注册经合规审计的 OFL 字体或使用系统字体
        -> UseDesktopControls
        -> UseDesktopColorPicker
        -> UseImageGallery
@@ -71,7 +72,9 @@ Application.Initialize
 - 主题必须在首个窗口创建前完成注册。首帧主题使用 AtomUI 的初始主题配置，不在窗口显示后补刷一套颜色。
 - AtomPix 不自行扫描 AtomUI/AtomUI.Labs 主题资源，不手工引用私有 AXAML，也不依赖任何 Gallery 示例/文档宿主项目。目标只消费 `AtomUI.Labs.Controls.ImageGallery` 包和公开主题注册入口。
 - Ant Design 图标使用 AtomUI 图标包的公开 Provider。已核对可用于主导航的图标包括 `PictureOutlined`、`CompressOutlined`、`SwapOutlined`、`ColumnWidthOutlined`、`ScissorOutlined`、`FolderOpenOutlined`、`SettingOutlined`。
-- 字体以 AtomUI 注册字体和平台中文 fallback 为准，不下载网络字体；最终字号、行高和对比度通过主题 Token 与视觉验收确定。
+- 字体使用已归档许可的 SIL OFL 字体或系统字体，不下载网络字体；正式发布不得调用 `UseAlibabaSansFont` 或携带 `AtomUI.Fonts.AlibabaSans` 资产，除非未来归档明确的嵌入与再分发授权。最终字号、行高和对比度通过主题 Token 与视觉验收确定。
+
+AtomUI/AtomUI.Labs 精确发布快照的替代授权、`Svg.Custom` 清理和最终依赖闭包门禁遵守[发布依赖许可证与合规设计](../../implementation/release-compliance.md)。
 
 ## 4. 全局组件映射
 

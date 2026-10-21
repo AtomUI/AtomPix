@@ -5,14 +5,16 @@ using AtomPix.Core.Errors;
 using AtomPix.Core.Jobs;
 using AtomPix.Core.Output;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
 
-public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -22,7 +24,9 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     private readonly OpenImageWorkflow _openImage;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly CompressImageWorkflow _compress;
-    private readonly DesktopNavigationCoordinator _navigation;
+    private readonly IDesktopNavigator _navigator;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
+    private readonly IAtomPixLocalizedText _text;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -47,7 +51,10 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         OpenImageWorkflow openImage,
         LoadSettingsWorkflow loadSettings,
         CompressImageWorkflow compress,
-        DesktopNavigationCoordinator navigation)
+        IDesktopNavigator navigator,
+        IDesktopForegroundTaskGate foregroundTasks,
+        IAtomPixLocalizedText text,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
@@ -57,30 +64,35 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _compress = compress ?? throw new ArgumentNullException(nameof(compress));
-        _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
+        _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        ResultFeedback = new OperationResultFeedback(_text);
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Output = new OutputPolicyEditorViewModel(_picker, _text, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
 
         Modes =
         [
-            new DesktopChoiceOption<CompressionMode>("智能", CompressionMode.Smart),
-            new DesktopChoiceOption<CompressionMode>("高质量", CompressionMode.HighQuality),
-            new DesktopChoiceOption<CompressionMode>("平衡", CompressionMode.Balanced),
-            new DesktopChoiceOption<CompressionMode>("极限", CompressionMode.Maximum),
-            new DesktopChoiceOption<CompressionMode>("自定义", CompressionMode.Custom)
+            new DesktopChoiceOption<CompressionMode>(_text.GetString("Common.Option.Compression.Smart"), CompressionMode.Smart),
+            new DesktopChoiceOption<CompressionMode>(_text.GetString("Common.Option.Compression.HighQuality"), CompressionMode.HighQuality),
+            new DesktopChoiceOption<CompressionMode>(_text.GetString("Common.Option.Compression.Balanced"), CompressionMode.Balanced),
+            new DesktopChoiceOption<CompressionMode>(_text.GetString("Common.Option.Compression.Maximum"), CompressionMode.Maximum),
+            new DesktopChoiceOption<CompressionMode>(_text.GetString("Common.Option.Compression.Custom"), CompressionMode.Custom)
         ];
         _selectedMode = Modes[0];
 
-        SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
-        CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
-        OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
-        ContinueResizeCommand = new RelayCommand<object?>(_ => ContinueResize(), _ => IsSuccess);
-        CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
+        SelectImageCommand = commands.CreateAsync(SelectImageAsync, () => !IsProcessing, activationOwner: activationOwner);
+        StartCommand = commands.CreateAsync(StartAsync, () => IsContentReady && !IsProcessing, activationOwner: activationOwner);
+        CancelCommand = commands.Create(() => _executionCancellation?.Cancel(), () => IsProcessing);
+        OpenOutputCommand = commands.CreateAsync(OpenOutputAsync, () => IsSuccess, activationOwner: activationOwner);
+        ContinueResizeCommand = commands.Create(ContinueResize, () => IsSuccess);
+        CopyDiagnosticIdCommand = commands.CreateAsync(CopyDiagnosticIdAsync, () => HasDiagnosticId, activationOwner: activationOwner);
     }
 
     public IReadOnlyList<DesktopChoiceOption<CompressionMode>> Modes { get; }
     public OutputPolicyEditorViewModel Output { get; }
-    public OperationResultFeedback ResultFeedback { get; } = new();
+    public OperationResultFeedback ResultFeedback { get; }
 
     public DesktopContentState ContentState
     {
@@ -130,7 +142,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
             MidpointRounding.AwayFromZero);
     }
 
-    public string StartActionLabel => "单张处理";
+    public string StartActionLabel => _text.GetString("Tools.Action.StartSingle");
 
     System.Windows.Input.ICommand IToolEditorActions.StartActionCommand => StartCommand;
 
@@ -179,25 +191,27 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     public string? DiagnosticId { get => _diagnosticId; private set { if (SetProperty(ref _diagnosticId, value)) { OnPropertyChanged(nameof(HasDiagnosticId)); CopyDiagnosticIdCommand.NotifyCanExecuteChanged(); } } }
     public string ResultTitle => _lastResult?.Status switch
     {
-        ImageJobStatus.Succeeded => "压缩完成",
-        ImageJobStatus.Canceled => "任务已取消",
-        ImageJobStatus.Skipped => "目标已存在，未生成新文件",
-        ImageJobStatus.Failed => "压缩失败",
+        ImageJobStatus.Succeeded => _text.GetString("Tools.Compression.Status.Succeeded"),
+        ImageJobStatus.Canceled => _text.GetString("Common.Status.TaskCanceled"),
+        ImageJobStatus.Skipped => _text.GetString("Common.Status.SkippedExisting"),
+        ImageJobStatus.Failed => _text.GetString("Tools.Compression.Status.Failed"),
         _ => string.Empty
     };
     public string ResultOutputPath => _lastResult?.OutputPath?.Value ?? string.Empty;
     public bool IsResultOutputAvailable => IsSuccess && _outputGuard.FileExists(_lastResult?.OutputPath);
     public bool IsResultOutputMissing => IsSuccess && _lastResult?.OutputPath is not null && !IsResultOutputAvailable;
-    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult);
-    public string AppliedQualityText => _appliedQuality is null ? string.Empty : $"实际质量：{_appliedQuality.Value.Value}";
+    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult, _text);
+    public string AppliedQualityText => _appliedQuality is null
+        ? string.Empty
+        : _text.Format("Tools.Compression.AppliedQuality", _appliedQuality.Value.Value);
     public bool HasAppliedQuality => _appliedQuality is not null;
 
-    public AsyncCommand SelectImageCommand { get; }
-    public AsyncCommand StartCommand { get; }
-    public RelayCommand<object?> CancelCommand { get; }
-    public AsyncCommand OpenOutputCommand { get; }
-    public RelayCommand<object?> ContinueResizeCommand { get; }
-    public AsyncCommand CopyDiagnosticIdCommand { get; }
+    public IAsyncRelayCommand SelectImageCommand { get; }
+    public IAsyncRelayCommand StartCommand { get; }
+    public IRelayCommand CancelCommand { get; }
+    public IAsyncRelayCommand OpenOutputCommand { get; }
+    public IRelayCommand ContinueResizeCommand { get; }
+    public IAsyncRelayCommand CopyDiagnosticIdCommand { get; }
 
     public void RequestCancellation() => _executionCancellation?.Cancel();
 
@@ -261,7 +275,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         NotifyResult();
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         CancelLoad();
         _executionCancellation?.Cancel();
@@ -274,7 +288,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
         if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1)
         {
-            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage);
+            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage, _text);
             return;
         }
 
@@ -289,15 +303,15 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         if (_inputPath is null) return;
         if (!TryBuildProfile(out var profile, out var profileError))
         {
-            ResultFeedback.ShowWarning(profileError ?? "当前压缩配置无效。");
+            ResultFeedback.ShowWarning(profileError ?? _text.GetString("Tools.Compression.Validation.InvalidProfile"));
             return;
         }
         if (!Output.TryBuild(out var outputPolicy, out var outputError))
         {
-            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
+            ResultFeedback.ShowWarning(outputError ?? _text.GetString("Common.Validation.Output.Invalid"));
             return;
         }
-        if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
+        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = _text.GetString("Common.Error.ForegroundTaskBusy"); return; }
 
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
@@ -329,32 +343,32 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
             _appliedQuality = result.Value.AppliedQuality;
             ExecutionState = ToExecutionState(_lastResult.Status);
             if (_lastResult.Status == ImageJobStatus.Failed) SetError(_lastResult.Error);
-            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, "压缩完成", ResultSizeChange);
+            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, _text.GetString("Tools.Compression.Status.Succeeded"), ResultSizeChange);
             NotifyResult();
         }
         finally
         {
             _executionCancellation = null;
-            _navigation.EndForegroundTask();
+            _foregroundTasks.EndForegroundTask();
         }
     }
 
     private async Task HandleSourceConflictAsync(CancellationToken cancellationToken)
     {
         var useAutoRename = await _dialogs.ConfirmAsync(
-            "无法覆盖原始图片",
-            "当前输出位置和文件名会覆盖源文件。AtomPix 禁止原地覆盖输入图片。",
-            "改为自动重命名",
-            "返回修改",
+            _text.GetString("Common.Dialog.SourceOverwrite.Title"),
+            _text.GetString("Common.Dialog.SourceOverwrite.Message"),
+            _text.GetString("Common.Action.UseAutoRename"),
+            _text.GetString("Common.Action.BackToEdit"),
             cancellationToken);
         if (useAutoRename)
         {
             Output.SetOverwrite(OverwritePolicy.AutoRename);
-            ErrorMessage = "已改为自动重命名，请确认后重新开始。";
+            ErrorMessage = _text.GetString("Common.Message.AutoRenameApplied");
         }
         else
         {
-            ErrorMessage = DesktopErrorText.FromWorkflow(new AtomPixError(AtomPixErrorCode.OutputPathConflictsWithInput, AtomPixErrorCategory.Validation, "Conflict"));
+            ErrorMessage = DesktopErrorText.FromWorkflow(new AtomPixError(AtomPixErrorCode.OutputPathConflictsWithInput, AtomPixErrorCategory.Validation, "Conflict"), _text);
         }
     }
 
@@ -364,7 +378,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         var directory = Path.GetDirectoryName(ResultOutputPath);
         if (string.IsNullOrWhiteSpace(directory) || !await _launcher.OpenDirectoryAsync(directory, cancellationToken))
         {
-            ErrorMessage = "无法打开输出目录，文件可能已被移动。";
+            ErrorMessage = _text.GetString("Common.Error.OpenOutputDirectoryFailed");
         }
     }
 
@@ -378,7 +392,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     private bool EnsureResultOutputAvailable()
     {
         if (IsResultOutputAvailable) return true;
-        ErrorMessage = "输出文件已不存在，无法继续操作。请重新处理原图片。";
+        ErrorMessage = _text.GetString("Common.Error.OutputMissingReprocess");
         NotifyResult();
         return false;
     }
@@ -387,7 +401,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     {
         var opened = await _openImage.ExecuteAsync(new OpenImageRequest(output), CancellationToken.None);
         if (!opened.Succeeded) { SetError(opened.Error); return; }
-        _navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
+        _navigator.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
     }
 
     private async Task CopyDiagnosticIdAsync(CancellationToken cancellationToken)
@@ -399,10 +413,10 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
     {
         profile = null;
         error = null;
-        if (_probe is null) { error = "请先选择图片。"; return false; }
+        if (_probe is null) { error = _text.GetString("Common.Validation.SelectImageFirst"); return false; }
         if (_probe.IsAnimated || _probe.FrameCount != 1 || _probe.Format is not (ImageFormatKind.Jpeg or ImageFormatKind.Png or ImageFormatKind.WebP))
         {
-            error = "当前格式不能直接压缩，请先转换为 JPEG、PNG 或单帧 WebP。";
+            error = _text.GetString("Tools.Compression.Validation.UnsupportedFormat");
             return false;
         }
 
@@ -423,7 +437,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
         }
         catch (ArgumentException)
         {
-            error = "自定义质量必须是 1 到 100 的整数。";
+            error = _text.GetString("Tools.Compression.Validation.CustomQuality");
             return false;
         }
     }
@@ -468,7 +482,7 @@ public sealed class CompressionEditorViewModel : ObservableObject, IDisposable, 
 
     private void SetError(AtomPixError? error)
     {
-        ErrorMessage = DesktopErrorText.FromWorkflow(error);
+        ErrorMessage = DesktopErrorText.FromWorkflow(error, _text);
         DiagnosticId = DesktopErrorText.DiagnosticId(error);
     }
 

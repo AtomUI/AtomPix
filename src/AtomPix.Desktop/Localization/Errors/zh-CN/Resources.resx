@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="Errors.SourceOpenFailed" xml:space="preserve">
+    <value>无法打开图片来源</value>
+  </data>
+  <data name="Errors.Unexpected.Title" xml:space="preserve">
+    <value>AtomPix 遇到未预期错误</value>
+  </data>
+  <data name="Errors.Unexpected.Message" xml:space="preserve">
+    <value>当前操作未能完成。诊断编号：{0}&#xA;&#xA;该编号只用于定位本机日志，不包含图片路径或日志原文。</value>
+  </data>
+  <data name="Errors.PickerFailed" xml:space="preserve"><value>无法打开系统选择器，请重试。</value></data>
+  <data name="Errors.InputFileNotFound" xml:space="preserve"><value>图片已不存在，请重新选择。</value></data>
+  <data name="Errors.InputDirectoryNotFound" xml:space="preserve"><value>文件夹已不存在，请重新选择。</value></data>
+  <data name="Errors.UnsupportedInputFormat" xml:space="preserve"><value>该文件不是 AtomPix 当前支持的图片格式。</value></data>
+  <data name="Errors.InvalidImageFile" xml:space="preserve"><value>图片已损坏或无法识别，请选择其他图片。</value></data>
+  <data name="Errors.InputFileTooLarge" xml:space="preserve"><value>图片文件超过当前处理上限。</value></data>
+  <data name="Errors.ImageDimensionsExceedLimit" xml:space="preserve"><value>图片分辨率超过当前处理上限。</value></data>
+  <data name="Errors.InvalidResizeOptions" xml:space="preserve"><value>调整尺寸参数无效，请检查宽度、高度或百分比。</value></data>
+  <data name="Errors.InvalidCropOptions" xml:space="preserve"><value>裁剪区域无效，请检查位置和尺寸。</value></data>
+  <data name="Errors.InvalidCompressionQuality" xml:space="preserve"><value>压缩质量必须是 1 到 100 的整数。</value></data>
+  <data name="Errors.InvalidConversionOptions" xml:space="preserve"><value>转换参数无效，请检查输出格式、质量或透明背景色。</value></data>
+  <data name="Errors.InvalidOutputNamingPattern" xml:space="preserve"><value>文件名格式无效，请只使用 {name} 和 {index} 占位符。</value></data>
+  <data name="Errors.OutputPathConflictsWithInput" xml:space="preserve"><value>无法覆盖原始图片，请改用自动重命名。</value></data>
+  <data name="Errors.OutputFileAlreadyExists" xml:space="preserve"><value>目标文件已存在。</value></data>
+  <data name="Errors.SettingsLoadFailed" xml:space="preserve"><value>设置读取失败，请恢复默认设置或检查配置目录。</value></data>
+  <data name="Errors.SettingsSaveFailed" xml:space="preserve"><value>设置保存失败，修改尚未丢失，请重试。</value></data>
+  <data name="Errors.ImageCompressFailed" xml:space="preserve"><value>压缩失败，请重试或更换图片。</value></data>
+  <data name="Errors.ImageConvertFailed" xml:space="preserve"><value>转换失败，请重试或更换图片。</value></data>
+  <data name="Errors.ImageResizeFailed" xml:space="preserve"><value>调整尺寸失败，请重试或更换图片。</value></data>
+  <data name="Errors.ImageCropFailed" xml:space="preserve"><value>裁剪失败，请重试或更换图片。</value></data>
+  <data name="Errors.ImageWriteFailed" xml:space="preserve"><value>无法写入输出文件，请检查目录权限或选择其他输出位置。</value></data>
+  <data name="Errors.ImageResourceLimitExceeded" xml:space="preserve"><value>图片处理超出当前资源保护上限，请使用更小的图片或尺寸。</value></data>
+  <data name="Errors.InsufficientDiskSpace" xml:space="preserve"><value>磁盘空间不足，请释放空间或选择其他输出目录。</value></data>
+  <data name="Errors.Unknown" xml:space="preserve"><value>发生未预期错误，请使用诊断编号定位本地日志。</value></data>
+  <data name="Errors.Default" xml:space="preserve"><value>操作未完成，请检查输入与输出设置后重试。</value></data>
+</root>

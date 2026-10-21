@@ -3,6 +3,10 @@
   <ItemGroup>
     <ProjectReference Include="..\AtomPix.Core\AtomPix.Core.csproj" />
     <ProjectReference Include="..\AtomPix.Imaging.Abstractions\AtomPix.Imaging.Abstractions.csproj" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.Core\AtomUI.City.Core.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
+    <ProjectReference Include="..\..\external\AtomUI.City\src\AtomUI.City.State\AtomUI.City.State.csproj"
+                      AdditionalProperties="Configuration=$(Configuration)" />
   </ItemGroup>
 
   <PropertyGroup>

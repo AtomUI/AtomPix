@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:atom="https://atomui.net" xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:vm="using:AtomPix.Desktop.ViewModels" x:Class="AtomPix.Desktop.Views.CompressionEditorView"
              x:DataType="vm:CompressionEditorViewModel">
     <Grid Background="{DynamicResource AtomPixInspectorSurfaceBrush}">
@@ -12,30 +13,30 @@
                 </StackPanel>
                 <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" />
                 <StackPanel Spacing="11">
-                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="压缩模式" />
-                    <atom:Segmented AutomationProperties.Name="压缩模式"
+                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="{loc:Loc Tools.Compression.ModeTitle}" />
+                    <atom:Segmented AutomationProperties.Name="{loc:Loc Tools.Compression.ModeAutomation}"
                                     ItemsSource="{Binding Modes}"
                                     SelectedItem="{Binding SelectedMode, Mode=TwoWay}"
                                     IsExpanding="True" />
                     <Grid IsVisible="{Binding ShowCustomQuality}" ColumnDefinitions="*,96" ColumnSpacing="12"
                           HorizontalAlignment="Stretch">
                         <atom:Slider Classes="AtomPixInspectorAlignedSlider"
-                                     AutomationProperties.Name="自定义压缩质量"
+                                     AutomationProperties.Name="{loc:Loc Tools.Compression.QualityAutomation}"
                                      Minimum="1" Maximum="100"
                                      HorizontalAlignment="Stretch"
                                      Value="{Binding CustomQualitySlider, Mode=TwoWay}" />
-                        <atom:NumericUpDown AutomationProperties.Name="自定义压缩质量数值"
+                        <atom:NumericUpDown AutomationProperties.Name="{loc:Loc Tools.Compression.QualityValueAutomation}"
                                             Grid.Column="1" Minimum="1" Maximum="100" FormatString="0"
                                             MinWidth="96" HorizontalAlignment="Stretch"
                                             Value="{Binding CustomQuality, Mode=TwoWay}" />
                     </Grid>
                     <atom:Alert IsVisible="{Binding ShowCustomQualityUnavailable}"
                                 Type="Info" IsShowIcon="True"
-                                Message="当前格式不使用有损质量参数" />
-                    <atom:CheckBox Content="移除拍摄信息与位置数据"
+                                Message="{loc:Loc Tools.Compression.QualityUnavailable}" />
+                    <atom:CheckBox Content="{loc:Loc Tools.Common.RemoveMetadata}"
                                    IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
                     <TextBlock Classes="AtomPixInspectorCaption"
-                               Text="智能模式自动平衡体积与画质，不改变像素尺寸"
+                               Text="{loc:Loc Tools.Compression.SmartDescription}"
                                TextWrapping="Wrap" />
                 </StackPanel>
                 <Border Classes="AtomPixInspectorDivider" />

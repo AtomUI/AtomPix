@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="Common.Action.Cancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="Common.Action.CancelTask" xml:space="preserve">
+    <value>取消任务</value>
+  </data>
+  <data name="Common.Action.CopyDiagnosticId" xml:space="preserve">
+    <value>复制诊断编号</value>
+  </data>
+  <data name="Common.Action.Choose" xml:space="preserve">
+    <value>选择</value>
+  </data>
+  <data name="Common.Action.Change" xml:space="preserve">
+    <value>更改</value>
+  </data>
+  <data name="Common.Output.LocationTitle" xml:space="preserve">
+    <value>输出位置</value>
+  </data>
+  <data name="Common.Output.SubfolderName" xml:space="preserve">
+    <value>子目录名称</value>
+  </data>
+  <data name="Common.Output.SubfolderAutomation" xml:space="preserve">
+    <value>输出子目录名称</value>
+  </data>
+  <data name="Common.Output.SameAsInput" xml:space="preserve">
+    <value>输出到原图所在目录</value>
+  </data>
+  <data name="Common.Output.ExistingPolicyHint" xml:space="preserve">
+    <value>同名文件按照下方的同名文件策略处理</value>
+  </data>
+  <data name="Common.Output.CustomDirectoryTitle" xml:space="preserve">
+    <value>指定输出文件夹</value>
+  </data>
+  <data name="Common.Output.CustomDirectoryAutomation" xml:space="preserve">
+    <value>自定义输出目录</value>
+  </data>
+  <data name="Common.Output.DirectoryNotSelected" xml:space="preserve">
+    <value>尚未选择输出文件夹</value>
+  </data>
+  <data name="Common.Output.ChooseDirectoryAutomation" xml:space="preserve">
+    <value>选择或更改输出文件夹</value>
+  </data>
+  <data name="Common.Output.FixedDirectoryDescription" xml:space="preserve">
+    <value>所有图片都将输出到这个固定目录</value>
+  </data>
+  <data name="Common.Output.NamingTitle" xml:space="preserve">
+    <value>文件命名</value>
+  </data>
+  <data name="Common.Output.NamingModeAutomation" xml:space="preserve">
+    <value>文件命名方式</value>
+  </data>
+  <data name="Common.Output.KeepOriginalNameTitle" xml:space="preserve">
+    <value>沿用原图片名称</value>
+  </data>
+  <data name="Common.Output.KeepOriginalNameDescription" xml:space="preserve">
+    <value>不添加后缀；同名情况由下方策略处理</value>
+  </data>
+  <data name="Common.Output.NamingPreviewPrefix" xml:space="preserve">
+    <value>名称示例：</value>
+  </data>
+  <data name="Common.Output.SuffixTitle" xml:space="preserve">
+    <value>原文件名后缀</value>
+  </data>
+  <data name="Common.Output.SuffixAutomation" xml:space="preserve">
+    <value>文件名后缀</value>
+  </data>
+  <data name="Common.Output.ExtensionDescription" xml:space="preserve">
+    <value>扩展名由所选输出格式决定</value>
+  </data>
+  <data name="Common.Output.PatternTitle" xml:space="preserve">
+    <value>自定义名称格式</value>
+  </data>
+  <data name="Common.Output.PatternAutomation" xml:space="preserve">
+    <value>文件名格式</value>
+  </data>
+  <data name="Common.Output.PatternPlaceholder" xml:space="preserve">
+    <value>示例：{name}_atompix</value>
+  </data>
+  <data name="Common.Output.InsertNameToken" xml:space="preserve">
+    <value>＋ 原文件名</value>
+  </data>
+  <data name="Common.Output.InsertIndexToken" xml:space="preserve">
+    <value>＋ 序号</value>
+  </data>
+  <data name="Common.Output.BatchIndexDescription" xml:space="preserve">
+    <value>批量处理时，若格式中没有序号，AtomPix 会自动追加</value>
+  </data>
+  <data name="Common.Output.ExistingTitle" xml:space="preserve">
+    <value>同名文件</value>
+  </data>
+  <data name="Common.Output.ExistingAutomation" xml:space="preserve">
+    <value>已有文件处理方式</value>
+  </data>
+  <data name="Common.Output.SubfolderDestinationHint" xml:space="preserve">
+    <value>图片将保存到：每张原图所在目录 / {0}</value>
+  </data>
+  <data name="Common.Output.SubfolderDestinationEmptyHint" xml:space="preserve">
+    <value>图片将保存到：每张原图所在目录 / …</value>
+  </data>
+  <data name="Common.Output.LocationSummary.Subfolder" xml:space="preserve">
+    <value>原图旁 / {0}</value>
+  </data>
+  <data name="Common.Output.ExampleImageName" xml:space="preserve">
+    <value>示例图片</value>
+  </data>
+  <data name="Common.Option.Compression.Smart" xml:space="preserve">
+    <value>智能</value>
+  </data>
+  <data name="Common.Option.Compression.HighQuality" xml:space="preserve">
+    <value>高质量</value>
+  </data>
+  <data name="Common.Option.Compression.Balanced" xml:space="preserve">
+    <value>平衡</value>
+  </data>
+  <data name="Common.Option.Compression.Maximum" xml:space="preserve">
+    <value>极限</value>
+  </data>
+  <data name="Common.Option.Compression.Custom" xml:space="preserve">
+    <value>自定义</value>
+  </data>
+  <data name="Common.Option.OutputLocation.SubfolderLong" xml:space="preserve">
+    <value>原图旁的输出子目录</value>
+  </data>
+  <data name="Common.Option.OutputLocation.SameAsInputLong" xml:space="preserve">
+    <value>与原图相同目录</value>
+  </data>
+  <data name="Common.Option.OutputLocation.CustomDirectory" xml:space="preserve">
+    <value>自定义目录</value>
+  </data>
+  <data name="Common.Option.OutputLocation.SubfolderShort" xml:space="preserve">
+    <value>原图旁子目录</value>
+  </data>
+  <data name="Common.Option.OutputLocation.SameAsInputShort" xml:space="preserve">
+    <value>原图目录</value>
+  </data>
+  <data name="Common.Option.Overwrite.AutoRename" xml:space="preserve">
+    <value>自动重命名</value>
+  </data>
+  <data name="Common.Option.Overwrite.Skip" xml:space="preserve">
+    <value>跳过已有文件</value>
+  </data>
+  <data name="Common.Option.Overwrite.Overwrite" xml:space="preserve">
+    <value>覆盖已有输出</value>
+  </data>
+  <data name="Common.Option.Naming.KeepOriginal" xml:space="preserve">
+    <value>保留原文件名</value>
+  </data>
+  <data name="Common.Option.Naming.AppendSuffix" xml:space="preserve">
+    <value>添加后缀</value>
+  </data>
+  <data name="Common.Option.Naming.CustomPattern" xml:space="preserve">
+    <value>自定义格式</value>
+  </data>
+  <data name="Common.Validation.Output.SubfolderRequired" xml:space="preserve">
+    <value>输出子目录名称不能为空。</value>
+  </data>
+  <data name="Common.Validation.Output.CustomDirectoryRequired" xml:space="preserve">
+    <value>请选择自定义输出目录。</value>
+  </data>
+  <data name="Common.Validation.Output.SuffixRequired" xml:space="preserve">
+    <value>文件名后缀不能为空。</value>
+  </data>
+  <data name="Common.Validation.Output.PatternRequired" xml:space="preserve">
+    <value>文件名格式不能为空。</value>
+  </data>
+  <data name="Common.Validation.Output.PatternInvalid" xml:space="preserve">
+    <value>文件名格式无效，只能使用 {name} 与 {index} 占位符，且不能包含路径字符。</value>
+  </data>
+  <data name="Common.Result.AutoRenamed" xml:space="preserve">
+    <value>{0}；目标已存在，已自动保存为 {1}</value>
+  </data>
+  <data name="Common.Result.Overwritten" xml:space="preserve">
+    <value>{0}；已覆盖已有输出 {1}</value>
+  </data>
+  <data name="Common.Result.Saved" xml:space="preserve">
+    <value>{0}；已保存为 {1}</value>
+  </data>
+  <data name="Common.Result.SkippedExisting" xml:space="preserve">
+    <value>未生成新文件；目标文件已存在，已按设置跳过</value>
+  </data>
+  <data name="Common.Result.CanceledNoOutput" xml:space="preserve">
+    <value>任务已取消；未生成新文件</value>
+  </data>
+  <data name="Common.Result.SizeReduced" xml:space="preserve"><value>体积减少 {0}（{1:0.##}%）</value></data>
+  <data name="Common.Result.SizeUnchanged" xml:space="preserve"><value>文件大小未变化</value></data>
+  <data name="Common.Result.SizeIncreased" xml:space="preserve"><value>体积增加 {0}（{1:0.##}%）</value></data>
+  <data name="Common.Status.TaskCanceled" xml:space="preserve">
+    <value>任务已取消</value>
+  </data>
+  <data name="Common.Status.SkippedExisting" xml:space="preserve">
+    <value>目标已存在，未生成新文件</value>
+  </data>
+  <data name="Common.Status.NoOutput" xml:space="preserve">
+    <value>未生成新文件</value>
+  </data>
+  <data name="Common.Error.ForegroundTaskBusy" xml:space="preserve">
+    <value>已有任务正在运行，请等待其结束。</value>
+  </data>
+  <data name="Common.Error.OpenOutputDirectoryFailed" xml:space="preserve">
+    <value>无法打开输出目录，文件可能已被移动。</value>
+  </data>
+  <data name="Common.Error.OutputMissingReprocess" xml:space="preserve">
+    <value>输出文件已不存在，无法继续操作。请重新处理原图片。</value>
+  </data>
+  <data name="Common.Error.SourceOverwriteChangeOutput" xml:space="preserve">
+    <value>无法覆盖原始图片，请修改输出设置。</value>
+  </data>
+  <data name="Common.Dialog.SourceOverwrite.Title" xml:space="preserve">
+    <value>无法覆盖原始图片</value>
+  </data>
+  <data name="Common.Dialog.SourceOverwrite.Message" xml:space="preserve">
+    <value>当前输出位置和文件名会覆盖源文件。AtomPix 禁止原地覆盖输入图片。</value>
+  </data>
+  <data name="Common.Action.UseAutoRename" xml:space="preserve">
+    <value>改为自动重命名</value>
+  </data>
+  <data name="Common.Action.BackToEdit" xml:space="preserve">
+    <value>返回修改</value>
+  </data>
+  <data name="Common.Message.AutoRenameApplied" xml:space="preserve">
+    <value>已改为自动重命名，请确认后重新开始。</value>
+  </data>
+  <data name="Common.Validation.SelectImageFirst" xml:space="preserve">
+    <value>请先选择图片。</value>
+  </data>
+  <data name="Common.Validation.Output.Invalid" xml:space="preserve">
+    <value>当前输出配置无效。</value>
+  </data>
+  <data name="Common.Metadata.RemoveLocation" xml:space="preserve">
+    <value>移除拍摄信息与位置数据</value>
+  </data>
+  <data name="Common.Metadata.PreserveLocation" xml:space="preserve">
+    <value>保留拍摄信息与位置数据</value>
+  </data>
+  <data name="Common.Metadata.Remove" xml:space="preserve">
+    <value>移除拍摄信息</value>
+  </data>
+  <data name="Common.Metadata.Preserve" xml:space="preserve">
+    <value>保留拍摄信息</value>
+  </data>
+  <data name="Common.Option.Resize.Pixel" xml:space="preserve">
+    <value>按像素</value>
+  </data>
+  <data name="Common.Option.Resize.Percentage" xml:space="preserve">
+    <value>按百分比</value>
+  </data>
+  <data name="Common.Option.Crop.Custom" xml:space="preserve">
+    <value>自定义</value>
+  </data>
+  <data name="Common.Picker.SupportedImages" xml:space="preserve">
+    <value>AtomPix 支持的图片</value>
+  </data>
+  <data name="Common.Picker.FolderUnavailable" xml:space="preserve">
+    <value>当前窗口不支持目录选择。</value>
+  </data>
+  <data name="Common.Picker.OpenImageFolder" xml:space="preserve">
+    <value>打开图片文件夹</value>
+  </data>
+  <data name="Common.Picker.FolderFailed" xml:space="preserve">
+    <value>无法打开系统目录选择器。</value>
+  </data>
+  <data name="Common.Picker.FileUnavailable" xml:space="preserve">
+    <value>当前窗口不支持文件选择。</value>
+  </data>
+  <data name="Common.Picker.AddImages" xml:space="preserve">
+    <value>添加图片</value>
+  </data>
+  <data name="Common.Picker.OpenImage" xml:space="preserve">
+    <value>打开图片</value>
+  </data>
+  <data name="Common.Picker.FileFailed" xml:space="preserve">
+    <value>无法打开系统文件选择器。</value>
+  </data>
+  <data name="Common.Answer.Yes" xml:space="preserve">
+    <value>有</value>
+  </data>
+  <data name="Common.Answer.No" xml:space="preserve">
+    <value>无</value>
+  </data>
+</root>

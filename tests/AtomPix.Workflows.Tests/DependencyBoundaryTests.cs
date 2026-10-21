@@ -21,6 +21,8 @@ public sealed class DependencyBoundaryTests
         || name.StartsWith("AtomPix.Imaging.Magick", StringComparison.Ordinal)
         || name.StartsWith("Avalonia", StringComparison.Ordinal)
         || name.StartsWith("AtomUI", StringComparison.Ordinal)
+            && !string.Equals(name, "AtomUI.City.State", StringComparison.Ordinal)
+            && !string.Equals(name, "AtomUI.City.Core", StringComparison.Ordinal)
         || name.StartsWith("ImageMagick", StringComparison.Ordinal)
         || name.StartsWith("Magick", StringComparison.Ordinal)
         || name.StartsWith("SkiaSharp", StringComparison.Ordinal);

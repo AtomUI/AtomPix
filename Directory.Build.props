@@ -14,6 +14,12 @@
     <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- City is intentionally consumed as source outside AtomPix.slnx. Preserve
+         the parent Debug/Release configuration across those project edges. -->
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
     <RestorePackagesPath>$(MSBuildThisFileDirectory)eng\nuget-cache</RestorePackagesPath>
+    <AtomUICityCommit>c2e4176159b9b441af2d7ce065d5acde6a888543</AtomUICityCommit>
+    <AtomUICityBuildPackageVersion>1.0.0-atompix.c2e4176</AtomUICityBuildPackageVersion>
+    <AtomUICityBuildPackageSha256>5ED32116E11204D782740DA84FA4560E674FB49BCD2358D7E445FEBA08BA9F8E</AtomUICityBuildPackageSha256>
   </PropertyGroup>
 </Project>

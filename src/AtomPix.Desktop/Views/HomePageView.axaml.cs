@@ -1,13 +1,14 @@
 namespace AtomPix.Desktop.Views;
 
 using AtomPix.Desktop.ViewModels;
+using AtomUI.City.Presentation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Interactivity;
 
-public sealed partial class HomePageView : UserControl
+public sealed partial class HomePageView : UserControl, IViewDataContextAware
 {
     public HomePageView()
     {

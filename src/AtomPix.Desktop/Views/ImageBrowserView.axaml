@@ -2,11 +2,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:labs="https://atomui.net/labs"
              xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:vm="using:AtomPix.Desktop.ViewModels"
              x:Class="AtomPix.Desktop.Views.ImageBrowserView"
              x:DataType="vm:ImageBrowserViewModel">
     <Grid x:Name="BrowserContentLayout"
-          AutomationProperties.Name="图片浏览器"
+          AutomationProperties.Name="{loc:Loc Browser.Automation.Workspace}"
           Background="White">
         <Border IsVisible="{Binding IsCropMode}"
                 Background="{DynamicResource AtomPixWorkspaceSurfaceBrush}"
@@ -27,7 +28,7 @@
                              IsInteractionEnabled="{Binding !CropEditor.IsProcessing}" />
 
         <labs:ImageGallery x:Name="ImageGalleryViewer"
-                           AutomationProperties.Name="图片集预览器"
+                           AutomationProperties.Name="{loc:Loc Browser.Automation.Gallery}"
                            ItemsSource="{Binding GalleryItems}"
                            SelectedItem="{Binding SelectedGalleryItem, Mode=OneWay}"
                            MainImageMode="{Binding GalleryMainImageMode}"

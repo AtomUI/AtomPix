@@ -5,7 +5,10 @@ using AtomPix.Core.ValueObjects;
 
 public sealed class AppPathProvider : IAppPathProvider
 {
-    public AppPathProvider() : this(GetDefaultAppDataDirectory(), Path.Combine(Path.GetTempPath(), "AtomPix"))
+    public const string AppDataDirectoryEnvironmentVariable = "ATOMPIX_APPDATA_DIRECTORY";
+    public const string TempDirectoryEnvironmentVariable = "ATOMPIX_TEMP_DIRECTORY";
+
+    public AppPathProvider() : this(GetDefaultAppDataDirectory(), GetDefaultTempDirectory())
     {
     }
 
@@ -21,6 +24,12 @@ public sealed class AppPathProvider : IAppPathProvider
 
     private static string GetDefaultAppDataDirectory()
     {
+        var configured = GetConfiguredDirectory(AppDataDirectoryEnvironmentVariable);
+        if (configured is not null)
+        {
+            return configured;
+        }
+
         if (OperatingSystem.IsWindows())
         {
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -41,5 +50,26 @@ public sealed class AppPathProvider : IAppPathProvider
 
         var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return Path.Combine(userHome, ".local", "share", "AtomPix");
+    }
+
+    private static string GetDefaultTempDirectory() =>
+        GetConfiguredDirectory(TempDirectoryEnvironmentVariable)
+        ?? Path.Combine(Path.GetTempPath(), "AtomPix");
+
+    private static string? GetConfiguredDirectory(string variableName)
+    {
+        var value = Environment.GetEnvironmentVariable(variableName);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!Path.IsPathFullyQualified(value))
+        {
+            throw new InvalidOperationException(
+                $"Environment variable '{variableName}' must contain an absolute path.");
+        }
+
+        return Path.GetFullPath(value);
     }
 }

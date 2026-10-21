@@ -2,16 +2,20 @@ namespace AtomPix.Desktop.ViewModels;
 
 using AtomPix.Core.Errors;
 using AtomPix.Desktop.Platform;
+using AtomUI.City.Presentation;
 
 public sealed class DiagnosticErrorViewModel : ObservableObject
 {
     private readonly IDesktopClipboardService _clipboard;
     private string? _diagnosticId;
 
-    public DiagnosticErrorViewModel(IDesktopClipboardService clipboard)
+    public DiagnosticErrorViewModel(
+        IDesktopClipboardService clipboard,
+        IUiCommandFactory? commandFactory = null)
     {
         _clipboard = clipboard ?? throw new ArgumentNullException(nameof(clipboard));
-        CopyCommand = new AsyncCommand(CopyAsync, () => HasDiagnosticId);
+        CopyCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance)
+            .CreateAsync(CopyAsync, () => HasDiagnosticId);
     }
 
     public string? DiagnosticId
@@ -29,7 +33,7 @@ public sealed class DiagnosticErrorViewModel : ObservableObject
 
     public bool HasDiagnosticId => !string.IsNullOrWhiteSpace(DiagnosticId);
 
-    public AsyncCommand CopyCommand { get; }
+    public IAsyncRelayCommand CopyCommand { get; }
 
     public void Set(AtomPixError? error) => DiagnosticId = DesktopErrorText.DiagnosticId(error);
 

@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:atom="https://atomui.net" xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:vm="using:AtomPix.Desktop.ViewModels" x:Class="AtomPix.Desktop.Views.ConversionEditorView"
              x:DataType="vm:ConversionEditorViewModel">
     <Grid Background="{DynamicResource AtomPixInspectorSurfaceBrush}">
@@ -12,38 +13,38 @@
                 </StackPanel>
                 <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" />
                 <StackPanel Spacing="11">
-                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="输出格式" />
-                    <atom:Segmented AutomationProperties.Name="转换输出格式"
+                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="{loc:Loc Tools.Conversion.FormatTitle}" />
+                    <atom:Segmented AutomationProperties.Name="{loc:Loc Tools.Conversion.FormatAutomation}"
                                     ItemsSource="{Binding Formats}"
                                     SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
                                     IsExpanding="True" />
                     <Grid IsVisible="{Binding IsLossyFormat}" ColumnDefinitions="*,74" ColumnSpacing="8">
                         <atom:Slider Classes="AtomPixInspectorAlignedSlider"
-                                     AutomationProperties.Name="转换输出质量"
+                                     AutomationProperties.Name="{loc:Loc Tools.Conversion.QualityAutomation}"
                                      Minimum="1" Maximum="100"
                                      Value="{Binding QualitySlider, Mode=TwoWay}" />
-                        <atom:NumericUpDown AutomationProperties.Name="转换输出质量数值"
+                        <atom:NumericUpDown AutomationProperties.Name="{loc:Loc Tools.Conversion.QualityValueAutomation}"
                                             Grid.Column="1" Minimum="1" Maximum="100" FormatString="0"
                                             Value="{Binding Quality, Mode=TwoWay}" />
                     </Grid>
                     <TextBlock Classes="AtomPixInspectorCaption" IsVisible="{Binding IsLossyFormat}"
-                               Text="有损格式使用质量值；PNG 自动忽略" />
+                               Text="{loc:Loc Tools.Conversion.QualityDescription}" />
                 </StackPanel>
                 <StackPanel IsVisible="{Binding ShowTransparencyBackground}" Spacing="10">
                     <Border Classes="AtomPixInspectorDivider" />
-                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="透明区域" />
-                    <TextBlock Classes="AtomPixInspectorCaption" Text="JPEG 背景色" />
+                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="{loc:Loc Tools.Conversion.TransparencyTitle}" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{loc:Loc Tools.Conversion.BackgroundTitle}" />
                     <Grid ColumnDefinitions="42,*,Auto,Auto" ColumnSpacing="6">
                         <controls:RgbColorPickerBridge Width="36" Height="36"
                                                        HexValue="{Binding BackgroundHex, Mode=TwoWay}" />
-                        <atom:TextBox Grid.Column="1" AutomationProperties.Name="透明区域背景色"
+                        <atom:TextBox Grid.Column="1" AutomationProperties.Name="{loc:Loc Tools.Conversion.BackgroundAutomation}"
                                       Text="{Binding BackgroundHex, Mode=TwoWay}" PlaceholderText="#RRGGBB" />
-                        <atom:Button Grid.Column="2" Content="白" Command="{Binding UseWhiteCommand}" />
-                        <atom:Button Grid.Column="3" Content="黑" Command="{Binding UseBlackCommand}" />
+                        <atom:Button Grid.Column="2" Content="{loc:Loc Tools.Conversion.White}" Command="{Binding UseWhiteCommand}" />
+                        <atom:Button Grid.Column="3" Content="{loc:Loc Tools.Conversion.Black}" Command="{Binding UseBlackCommand}" />
                     </Grid>
                     <TextBlock Classes="AtomPixInspectorCaption" Text="{Binding TransparencySummary}" TextWrapping="Wrap" />
                 </StackPanel>
-                <atom:CheckBox Content="移除拍摄信息与位置数据" IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
+                <atom:CheckBox Content="{loc:Loc Tools.Common.RemoveMetadata}" IsChecked="{Binding RemoveMetadata, Mode=TwoWay}" />
                 <Border Classes="AtomPixInspectorDivider" />
                 <controls:OutputPolicyEditorView DataContext="{Binding Output}" />
                 <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}"

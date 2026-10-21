@@ -3,6 +3,7 @@ namespace AtomPix.Desktop.Views;
 using System.ComponentModel;
 using AtomPix.Desktop.Controls;
 using AtomPix.Desktop.ViewModels;
+using AtomUI.City.Presentation;
 using AtomUI.Labs.Controls.ImageGallery;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,7 +11,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
 
-public sealed partial class ImageBrowserView : UserControl
+public sealed partial class ImageBrowserView : UserControl, IViewDataContextAware
 {
     private ImageGallery? _gallery;
     private CropCanvas? _cropCanvas;

@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:atom="https://atomui.net"
              xmlns:antdicons="https://atomui.net/icons/antdesign"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:nav="using:AtomPix.Desktop.Navigation"
              xmlns:shell="using:AtomPix.Desktop.Shell"
              xmlns:vm="using:AtomPix.Desktop.ViewModels"
@@ -29,17 +30,16 @@
     </atom:Window.DataTemplates>
 
     <Grid x:Name="AppLayoutRoot"
-          AutomationProperties.Name="AtomPix 应用工作区"
+          AutomationProperties.Name="{loc:Loc Shell.Application.Workspace}"
           Background="{DynamicResource AtomPixWorkspaceSurfaceBrush}">
         <Grid ColumnDefinitions="*,Auto">
             <Grid Grid.Column="0" MinWidth="0">
                 <ContentControl x:Name="PrimaryWorkspace"
                                 HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch"
-                                Content="{Binding CurrentPage}" />
+                                VerticalContentAlignment="Stretch" />
 
                 <Border x:Name="NavigationRail"
-                        AutomationProperties.Name="主功能导航轨"
+                        AutomationProperties.Name="{loc:Loc Shell.Navigation.Rail}"
                         Width="{DynamicResource AtomPixNavigationRailWidth}"
                         Padding="5,8"
                         HorizontalAlignment="Left"
@@ -54,8 +54,8 @@
                         <atom:Button Classes="AtomPixFloatingIconButton"
                                      ButtonType="Text"
                                      Width="44" Height="44"
-                                     AutomationProperties.Name="返回首页"
-                                     atom:ToolTip.Tip="首页"
+                                     AutomationProperties.Name="{loc:Loc Shell.Navigation.Home}"
+                                     atom:ToolTip.Tip="{loc:Loc Shell.Navigation.HomeTip}"
                                      Command="{Binding NavigateCommand}"
                                      CommandParameter="{x:Static nav:DesktopRoute.Browse}">
                             <Image Width="30" Height="30" Source="/Assets/Branding/AtomPix-64.png" />
@@ -65,7 +65,7 @@
                             <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsCompressActive}" />
                             <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsCompressActive}" />
                             <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
-                                         AutomationProperties.Name="压缩体积" atom:ToolTip.Tip="压缩体积"
+                                         AutomationProperties.Name="{loc:Loc Shell.Tool.Compress}" atom:ToolTip.Tip="{loc:Loc Shell.Tool.Compress}"
                                          Icon="{antdicons:AntDesignIconProvider Kind=CompressOutlined}"
                                          Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Compress}" />
                         </Grid>
@@ -73,7 +73,7 @@
                             <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsConvertActive}" />
                             <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsConvertActive}" />
                             <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
-                                         AutomationProperties.Name="转换格式" atom:ToolTip.Tip="转换格式"
+                                         AutomationProperties.Name="{loc:Loc Shell.Tool.Convert}" atom:ToolTip.Tip="{loc:Loc Shell.Tool.Convert}"
                                          Icon="{antdicons:AntDesignIconProvider Kind=SwapOutlined}"
                                          Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Convert}" />
                         </Grid>
@@ -81,7 +81,7 @@
                             <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsResizeActive}" />
                             <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsResizeActive}" />
                             <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
-                                         AutomationProperties.Name="调整尺寸" atom:ToolTip.Tip="调整尺寸"
+                                         AutomationProperties.Name="{loc:Loc Shell.Tool.Resize}" atom:ToolTip.Tip="{loc:Loc Shell.Tool.Resize}"
                                          Icon="{antdicons:AntDesignIconProvider Kind=ColumnWidthOutlined}"
                                          Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Resize}" />
                         </Grid>
@@ -89,7 +89,7 @@
                             <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsCropActive}" />
                             <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsCropActive}" />
                             <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
-                                         AutomationProperties.Name="剪裁尺寸" atom:ToolTip.Tip="剪裁尺寸"
+                                         AutomationProperties.Name="{loc:Loc Shell.Tool.Crop}" atom:ToolTip.Tip="{loc:Loc Shell.Tool.Crop}"
                                          Icon="{antdicons:AntDesignIconProvider Kind=ScissorOutlined}"
                                          Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Crop}" />
                         </Grid>
@@ -97,7 +97,7 @@
                             <Border Background="{atom:SharedTokenResource ColorPrimaryBg}" CornerRadius="6" IsVisible="{Binding IsSettingsActive}" />
                             <Border Width="3" Height="18" HorizontalAlignment="Right" Background="{atom:SharedTokenResource ColorPrimary}" CornerRadius="2" IsVisible="{Binding IsSettingsActive}" />
                             <atom:Button Classes="AtomPixFloatingIconButton" ButtonType="Text" Width="44" Height="42" FontSize="19"
-                                         AutomationProperties.Name="设置" atom:ToolTip.Tip="设置"
+                                         AutomationProperties.Name="{loc:Loc Shell.Navigation.Settings}" atom:ToolTip.Tip="{loc:Loc Shell.Navigation.Settings}"
                                          Icon="{antdicons:AntDesignIconProvider Kind=SettingOutlined}"
                                          Command="{Binding NavigateCommand}" CommandParameter="{x:Static nav:DesktopRoute.Settings}" />
                         </Grid>
@@ -107,7 +107,7 @@
 
             <Border x:Name="ToolPanel"
                     Grid.Column="1"
-                    AutomationProperties.Name="图片处理配置面板"
+                    AutomationProperties.Name="{loc:Loc Shell.Panel.Configuration}"
                     Width="380"
                     Background="{DynamicResource AtomPixInspectorSurfaceBrush}"
                     BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}"
@@ -124,7 +124,7 @@
                                          Classes="AtomPixFloatingIconButton"
                                          ButtonType="Text"
                                          Width="34" Height="34"
-                                         AutomationProperties.Name="关闭配置面板"
+                                         AutomationProperties.Name="{loc:Loc Shell.Panel.Close}"
                                          Icon="{antdicons:AntDesignIconProvider Kind=CloseOutlined}"
                                          Command="{Binding CloseDrawerCommand}" />
                         </Grid>
@@ -138,7 +138,7 @@
         </Grid>
 
         <Border x:Name="SettingsTitleBarSeparator"
-                AutomationProperties.Name="设置页面标题栏分割线"
+                AutomationProperties.Name="{loc:Loc Shell.Settings.Separator}"
                 Height="1"
                 VerticalAlignment="Top"
                 Background="{atom:SharedTokenResource ColorBorderSecondary}"
@@ -147,7 +147,7 @@
                 ZIndex="90" />
 
         <atom:Dialog x:Name="BatchResultDialog"
-                     AutomationProperties.Name="批量处理结果详情"
+                     AutomationProperties.Name="{loc:Loc Shell.Batch.ResultDetails}"
                      IsModal="True"
                      IsClosable="True"
                      IsResizable="False"
@@ -157,7 +157,7 @@
                      DialogHostType="Overlay"
                      HorizontalStartupLocation="Center"
                      VerticalStartupLocation="Center"
-                     Title="批量处理结果"
+                     Title="{loc:Loc Shell.Batch.ResultTitle}"
                      HostWidth="720"
                      HostHeight="600" />
     </Grid>

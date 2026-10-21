@@ -382,6 +382,49 @@ public sealed class InfrastructureContractTests : IDisposable
         Assert.EndsWith("AtomPix", provider.AppDataDirectory.Value);
         Assert.EndsWith("AtomPix", provider.TempDirectory.Value);
     }
+
+    [Fact]
+    public void App_path_provider_honors_explicit_absolute_environment_overrides()
+    {
+        var originalAppData = Environment.GetEnvironmentVariable(AppPathProvider.AppDataDirectoryEnvironmentVariable);
+        var originalTemp = Environment.GetEnvironmentVariable(AppPathProvider.TempDirectoryEnvironmentVariable);
+        var appData = Path.Combine(_root, "process-appdata");
+        var temp = Path.Combine(_root, "process-temp");
+        try
+        {
+            Environment.SetEnvironmentVariable(AppPathProvider.AppDataDirectoryEnvironmentVariable, appData);
+            Environment.SetEnvironmentVariable(AppPathProvider.TempDirectoryEnvironmentVariable, temp);
+
+            var provider = new AppPathProvider();
+
+            Assert.Equal(Path.GetFullPath(appData), provider.AppDataDirectory.Value);
+            Assert.Equal(Path.GetFullPath(temp), provider.TempDirectory.Value);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(AppPathProvider.AppDataDirectoryEnvironmentVariable, originalAppData);
+            Environment.SetEnvironmentVariable(AppPathProvider.TempDirectoryEnvironmentVariable, originalTemp);
+        }
+    }
+
+    [Fact]
+    public void App_path_provider_rejects_relative_environment_overrides()
+    {
+        var original = Environment.GetEnvironmentVariable(AppPathProvider.AppDataDirectoryEnvironmentVariable);
+        try
+        {
+            Environment.SetEnvironmentVariable(AppPathProvider.AppDataDirectoryEnvironmentVariable, "relative-path");
+
+            var error = Assert.Throws<InvalidOperationException>(() => new AppPathProvider());
+
+            Assert.Contains(AppPathProvider.AppDataDirectoryEnvironmentVariable, error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(AppPathProvider.AppDataDirectoryEnvironmentVariable, original);
+        }
+    }
+
     [Fact]
     public void File_system_normalizes_extension()
     {

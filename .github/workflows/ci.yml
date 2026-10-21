@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -48,6 +50,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -85,6 +89,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -99,6 +105,10 @@ jobs:
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: ./eng/windows-ui-automation.ps1
+      - name: Windows published functional matrix
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: ./eng/windows-published-functional-test.ps1
       - name: Linux startup smoke test under Xvfb
         if: matrix.rid == 'linux-x64'
         shell: bash
@@ -112,4 +122,11 @@ jobs:
           name: AtomPix-${{ matrix.rid }}
           path: |
             .artifacts/packages/*
+          if-no-files-found: error
+      - name: Upload published functional evidence
+        if: always() && matrix.rid == 'win-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-functional-${{ github.run_number }}
+          path: .artifacts/published-functional
           if-no-files-found: error

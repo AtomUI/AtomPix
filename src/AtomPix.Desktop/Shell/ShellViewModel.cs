@@ -4,26 +4,41 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using AtomPix.Core.Jobs;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Composition;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Desktop.ViewModels;
 using AtomPix.Workflows.Images;
+using AtomUI.City.Presentation;
 
-public sealed class ShellViewModel : ObservableObject, IDisposable
+public enum PrimaryWorkspaceKind
 {
-    private readonly DesktopNavigationCoordinator _navigation;
-    private readonly HomePageViewModel _home;
+    Home,
+    Browser,
+    Settings,
+}
+
+public sealed class ShellViewModel : ViewModelBase
+{
+    private readonly IDesktopNavigationIntentSource _navigation;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
+    private readonly IDesktopEntryViewModelFactory _entryFactory;
+    private HomePageViewModel? _home;
     private readonly ImageBrowserViewModel _browser;
     private readonly CompressionEditorViewModel _compress;
     private readonly ConversionEditorViewModel _convert;
     private readonly ResizeEditorViewModel _resize;
     private readonly CropEditorViewModel _crop;
     private readonly BatchTaskViewModel _batch;
-    private readonly SettingsPageViewModel _settings;
+    private SettingsPageViewModel? _settings;
     private readonly IDesktopDialogService _dialogs;
     private readonly IDesktopFeedbackService _feedback;
-    private object _currentPage;
-    private object _pageBeforeSettings;
+    private readonly IAtomPixLocalizedText _text;
+    private readonly AtomPixCityNavigator? _cityNavigator;
+    private readonly IUiCommandFactory _commandFactory;
+    private PrimaryWorkspaceKind _primaryWorkspace = PrimaryWorkspaceKind.Home;
+    private PrimaryWorkspaceKind _workspaceBeforeSettings = PrimaryWorkspaceKind.Home;
     private object? _drawerContent;
     private DesktopRoute _currentRoute = DesktopRoute.Browse;
     private DesktopRoute _routeBeforeSettings = DesktopRoute.Browse;
@@ -36,45 +51,56 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     private bool _isNavigationPending;
     private int _navigationRevision;
     private ToolDrawerSessionViewModel? _toolSession;
+    private ViewModelCompositionLease? _compositionRoot;
+    private ViewModelCompositionLease? _toolComposition;
 
     public ShellViewModel(
-        DesktopNavigationCoordinator navigation,
-        HomePageViewModel home,
+        IDesktopNavigationIntentSource navigation,
+        IDesktopForegroundTaskGate foregroundTasks,
+        IDesktopEntryViewModelFactory entryFactory,
         ImageBrowserViewModel browser,
         CompressionEditorViewModel compress,
         ConversionEditorViewModel convert,
         ResizeEditorViewModel resize,
         CropEditorViewModel crop,
         BatchTaskViewModel batch,
-        SettingsPageViewModel settings,
         IDesktopDialogService dialogs,
-        IDesktopFeedbackService feedback)
+        IDesktopFeedbackService feedback,
+        IAtomPixLocalizedText text,
+        AtomPixCityNavigator? cityNavigator = null,
+        IUiCommandFactory? commandFactory = null)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        _home = home ?? throw new ArgumentNullException(nameof(home));
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
+        _entryFactory = entryFactory ?? throw new ArgumentNullException(nameof(entryFactory));
         _browser = browser ?? throw new ArgumentNullException(nameof(browser));
         _compress = compress ?? throw new ArgumentNullException(nameof(compress));
         _convert = convert ?? throw new ArgumentNullException(nameof(convert));
         _resize = resize ?? throw new ArgumentNullException(nameof(resize));
         _crop = crop ?? throw new ArgumentNullException(nameof(crop));
         _batch = batch ?? throw new ArgumentNullException(nameof(batch));
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _feedback = feedback ?? throw new ArgumentNullException(nameof(feedback));
-        _currentPage = _home;
-        _pageBeforeSettings = _home;
-
-        NavigateCommand = new RelayCommand<DesktopRoute>(route => _ = NavigateAsync(route), CanNavigateTo);
-        CloseDrawerCommand = new RelayCommand<object?>(_ => CloseToolDrawer(), _ => !IsForegroundTaskActive);
-        CloseSettingsCommand = new RelayCommand<object?>(_ => _ = CloseSettingsPageAsync(), _ => IsSettingsOpen && !IsForegroundTaskActive);
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        _cityNavigator = cityNavigator;
+        _commandFactory = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        NavigateCommand = _commandFactory.CreateAsync<DesktopRoute>(
+            (route, _) => NavigateAsync(route),
+            CanNavigateTo,
+            activationOwner: activationOwner);
+        CloseDrawerCommand = _commandFactory.Create(CloseToolDrawer, () => !IsForegroundTaskActive);
+        CloseSettingsCommand = _commandFactory.CreateAsync(
+            _ => CloseSettingsPageAsync(),
+            () => IsSettingsOpen && !IsForegroundTaskActive,
+            activationOwner: activationOwner);
 
         _navigation.NavigationRequested += HandleNavigationRequested;
-        _navigation.NavigationLockChanged += HandleNavigationLockChanged;
+        _foregroundTasks.ForegroundTaskStateChanged += HandleForegroundTaskStateChanged;
         _batch.Items.CollectionChanged += HandleBatchItemsChanged;
         _batch.PropertyChanged += HandleBatchPropertyChanged;
         _batch.RecoveryDraftCreated += HandleBatchRecoveryDraftCreated;
         _browser.PropertyChanged += HandleBrowserPropertyChanged;
-        _settings.CloseRequested += HandleSettingsCloseRequested;
         SubscribeOperationFeedback(_compress.ResultFeedback);
         SubscribeOperationFeedback(_convert.ResultFeedback);
         SubscribeOperationFeedback(_resize.ResultFeedback);
@@ -82,9 +108,22 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     }
 
     public string ApplicationTitle => "AtomPix";
-    public HomePageViewModel Home => _home;
+    public HomePageViewModel Home => _home ??= _entryFactory.CreateHome();
     public ImageBrowserViewModel Browser => _browser;
-    public SettingsPageViewModel Settings => _settings;
+    public SettingsPageViewModel Settings
+    {
+        get
+        {
+            if (_settings is not null)
+            {
+                return _settings;
+            }
+
+            _settings = _entryFactory.CreateSettings();
+            _settings.CloseRequested += HandleSettingsCloseRequested;
+            return _settings;
+        }
+    }
     public CropEditorViewModel Crop => _crop;
     public BatchTaskViewModel BatchResultDetails => _batch;
 
@@ -106,12 +145,12 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    public object CurrentPage
+    public PrimaryWorkspaceKind PrimaryWorkspace
     {
-        get => _currentPage;
+        get => _primaryWorkspace;
         private set
         {
-            if (!SetProperty(ref _currentPage, value)) return;
+            if (!SetProperty(ref _primaryWorkspace, value)) return;
             OnPropertyChanged(nameof(IsHomeVisible));
             OnPropertyChanged(nameof(IsBrowserVisible));
             OnPropertyChanged(nameof(IsSettingsOpen));
@@ -148,6 +187,8 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
             if (value) return;
             DrawerContent = null;
             DrawerTitle = string.Empty;
+            var toolComposition = Interlocked.Exchange(ref _toolComposition, null);
+            toolComposition?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _toolSession?.Dispose();
             _toolSession = null;
             _browser.SetCropMode(false);
@@ -161,13 +202,13 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _isBatchResultOpen, value);
     }
 
-    public bool IsHomeVisible => ReferenceEquals(CurrentPage, _home);
-    public bool IsBrowserVisible => ReferenceEquals(CurrentPage, _browser);
+    public bool IsHomeVisible => PrimaryWorkspace == PrimaryWorkspaceKind.Home;
+    public bool IsBrowserVisible => PrimaryWorkspace == PrimaryWorkspaceKind.Browser;
     public bool IsCompressActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Compress;
     public bool IsConvertActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Convert;
     public bool IsCropActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Crop;
     public bool IsResizeActive => IsToolDrawerOpen && CurrentRoute == DesktopRoute.Resize;
-    public bool IsSettingsOpen => CurrentRoute == DesktopRoute.Settings && ReferenceEquals(CurrentPage, _settings);
+    public bool IsSettingsOpen => PrimaryWorkspace == PrimaryWorkspaceKind.Settings;
     public bool IsSettingsActive => IsSettingsOpen;
     public bool IsPrimaryNavigationVisible => !IsSettingsOpen;
     public bool IsToolPanelVisible => IsToolDrawerOpen && !IsSettingsOpen;
@@ -195,7 +236,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     private bool CanNavigateTo(DesktopRoute route)
     {
         if (!CanNavigate) return false;
-        if (!ReferenceEquals(CurrentPage, _browser)) return true;
+        if (!IsBrowserVisible) return true;
         return route switch
         {
             DesktopRoute.Compress => _browser.CanCompress,
@@ -206,11 +247,11 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         };
     }
 
-    public RelayCommand<DesktopRoute> NavigateCommand { get; }
-    public RelayCommand<object?> CloseDrawerCommand { get; }
-    public RelayCommand<object?> CloseSettingsCommand { get; }
+    public IAsyncRelayCommand<DesktopRoute> NavigateCommand { get; }
+    public IRelayCommand CloseDrawerCommand { get; }
+    public IAsyncRelayCommand CloseSettingsCommand { get; }
 
-    public void SetForegroundTaskActive(bool value) => _navigation.SetNavigationLocked(value);
+    public void SetForegroundTaskActive(bool value) => _foregroundTasks.SetForegroundTaskActive(value);
 
     public void RefreshResultAvailability()
     {
@@ -220,20 +261,51 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void Dispose()
+    internal async Task AttachCompositionAsync(
+        WindowSession session,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (_compositionRoot is not null)
+        {
+            throw new InvalidOperationException("The Shell ViewModel composition is already attached.");
+        }
+
+        var root = await session.ViewModels.AttachRootAsync(
+            "shell",
+            ViewModelLease.Borrowed(this),
+            cancellationToken);
+        try
+        {
+            await root.AttachChildAsync("compress-editor", ViewModelLease.Borrowed(_compress), cancellationToken);
+            await root.AttachChildAsync("convert-editor", ViewModelLease.Borrowed(_convert), cancellationToken);
+            await root.AttachChildAsync("resize-editor", ViewModelLease.Borrowed(_resize), cancellationToken);
+            await root.AttachChildAsync("crop-editor", ViewModelLease.Borrowed(_crop), cancellationToken);
+            await root.AttachChildAsync("batch-task", ViewModelLease.Borrowed(_batch), cancellationToken);
+            _compositionRoot = root;
+        }
+        catch
+        {
+            await root.DisposeAsync();
+            throw;
+        }
+    }
+
+    protected override void OnDisposed()
     {
         _navigation.NavigationRequested -= HandleNavigationRequested;
-        _navigation.NavigationLockChanged -= HandleNavigationLockChanged;
+        _foregroundTasks.ForegroundTaskStateChanged -= HandleForegroundTaskStateChanged;
         _batch.Items.CollectionChanged -= HandleBatchItemsChanged;
         _batch.PropertyChanged -= HandleBatchPropertyChanged;
         _batch.RecoveryDraftCreated -= HandleBatchRecoveryDraftCreated;
         _browser.PropertyChanged -= HandleBrowserPropertyChanged;
-        _settings.CloseRequested -= HandleSettingsCloseRequested;
         UnsubscribeOperationFeedback(_compress.ResultFeedback);
         UnsubscribeOperationFeedback(_convert.ResultFeedback);
         UnsubscribeOperationFeedback(_resize.ResultFeedback);
         UnsubscribeOperationFeedback(_crop.ResultFeedback);
         _toolSession?.Dispose();
+        _toolComposition = null;
+        _compositionRoot = null;
         DetachBatchItems(_batch.Items);
         _browser.Dispose();
         _compress.Dispose();
@@ -241,7 +313,8 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         _resize.Dispose();
         _crop.Dispose();
         _batch.Dispose();
-        _settings.Dispose();
+        ReleaseEntryReference(PrimaryWorkspaceKind.Home, dispose: true);
+        ReleaseEntryReference(PrimaryWorkspaceKind.Settings, dispose: true);
     }
 
     public async Task<bool> TryCloseAsync(CancellationToken cancellationToken = default)
@@ -249,10 +322,10 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         if (IsForegroundTaskActive)
         {
             var cancel = await _dialogs.ConfirmAsync(
-                "取消任务并退出？",
-                "AtomPix 会请求取消当前任务，保留已经完成并成功提交的输出，然后等待任务进入终态再关闭。",
-                "取消任务并退出",
-                "继续处理",
+                _text.GetString("Shell.Dialog.ExitTask.Title"),
+                _text.GetString("Shell.Dialog.ExitTask.Message"),
+                _text.GetString("Shell.Dialog.ExitTask.Confirm"),
+                _text.GetString("Shell.Dialog.ExitTask.Continue"),
                 cancellationToken);
             if (!cancel) return false;
 
@@ -261,7 +334,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
             await WaitForForegroundTaskAsync(cancellationToken);
         }
 
-        return await _settings.TryLeaveAsync(cancellationToken);
+        return _settings is null || await _settings.TryLeaveAsync(cancellationToken);
     }
 
     private async Task NavigateAsync(DesktopRoute route)
@@ -297,13 +370,13 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
             if (!isLocked) completion.TrySetResult();
         }
 
-        _navigation.NavigationLockChanged += Handler;
+        _foregroundTasks.ForegroundTaskStateChanged += Handler;
         return AwaitAndDetachAsync();
 
         async Task AwaitAndDetachAsync()
         {
             try { await completion.Task.WaitAsync(cancellationToken); }
-            finally { _navigation.NavigationLockChanged -= Handler; }
+            finally { _foregroundTasks.ForegroundTaskStateChanged -= Handler; }
         }
     }
 
@@ -312,8 +385,10 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
 
     private async Task HandleNavigationRequestedAsync(DesktopNavigationRequest request)
     {
+        var previousWorkspace = PrimaryWorkspace;
+        var previousRoute = CurrentRoute;
         if (IsSettingsOpen && request.Route != DesktopRoute.Settings
-            && !await _settings.TryLeaveAsync())
+            && (_settings is null || !await _settings.TryLeaveAsync()))
         {
             return;
         }
@@ -323,7 +398,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
             case DesktopRoute.Browse when request.Context is BrowserNavigationContext browserContext:
                 CloseToolDrawer();
                 CurrentRoute = DesktopRoute.Browse;
-                CurrentPage = _browser;
+                PrimaryWorkspace = PrimaryWorkspaceKind.Browser;
                 await _browser.LoadAsync(browserContext);
                 break;
 
@@ -331,19 +406,19 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 CloseToolDrawer();
                 _browser.EndSession();
                 CurrentRoute = DesktopRoute.Browse;
-                CurrentPage = _home;
+                PrimaryWorkspace = PrimaryWorkspaceKind.Home;
                 break;
 
             case DesktopRoute.Settings:
                 _routeBeforeSettings = CurrentRoute;
-                _pageBeforeSettings = CurrentPage;
-                await _settings.LoadAsync();
+                _workspaceBeforeSettings = PrimaryWorkspace;
+                await Settings.LoadAsync();
                 CurrentRoute = DesktopRoute.Settings;
-                CurrentPage = _settings;
+                PrimaryWorkspace = PrimaryWorkspaceKind.Settings;
                 break;
 
             case DesktopRoute.Batch:
-                _feedback.ShowMessage("批量处理请从压缩、转换或调整尺寸面板直接开始。", DesktopFeedbackSeverity.Information);
+                _feedback.ShowMessage(_text.GetString("Shell.Batch.StartHint"), DesktopFeedbackSeverity.Information);
                 break;
 
             case DesktopRoute.Compress or DesktopRoute.Convert or DesktopRoute.Resize or DesktopRoute.Crop:
@@ -351,7 +426,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 {
                     CloseToolDrawer();
                     CurrentRoute = DesktopRoute.Browse;
-                    CurrentPage = _browser;
+                    PrimaryWorkspace = PrimaryWorkspaceKind.Browser;
                     await _browser.LoadAsync(browserToolContext.Browser);
                     if (_browser.TryCreateCurrentContext(out var loadedContext) && CanNavigateTo(request.Route))
                     {
@@ -369,6 +444,31 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         }
 
         RefreshResultAvailability();
+        var presentationChanged = previousWorkspace != PrimaryWorkspace
+            || request.Context is BrowserNavigationContext or BrowserToolNavigationContext;
+        if (_cityNavigator is { IsAttached: true } && presentationChanged)
+        {
+            var presented = await _cityNavigator.PresentAsync(request, ResolvePrimaryViewModel());
+            if (!presented)
+            {
+                ReleaseCandidateEntryReference(previousWorkspace, PrimaryWorkspace);
+                PrimaryWorkspace = previousWorkspace;
+                CurrentRoute = previousRoute;
+                _feedback.ShowMessage(
+                    _text.GetString("Shell.Navigation.PresentationFailed"),
+                    DesktopFeedbackSeverity.Error);
+                return;
+            }
+
+            if (previousWorkspace != PrimaryWorkspace)
+            {
+                ReleaseEntryReference(previousWorkspace, dispose: false);
+            }
+        }
+        else if (previousWorkspace != PrimaryWorkspace)
+        {
+            ReleaseEntryReference(previousWorkspace, dispose: true);
+        }
         NavigationRevision++;
     }
 
@@ -378,10 +478,33 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     private async Task CloseSettingsPageAsync()
     {
         if (!IsSettingsOpen || IsForegroundTaskActive) return;
-        if (!await _settings.TryLeaveAsync()) return;
+        if (_settings is null || !await _settings.TryLeaveAsync()) return;
 
-        CurrentPage = _pageBeforeSettings;
+        PrimaryWorkspace = _workspaceBeforeSettings;
         CurrentRoute = _routeBeforeSettings;
+        if (_cityNavigator is { IsAttached: true })
+        {
+            var presented = PrimaryWorkspace == PrimaryWorkspaceKind.Browser
+                ? await _cityNavigator.ResumeBrowserAsync(_browser)
+                : await _cityNavigator.PresentAsync(
+                    new DesktopNavigationRequest(DesktopRoute.Browse),
+                    Home);
+            if (!presented)
+            {
+                ReleaseCandidateEntryReference(
+                    PrimaryWorkspaceKind.Settings,
+                    PrimaryWorkspace);
+                PrimaryWorkspace = PrimaryWorkspaceKind.Settings;
+                CurrentRoute = DesktopRoute.Settings;
+                return;
+            }
+
+            ReleaseEntryReference(PrimaryWorkspaceKind.Settings, dispose: false);
+        }
+        else
+        {
+            ReleaseEntryReference(PrimaryWorkspaceKind.Settings, dispose: true);
+        }
         RefreshResultAvailability();
         NavigationRevision++;
     }
@@ -390,13 +513,22 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     {
         if (context is null && !_browser.TryCreateCurrentContext(out context))
         {
+            if (!IsHomeVisible)
+            {
+                await HandleNavigationRequestedAsync(new DesktopNavigationRequest(DesktopRoute.Browse));
+                if (!IsHomeVisible)
+                {
+                    return;
+                }
+            }
+
             TriggerHomePicker(route);
             return;
         }
 
-        if (!ReferenceEquals(CurrentPage, _browser))
+        if (!IsBrowserVisible)
         {
-            CurrentPage = _browser;
+            PrimaryWorkspace = PrimaryWorkspaceKind.Browser;
             var item = new BrowserImageCandidate(context!.InputPath, Path.GetFileName(context.InputPath.Value));
             await _browser.LoadAsync(new BrowserNavigationContext(null, [item], context.InputPath, context.Probe));
         }
@@ -426,6 +558,11 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         _browser.SetCropMode(route == DesktopRoute.Crop, route == DesktopRoute.Crop ? _crop : null);
 
         _browser.ResetBatchStatuses();
+        var previousToolComposition = Interlocked.Exchange(ref _toolComposition, null);
+        if (previousToolComposition is not null)
+        {
+            await previousToolComposition.DisposeAsync();
+        }
         _toolSession?.Dispose();
         _toolSession = null;
         if (route != DesktopRoute.Crop)
@@ -441,7 +578,15 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 _browser.Items.Count,
                 cancellationToken => PrepareBatchForToolAsync(route, editorContent, cancellationToken),
                 () => SynchronizeSingleDraftFromBatch(editorContent),
-                _navigation);
+                _foregroundTasks,
+                _text,
+                _commandFactory);
+            if (_compositionRoot is not null)
+            {
+                _toolComposition = await _compositionRoot.AttachChildAsync(
+                    "tool-drawer",
+                    ViewModelLease.Borrowed(_toolSession));
+            }
             content = _toolSession;
         }
         OpenDrawer(route, BuildDrawerTitle(route), content);
@@ -473,21 +618,21 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         return false;
     }
 
-    private static string ResolveBatchStartBlockReason(BatchTaskViewModel batch)
+    private string ResolveBatchStartBlockReason(BatchTaskViewModel batch)
     {
-        if (!batch.HasInputs) return "当前图片集合为空，无法开始批量处理。";
-        if (batch.IsAppending) return "正在追加或读取图片，请稍后再试。";
-        if (batch.IsProcessing) return "已有批量任务正在运行。";
-        if (batch.HasResult) return "请先结束当前批量结果上下文，再开始新任务。";
-        return "批量任务尚未准备完成，请重试。";
+        if (!batch.HasInputs) return _text.GetString("Shell.Batch.Block.Empty");
+        if (batch.IsAppending) return _text.GetString("Shell.Batch.Block.Appending");
+        if (batch.IsProcessing) return _text.GetString("Shell.Batch.Block.Processing");
+        if (batch.HasResult) return _text.GetString("Shell.Batch.Block.ResultOpen");
+        return _text.GetString("Shell.Batch.Block.NotReady");
     }
 
-    private static string ResolveBatchDraftError(object editor) => editor switch
+    private string ResolveBatchDraftError(object editor) => editor switch
     {
-        CompressionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? "当前压缩配置无效。",
-        ConversionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? "当前转换配置无效。",
-        ResizeEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? "当前尺寸配置无效。",
-        _ => "当前批量处理配置无效。"
+        CompressionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? _text.GetString("Shell.Batch.Invalid.Compression"),
+        ConversionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? _text.GetString("Shell.Batch.Invalid.Conversion"),
+        ResizeEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? _text.GetString("Shell.Batch.Invalid.Resize"),
+        _ => _text.GetString("Shell.Batch.Invalid.Default")
     };
 
     internal static bool TryCaptureBatchDraft(object editor, BatchTaskViewModel batch, out Action? applyDraft)
@@ -582,12 +727,13 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
 
     private void TriggerHomePicker(DesktopRoute route)
     {
+        var home = Home;
         var command = route switch
         {
-            DesktopRoute.Compress => _home.OpenForCompressCommand,
-            DesktopRoute.Convert => _home.OpenForConvertCommand,
-            DesktopRoute.Resize => _home.OpenForResizeCommand,
-            DesktopRoute.Crop => _home.OpenForCropCommand,
+            DesktopRoute.Compress => home.OpenForCompressCommand,
+            DesktopRoute.Convert => home.OpenForConvertCommand,
+            DesktopRoute.Resize => home.OpenForResizeCommand,
+            DesktopRoute.Crop => home.OpenForCropCommand,
             _ => null
         };
         command?.Execute(null);
@@ -607,18 +753,18 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         IsToolDrawerOpen = false;
     }
 
-    private static string GetToolTitle(DesktopRoute route, bool batch) => route switch
+    private string GetToolTitle(DesktopRoute route, bool batch) => route switch
     {
-        DesktopRoute.Compress => batch ? "批量压缩" : "压缩图片",
-        DesktopRoute.Convert => batch ? "批量转换" : "转换格式",
-        DesktopRoute.Resize => batch ? "批量调整尺寸" : "调整尺寸",
-        DesktopRoute.Crop => "裁剪图片",
+        DesktopRoute.Compress => _text.GetString(batch ? "Shell.Title.BatchCompress" : "Shell.Title.Compress"),
+        DesktopRoute.Convert => _text.GetString(batch ? "Shell.Title.BatchConvert" : "Shell.Title.Convert"),
+        DesktopRoute.Resize => _text.GetString(batch ? "Shell.Title.BatchResize" : "Shell.Title.Resize"),
+        DesktopRoute.Crop => _text.GetString("Shell.Title.Crop"),
         _ => string.Empty
     };
 
-    private static string BuildDrawerTitle(DesktopRoute route) => GetToolTitle(route, false);
+    private string BuildDrawerTitle(DesktopRoute route) => GetToolTitle(route, false);
 
-    private void HandleNavigationLockChanged(object? sender, bool isLocked)
+    private void HandleForegroundTaskStateChanged(object? sender, bool isLocked)
     {
         IsForegroundTaskActive = isLocked;
         _browser.SetInteractionLocked(isLocked);
@@ -670,6 +816,49 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         && string.Equals(Path.GetFullPath(left), Path.GetFullPath(right),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
+    private object ResolvePrimaryViewModel() => PrimaryWorkspace switch
+    {
+        PrimaryWorkspaceKind.Home => Home,
+        PrimaryWorkspaceKind.Browser => _browser,
+        PrimaryWorkspaceKind.Settings => Settings,
+        _ => throw new ArgumentOutOfRangeException(nameof(PrimaryWorkspace), PrimaryWorkspace, null),
+    };
+
+    private void ReleaseCandidateEntryReference(
+        PrimaryWorkspaceKind previousWorkspace,
+        PrimaryWorkspaceKind candidateWorkspace)
+    {
+        if (candidateWorkspace != previousWorkspace)
+        {
+            ReleaseEntryReference(candidateWorkspace, dispose: false);
+        }
+    }
+
+    private void ReleaseEntryReference(PrimaryWorkspaceKind workspace, bool dispose)
+    {
+        switch (workspace)
+        {
+            case PrimaryWorkspaceKind.Home:
+                var home = Interlocked.Exchange(ref _home, null);
+                if (dispose)
+                {
+                    home?.Dispose();
+                }
+                break;
+            case PrimaryWorkspaceKind.Settings:
+                var settings = Interlocked.Exchange(ref _settings, null);
+                if (settings is not null)
+                {
+                    settings.CloseRequested -= HandleSettingsCloseRequested;
+                    if (dispose)
+                    {
+                        settings.Dispose();
+                    }
+                }
+                break;
+        }
+    }
+
     private void HandleBatchItemsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         if (args.OldItems is not null) DetachBatchItems(args.OldItems.Cast<BatchItemViewModel>());
@@ -712,14 +901,14 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 : DesktopFeedbackSeverity.Warning;
         var operation = _batch.SelectedTask.Value switch
         {
-            BatchTaskKind.Compress => "批量压缩",
-            BatchTaskKind.Convert => "批量转换",
-            BatchTaskKind.Resize => "批量调整尺寸",
-            _ => "批量处理"
+            BatchTaskKind.Compress => _text.GetString("Shell.Title.BatchCompress"),
+            BatchTaskKind.Convert => _text.GetString("Shell.Title.BatchConvert"),
+            BatchTaskKind.Resize => _text.GetString("Shell.Title.BatchResize"),
+            _ => _text.GetString("Batch.Action.Start")
         };
-        var content = $"{_batch.ResultSummary}{Environment.NewLine}{_batch.ResultSizeChange}{Environment.NewLine}点击查看处理详情";
+        var content = _text.Format("Shell.Batch.Notification.Content", _batch.ResultSummary, _batch.ResultSizeChange);
         _feedback.ShowNotification(new DesktopNotificationRequest(
-            $"{operation}：{_batch.ResultTitle}",
+            _text.Format("Shell.Batch.Notification.Title", operation, _batch.ResultTitle),
             content,
             severity,
             isCleanSuccess ? TimeSpan.FromSeconds(6) : TimeSpan.Zero,
@@ -803,7 +992,7 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
                 ImageJobStatus.Failed => BrowserTaskStatus.Failed,
                 ImageJobStatus.Skipped => BrowserTaskStatus.Skipped,
                 ImageJobStatus.Canceled => BrowserTaskStatus.Canceled,
-                _ when item.StatusText == "不可用" => BrowserTaskStatus.Failed,
+                _ when item.HasError => BrowserTaskStatus.Failed,
                 _ => BrowserTaskStatus.Pending
             };
         _browser.SetBatchStatus(item.Path, status);

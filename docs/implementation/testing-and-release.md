@@ -7,6 +7,8 @@
 > 基线范围：当前文档定义 UI 前置实现阶段的 headless 测试策略、测试轮次、测试项目规划和第一阶段发布验证策略
 >
 > 变更规则：调整测试分层、测试轮次、发布验证口径时，应先更新本文档。
+>
+> 2026-10-21 现行覆盖：City 迁移的发布功能与许可证门禁以第 57 节、[`with-city-engineering.md`](../iterations/features/with-city-engineering.md) 和 [`release-compliance.md`](release-compliance.md) 为准；更早的测试数量均是追加式历史快照。
 
 > 时间语义：第 1–31 节包含 2026-06-26 首轮 Headless 策略和逐轮通过记录；第 32–46 节是后来冻结的目标契约；第 47–50 节记录 2026-08-07 Headless、Desktop 首轮、第一阶段贯通和交互闭环快照。历史记录中出现的内嵌 Resize、`ResizeApplied`、旧 `Saved*` 或 Magick 建目录行为不构成现行规范；冲突时以最新快照及对应模块正式设计为准。
 
@@ -1330,4 +1332,24 @@ macOS/Linux 安装器使用公开仓库 `https://github.com/kusarparlly/AtomUITo
 仓库级 `NuGet.config` 只声明随仓库提交的 `eng/nuget-local` 与 `nuget.org` 两个正式包源。不得把用户目录下的全局包缓存配置成 `fallbackPackageFolders`：全新 GitHub Runner 上该目录可能尚不存在，而 NuGet 会把 fallback 目录当成必须已经存在的包源并以 `NU1301` 终止。全局包缓存的位置和创建由 NuGet 自身管理；CI 可通过临时 `NUGET_PACKAGES` 路径执行冷缓存恢复，以验证构建不依赖开发机缓存。
 
 Headless UI 自动化不得以“动画时长加少量余量”的固定 `Task.Delay` 作为完成条件。GitHub macOS/Linux Runner 会并发执行多个测试程序集，调度延迟可能超过动画余量。涉及滚动、导航和异步布局的断言必须等待可观测的最终状态，并在等待期间推进 Avalonia UI 调度队列；超时只承担防止永久等待的职责，不作为正常同步机制。
+
+## 57. 2026-10-21 City 迁移发布功能与合规门禁
+
+本节是目标合同，尚未实现的条目不得写成已通过。
+
+Windows published functional 测试以 `tests/TestAssets/Images` 为唯一不可变输入源，并新增 manifest 记录 SHA-256、格式、尺寸和透明度。每次运行创建唯一 run root；每个 scenario 拥有独立 input、output、results 和 `LOCALAPPDATA`，所有设置路径从子进程 session 的 AppData 推导。默认执行不依赖历史 `.artifacts/trim-validation/gui-cases-*` 目录。
+
+每个场景必须验证稳定 `AutomationId`、精确输出数量、格式、尺寸、可解码性、临时文件清理和输入 hash 不变；场景名称、实际配置和断言保持一致。进程优先正常关闭，强制结束仅作测试 cleanup。JSON/trace 无论成败均上传；失败增加截图、隔离设置、case 输入输出和进程诊断。Windows CI/Release 在 publish、启动 smoke 和基础真实进程 UI smoke 后运行全部 case，失败阻断 job；`-Only` 只用于本地诊断。
+
+City 迁移新增代表链路：
+
+- Browser 打开工具并修改草稿，进入 Settings 再返回，集合、当前项、ActiveTool、工具草稿和必要 viewport 检查点保持等价；旧 View/scope 已释放，新 scope 正常激活。
+- Router 成功而 View create/bind/activate/outlet commit 失败时，按 commit receipt 安全恢复；迟到补偿不得撤销后续导航。
+- 设置加载 `Faulted` 后主窗口和显式参数功能继续可用，重试/确认重置恢复；保存遵守 Store-first/State-second。
+- close denial 后窗口仍可操作，授权关闭只发生一次。
+- 四项单张、三项批量和输出策略继续由真实发布 EXE、native picker/UIA 和文件系统验证。
+
+内部阶段的穷举故障注入放在 Headless/集成测试，发布 UIA 只保留必须跨 EXE、原生 UI 和文件系统验证的代表链路。
+
+发布合规同时从每个 RID 的真实 publish closure 生成 SBOM、third-party notices 和源码索引。正式包必须移除未经明确再分发授权的 Alibaba Sans，移除/替换 `Svg.Custom` MS-PL 依赖，归档自有 AtomUI/City/Labs 精确快照的 GPLv3+ 替代授权，并随 Magick.NET 提供完整 Notice、精确 Native 组件源码和可用的重建说明。详细失败条件见 [`release-compliance.md`](release-compliance.md)。
 

@@ -5,11 +5,13 @@ using AtomPix.Core.Errors;
 using AtomPix.Core.Output;
 using AtomPix.Core.Resize;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
+using AtomUI.City.Presentation;
 
 public enum ResizeDraftMode
 {
@@ -23,7 +25,7 @@ public enum PixelDimensionAnchor
     Height
 }
 
-public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class ResizeEditorViewModel : ViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
@@ -34,7 +36,8 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly ResizeImageWorkflow _resize;
     private readonly IImageProcessor _imageProcessor;
-    private readonly DesktopNavigationCoordinator _taskGate;
+    private readonly IDesktopForegroundTaskGate _taskGate;
+    private readonly IAtomPixLocalizedText _text;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -66,7 +69,9 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         LoadSettingsWorkflow loadSettings,
         ResizeImageWorkflow resize,
         IImageProcessor imageProcessor,
-        DesktopNavigationCoordinator taskGate)
+        IDesktopForegroundTaskGate taskGate,
+        IAtomPixLocalizedText text,
+        IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
@@ -78,25 +83,29 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         _resize = resize ?? throw new ArgumentNullException(nameof(resize));
         _imageProcessor = imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor));
         _taskGate = taskGate ?? throw new ArgumentNullException(nameof(taskGate));
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning);
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        ResultFeedback = new OperationResultFeedback(_text);
+        var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
+        Output = new OutputPolicyEditorViewModel(_picker, _text, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
 
         ResizeModes =
         [
-            new DesktopChoiceOption<ResizeDraftMode>("按像素", ResizeDraftMode.Pixel),
-            new DesktopChoiceOption<ResizeDraftMode>("按百分比", ResizeDraftMode.Percentage)
+            new DesktopChoiceOption<ResizeDraftMode>(_text.GetString("Common.Option.Resize.Pixel"), ResizeDraftMode.Pixel),
+            new DesktopChoiceOption<ResizeDraftMode>(_text.GetString("Common.Option.Resize.Percentage"), ResizeDraftMode.Percentage)
         ];
         _selectedMode = ResizeModes[0];
 
-        SelectImageCommand = new AsyncCommand(SelectImageAsync, () => !IsProcessing);
-        StartCommand = new AsyncCommand(StartAsync, () => IsContentReady && !IsProcessing);
-        CancelCommand = new RelayCommand<object?>(_ => _executionCancellation?.Cancel(), _ => IsProcessing);
-        OpenOutputCommand = new AsyncCommand(OpenOutputAsync, () => IsSuccess);
-        CopyDiagnosticIdCommand = new AsyncCommand(CopyDiagnosticIdAsync, () => HasDiagnosticId);
+        SelectImageCommand = commands.CreateAsync(SelectImageAsync, () => !IsProcessing, activationOwner: activationOwner);
+        StartCommand = commands.CreateAsync(StartAsync, () => IsContentReady && !IsProcessing, activationOwner: activationOwner);
+        CancelCommand = commands.Create(() => _executionCancellation?.Cancel(), () => IsProcessing);
+        OpenOutputCommand = commands.CreateAsync(OpenOutputAsync, () => IsSuccess, activationOwner: activationOwner);
+        CopyDiagnosticIdCommand = commands.CreateAsync(CopyDiagnosticIdAsync, () => HasDiagnosticId, activationOwner: activationOwner);
     }
 
     public IReadOnlyList<DesktopChoiceOption<ResizeDraftMode>> ResizeModes { get; }
     public OutputPolicyEditorViewModel Output { get; }
-    public OperationResultFeedback ResultFeedback { get; } = new();
+    public OperationResultFeedback ResultFeedback { get; }
 
     public DesktopContentState ContentState
     {
@@ -232,7 +241,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
 
     public bool IsProcessing => ExecutionState == DesktopExecutionState.Processing;
 
-    public string StartActionLabel => "单张处理";
+    public string StartActionLabel => _text.GetString("Tools.Action.StartSingle");
 
     System.Windows.Input.ICommand IToolEditorActions.StartActionCommand => StartCommand;
 
@@ -303,10 +312,10 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
 
     public string ResultTitle => _lastResult?.Status switch
     {
-        ImageJobStatus.Succeeded => "调整尺寸完成",
-        ImageJobStatus.Canceled => "任务已取消",
-        ImageJobStatus.Skipped => "未生成新文件",
-        ImageJobStatus.Failed => "调整尺寸失败",
+        ImageJobStatus.Succeeded => _text.GetString("Tools.Resize.Status.Succeeded"),
+        ImageJobStatus.Canceled => _text.GetString("Common.Status.TaskCanceled"),
+        ImageJobStatus.Skipped => _text.GetString("Common.Status.NoOutput"),
+        ImageJobStatus.Failed => _text.GetString("Tools.Resize.Status.Failed"),
         _ => string.Empty
     };
 
@@ -314,9 +323,14 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
     public bool IsResultOutputAvailable => IsSuccess && _outputGuard.FileExists(_lastResult?.OutputPath);
     public bool IsResultOutputMissing => IsSuccess && _lastResult?.OutputPath is not null && !IsResultOutputAvailable;
 
-    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult);
+    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult, _text);
 
-    public string EncodingSummary => $"保留原格式 · 有损质量 {_encodingPolicy.LossyQuality.Value} · {(_encodingPolicy.MetadataPolicy == AtomPix.Core.Compression.MetadataPolicy.Remove ? "移除拍摄信息与位置数据" : "保留拍摄信息与位置数据")} · ICC 保留";
+    public string EncodingSummary => _text.Format(
+        "Tools.Resize.EncodingSummary",
+        _encodingPolicy.LossyQuality.Value,
+        _text.GetString(_encodingPolicy.MetadataPolicy == AtomPix.Core.Compression.MetadataPolicy.Remove
+            ? "Common.Metadata.RemoveLocation"
+            : "Common.Metadata.PreserveLocation"));
     public SameFormatEncodingPolicy EncodingPolicy => _encodingPolicy;
 
     public string? DiagnosticId
@@ -338,15 +352,15 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         private set => SetProperty(ref _resultDetails, value);
     }
 
-    public AsyncCommand SelectImageCommand { get; }
+    public IAsyncRelayCommand SelectImageCommand { get; }
 
-    public AsyncCommand StartCommand { get; }
+    public IAsyncRelayCommand StartCommand { get; }
 
-    public RelayCommand<object?> CancelCommand { get; }
+    public IRelayCommand CancelCommand { get; }
 
-    public AsyncCommand OpenOutputCommand { get; }
+    public IAsyncRelayCommand OpenOutputCommand { get; }
 
-    public AsyncCommand CopyDiagnosticIdCommand { get; }
+    public IAsyncRelayCommand CopyDiagnosticIdCommand { get; }
 
     public void RequestCancellation() => _executionCancellation?.Cancel();
 
@@ -437,7 +451,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         NotifyResult();
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         CancelLoad();
         _executionCancellation?.Cancel();
@@ -454,7 +468,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
 
         if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1)
         {
-            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage);
+            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage, _text);
             return;
         }
 
@@ -474,18 +488,18 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         if (_inputPath is null) return;
         if (!TryBuildPolicy(out var policy, out _, out var policyError))
         {
-            ResultFeedback.ShowWarning(policyError ?? "当前尺寸配置无效。");
+            ResultFeedback.ShowWarning(policyError ?? _text.GetString("Tools.Resize.Validation.InvalidProfile"));
             return;
         }
         if (!Output.TryBuild(out var outputPolicy, out var outputError))
         {
-            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
+            ResultFeedback.ShowWarning(outputError ?? _text.GetString("Common.Validation.Output.Invalid"));
             return;
         }
 
         if (!_taskGate.TryBeginForegroundTask())
         {
-            ErrorMessage = "已有任务正在运行，请等待其结束。";
+            ErrorMessage = _text.GetString("Common.Error.ForegroundTaskBusy");
             return;
         }
 
@@ -529,7 +543,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
             }
             else
             {
-                ResultFeedback.Show(value.JobResult, value.OutputDisposition, "调整尺寸完成", ResultDetails);
+                ResultFeedback.Show(value.JobResult, value.OutputDisposition, _text.GetString("Tools.Resize.Status.Succeeded"), ResultDetails);
             }
 
             NotifyResult();
@@ -544,15 +558,15 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
     private async Task HandleSourceConflictAsync(CancellationToken cancellationToken)
     {
         var useAutoRename = await _dialogs.ConfirmAsync(
-            "无法覆盖原始图片",
-            "当前输出位置和文件名会覆盖源文件。AtomPix 禁止原地覆盖输入图片。",
-            "改为自动重命名",
-            "返回修改",
+            _text.GetString("Common.Dialog.SourceOverwrite.Title"),
+            _text.GetString("Common.Dialog.SourceOverwrite.Message"),
+            _text.GetString("Common.Action.UseAutoRename"),
+            _text.GetString("Common.Action.BackToEdit"),
             cancellationToken);
         if (useAutoRename)
         {
             Output.SetOverwrite(OverwritePolicy.AutoRename);
-            ErrorMessage = "已改为自动重命名，请确认后重新开始。";
+            ErrorMessage = _text.GetString("Common.Message.AutoRenameApplied");
         }
         else
         {
@@ -565,13 +579,13 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         if (!EnsureResultOutputAvailable()) return;
         var directory = Path.GetDirectoryName(ResultOutputPath);
         if (string.IsNullOrWhiteSpace(directory) || !await _launcher.OpenDirectoryAsync(directory, cancellationToken))
-            ErrorMessage = "无法打开输出目录，文件可能已被移动。";
+            ErrorMessage = _text.GetString("Common.Error.OpenOutputDirectoryFailed");
     }
 
     private bool EnsureResultOutputAvailable()
     {
         if (IsResultOutputAvailable) return true;
-        ErrorMessage = "输出文件已不存在，无法继续操作。请重新处理原图片。";
+        ErrorMessage = _text.GetString("Common.Error.OutputMissingReprocess");
         NotifyResult();
         return false;
     }
@@ -594,14 +608,14 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         error = null;
         if (_probe is null)
         {
-            error = "请先选择图片。";
+            error = _text.GetString("Common.Validation.SelectImageFirst");
             return false;
         }
 
         var capability = _imageProcessor.Capabilities.Resize;
         if (_probe.IsAnimated || _probe.FrameCount != 1 || capability is null || !capability.SupportedSameFormatFormats.Contains(_probe.Format))
         {
-            error = "当前格式不能直接调整尺寸，请先转换为 JPEG、PNG、BMP 或单帧 WebP。";
+            error = _text.GetString("Tools.Resize.Validation.UnsupportedFormat");
             return false;
         }
 
@@ -622,15 +636,15 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
         catch (Exception exception) when (exception is ArgumentException or OverflowException)
         {
             error = SelectedMode.Value == ResizeDraftMode.Pixel
-                ? "请输入有效的整数宽度和高度；保持比例时至少填写一项。"
-                : "请输入大于 0 的百分比。";
+                ? _text.GetString("Tools.Resize.Validation.PixelDimensions")
+                : _text.GetString("Tools.Resize.Validation.Percentage");
             return false;
         }
 
         var pixels = checked((long)resolved.Width * resolved.Height);
         if (resolved.Width > capability.MaxWidth || resolved.Height > capability.MaxHeight || pixels > capability.MaxPixelCount)
         {
-            error = "预计输出尺寸超过当前处理上限。";
+            error = _text.GetString("Tools.Resize.Validation.OutputTooLarge");
             return false;
         }
 
@@ -665,7 +679,7 @@ public sealed class ResizeEditorViewModel : ObservableObject, IDisposable, ITool
 
     private void SetError(AtomPixError? error)
     {
-        ErrorMessage = DesktopErrorText.FromWorkflow(error);
+        ErrorMessage = DesktopErrorText.FromWorkflow(error, _text);
         DiagnosticId = DesktopErrorText.DiagnosticId(error);
     }
 

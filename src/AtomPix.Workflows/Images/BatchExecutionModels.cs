@@ -150,12 +150,14 @@ internal sealed class BatchOutputPlanner
             return OperationResult<BatchOutputPlan>.Failure(WorkflowHelpers.ValidationError("Input path list cannot be empty."));
         }
 
+        var pathComparer = Comparer<LocalPath>.Create(_fileSystem.ComparePaths);
         var normalizedInputs = new List<LocalPath>(inputPaths.Count);
+        var normalizedInputSet = new SortedSet<LocalPath>(pathComparer);
         foreach (var input in inputPaths)
         {
             var normalized = _fileSystem.NormalizePath(input);
             if (!normalized.Succeeded) return OperationResult<BatchOutputPlan>.Failure(normalized.Error!);
-            if (normalizedInputs.Any(item => _fileSystem.PathsEqual(item, normalized.Value)))
+            if (!normalizedInputSet.Add(normalized.Value))
             {
                 return OperationResult<BatchOutputPlan>.Failure(WorkflowHelpers.ValidationError("Batch input paths must be unique."));
             }
@@ -203,7 +205,7 @@ internal sealed class BatchOutputPlanner
         if (outputPolicy.OverwritePolicy == OverwritePolicy.Overwrite)
         {
             var conflicts = desiredItems
-                .Where(item => normalizedInputs.Any(input => _fileSystem.PathsEqual(input, item.Desired)))
+                .Where(item => normalizedInputSet.Contains(item.Desired))
                 .ToArray();
             if (conflicts.Length > 0)
             {
@@ -220,14 +222,14 @@ internal sealed class BatchOutputPlanner
             }
         }
 
-        var reserved = new List<LocalPath>();
+        var reserved = new SortedSet<LocalPath>(pathComparer);
         var planItems = new List<BatchOutputPlanItem>(desiredItems.Count);
         for (var index = 0; index < desiredItems.Count; index++)
         {
             var (input, desired) = desiredItems[index];
             var collides = _fileSystem.FileExists(desired)
-                || normalizedInputs.Any(path => _fileSystem.PathsEqual(path, desired))
-                || reserved.Any(path => _fileSystem.PathsEqual(path, desired));
+                || normalizedInputSet.Contains(desired)
+                || reserved.Contains(desired);
 
             if (outputPolicy.OverwritePolicy == OverwritePolicy.Skip && collides)
             {
@@ -244,19 +246,18 @@ internal sealed class BatchOutputPlanner
             LocalPath output;
             if (outputPolicy.OverwritePolicy == OverwritePolicy.AutoRename && collides)
             {
-                output = FindAvailablePath(desired, normalizedInputs, reserved);
+                output = FindAvailablePath(desired, normalizedInputSet, reserved);
             }
             else
             {
                 output = desired;
             }
 
-            if (reserved.Any(path => _fileSystem.PathsEqual(path, output)))
+            if (!reserved.Add(output))
             {
                 return InvalidPattern("Output naming pattern expands to duplicate paths.");
             }
 
-            reserved.Add(output);
             planItems.Add(new BatchOutputPlanItem(index, index + 1, input, output, BatchOutputDecision.Process, null));
         }
 
@@ -267,12 +268,11 @@ internal sealed class BatchOutputPlanner
         BatchOutputPlan plan,
         CancellationToken cancellationToken)
     {
-        var directories = new List<LocalPath>();
+        var directories = new SortedSet<LocalPath>(Comparer<LocalPath>.Create(_fileSystem.ComparePaths));
         foreach (var item in plan.Items.Where(item => item.Decision == BatchOutputDecision.Process))
         {
             var directoryText = Path.GetDirectoryName(item.OutputPath.Value);
             var directory = new LocalPath(string.IsNullOrWhiteSpace(directoryText) ? "." : directoryText);
-            if (directories.Any(existing => _fileSystem.PathsEqual(existing, directory))) continue;
             directories.Add(directory);
         }
 
@@ -287,15 +287,15 @@ internal sealed class BatchOutputPlanner
 
     private LocalPath FindAvailablePath(
         LocalPath desired,
-        IReadOnlyList<LocalPath> normalizedInputs,
-        IReadOnlyList<LocalPath> reserved)
+        ISet<LocalPath> normalizedInputs,
+        ISet<LocalPath> reserved)
     {
         for (var index = 1; ; index++)
         {
             var candidate = _fileSystem.BuildIndexedPath(desired, index);
             if (!_fileSystem.FileExists(candidate)
-                && !normalizedInputs.Any(path => _fileSystem.PathsEqual(path, candidate))
-                && !reserved.Any(path => _fileSystem.PathsEqual(path, candidate)))
+                && !normalizedInputs.Contains(candidate)
+                && !reserved.Contains(candidate))
             {
                 return candidate;
             }

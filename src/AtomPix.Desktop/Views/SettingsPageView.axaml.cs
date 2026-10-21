@@ -1,12 +1,13 @@
 namespace AtomPix.Desktop.Views;
 
 using AtomPix.Desktop.ViewModels;
+using AtomUI.City.Presentation;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
 
-public sealed partial class SettingsPageView : UserControl
+public sealed partial class SettingsPageView : UserControl, IViewDataContextAware
 {
     private CancellationTokenSource? _scrollCancellation;
     private SettingsPageViewModel? _viewModel;

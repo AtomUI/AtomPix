@@ -1,5 +1,6 @@
 namespace AtomPix.Desktop.Controls;
 
+using AtomPix.Desktop.Localization;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Automation.Peers;
@@ -39,6 +40,7 @@ public sealed class CropCanvas : Control
         AvaloniaProperty.Register<CropCanvas, IBrush?>(nameof(ImageBorderBrush));
 
     private const double HandleSize = 12;
+    private readonly string _automationName;
     private Bitmap? _bitmap;
     private CropDragHandle _dragHandle;
     private Point _dragStart;
@@ -46,9 +48,12 @@ public sealed class CropCanvas : Control
 
     public CropCanvas()
     {
+        var text = LocalizationHost.Current
+            ?? throw new InvalidOperationException("AtomPix localization has not been initialized.");
+        _automationName = text.GetString("Tools.Crop.CanvasAutomation");
         Focusable = true;
-        AutomationProperties.SetName(this, "裁剪选区画布");
-        AutomationProperties.SetHelpText(this, "使用方向键移动选区一像素，按住 Shift 时移动十像素。拖动选区或八个控制点可调整裁剪区域。");
+        AutomationProperties.SetName(this, _automationName);
+        AutomationProperties.SetHelpText(this, text.GetString("Tools.Crop.CanvasHelp"));
     }
 
     public event EventHandler<CropCanvasSelection>? SelectionChanged;
@@ -135,7 +140,7 @@ public sealed class CropCanvas : Control
         }
     }
 
-    protected override AutomationPeer OnCreateAutomationPeer() => new CropCanvasAutomationPeer(this);
+    protected override AutomationPeer OnCreateAutomationPeer() => new CropCanvasAutomationPeer(this, _automationName);
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -389,9 +394,9 @@ public sealed class CropCanvas : Control
         SouthEast
     }
 
-    private sealed class CropCanvasAutomationPeer(CropCanvas owner) : ControlAutomationPeer(owner)
+    private sealed class CropCanvasAutomationPeer(CropCanvas owner, string automationName) : ControlAutomationPeer(owner)
     {
-        protected override string GetNameCore() => "裁剪选区画布";
+        protected override string GetNameCore() => automationName;
 
         protected override string GetClassNameCore() => nameof(CropCanvas);
 

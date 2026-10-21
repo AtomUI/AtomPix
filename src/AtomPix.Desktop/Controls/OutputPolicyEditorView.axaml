@@ -1,23 +1,24 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:atom="https://atomui.net"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:vm="using:AtomPix.Desktop.ViewModels"
              x:Class="AtomPix.Desktop.Controls.OutputPolicyEditorView"
              x:DataType="vm:OutputPolicyEditorViewModel">
     <StackPanel Spacing="14">
         <StackPanel Spacing="9">
-            <TextBlock Classes="AtomPixInspectorSectionTitle" Text="输出位置" />
+            <TextBlock Classes="AtomPixInspectorSectionTitle" Text="{loc:Loc Common.Output.LocationTitle}" />
             <atom:Segmented x:Name="OutputLocationSelector"
-                            AutomationProperties.Name="输出位置"
+                            AutomationProperties.Name="{loc:Loc Common.Output.LocationTitle}"
                             ItemsSource="{Binding Locations}"
                             SelectedItem="{Binding SelectedLocation, Mode=TwoWay}"
                             IsExpanding="True" />
             <Border x:Name="SubfolderContextSurface" Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsSubfolder}">
                 <StackPanel Spacing="8">
-                    <TextBlock Classes="AtomPixInspectorCaption" Text="子目录名称" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{loc:Loc Common.Output.SubfolderName}" />
                     <atom:TextBox x:Name="SubfolderNameInput"
                                   Classes="AtomPixOutputInput"
-                                  AutomationProperties.Name="输出子目录名称"
+                                  AutomationProperties.Name="{loc:Loc Common.Output.SubfolderAutomation}"
                                   Text="{Binding SubfolderName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   PlaceholderText="AtomPix_Output" />
                     <TextBlock Classes="AtomPixInspectorCaption"
@@ -27,25 +28,25 @@
             </Border>
             <Border x:Name="SameAsInputContextSurface" Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsSameAsInput}">
                 <StackPanel Spacing="4">
-                    <TextBlock FontWeight="SemiBold" Text="输出到原图所在目录" />
+                    <TextBlock FontWeight="SemiBold" Text="{loc:Loc Common.Output.SameAsInput}" />
                     <TextBlock Classes="AtomPixInspectorCaption"
-                               Text="同名文件按照下方的同名文件策略处理"
+                               Text="{loc:Loc Common.Output.ExistingPolicyHint}"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
             <Border x:Name="CustomDirectoryContextSurface" Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsCustomDirectory}">
                 <StackPanel Spacing="8">
-                    <TextBlock Classes="AtomPixInspectorCaption" Text="指定输出文件夹" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{loc:Loc Common.Output.CustomDirectoryTitle}" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" VerticalAlignment="Center">
                         <atom:TextBox x:Name="CustomDirectoryInput"
                                       Classes="AtomPixOutputInput"
-                                      AutomationProperties.Name="自定义输出目录"
+                                      AutomationProperties.Name="{loc:Loc Common.Output.CustomDirectoryAutomation}"
                                       VerticalAlignment="Center"
                                       Text="{Binding CustomDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                      PlaceholderText="尚未选择输出文件夹" />
+                                      PlaceholderText="{loc:Loc Common.Output.DirectoryNotSelected}" />
                         <atom:Button x:Name="ChooseDirectoryButton"
                                      Grid.Column="1"
-                                     AutomationProperties.Name="选择或更改输出文件夹"
+                                     AutomationProperties.Name="{loc:Loc Common.Output.ChooseDirectoryAutomation}"
                                      SizeType="Middle"
                                      Height="{atom:SharedTokenResource ControlHeight}"
                                      VerticalAlignment="Center"
@@ -53,7 +54,7 @@
                                      Command="{Binding ChooseDirectoryCommand}" />
                     </Grid>
                     <TextBlock Classes="AtomPixInspectorCaption"
-                               Text="所有图片都将输出到这个固定目录"
+                               Text="{loc:Loc Common.Output.FixedDirectoryDescription}"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
@@ -62,53 +63,59 @@
         <Border Classes="AtomPixInspectorDivider" />
 
         <StackPanel Spacing="9">
-            <TextBlock Classes="AtomPixInspectorSectionTitle" Text="文件命名" />
+            <TextBlock Classes="AtomPixInspectorSectionTitle" Text="{loc:Loc Common.Output.NamingTitle}" />
             <atom:Segmented x:Name="OutputNamingSelector"
-                            AutomationProperties.Name="文件命名方式"
+                            AutomationProperties.Name="{loc:Loc Common.Output.NamingModeAutomation}"
                             ItemsSource="{Binding NamingModes}"
                             SelectedItem="{Binding SelectedNaming, Mode=TwoWay}"
                             IsExpanding="True" />
             <Border x:Name="KeepOriginalNameContextSurface" Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsKeepOriginalName}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="沿用原图片名称" />
+                    <TextBlock FontWeight="SemiBold" Text="{loc:Loc Common.Output.KeepOriginalNameTitle}" />
                     <TextBlock Classes="AtomPixInspectorCaption"
-                               Text="不添加后缀；同名情况由下方策略处理"
+                               Text="{loc:Loc Common.Output.KeepOriginalNameDescription}"
                                TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding NamingPreview, StringFormat='名称示例：{0}'}"
-                               TextWrapping="Wrap" />
+                    <TextBlock TextWrapping="Wrap">
+                        <Run Text="{loc:Loc Common.Output.NamingPreviewPrefix}" />
+                        <Run Text="{Binding NamingPreview}" />
+                    </TextBlock>
                 </StackPanel>
             </Border>
             <Border x:Name="AppendSuffixContextSurface" Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsAppendSuffix}">
                 <StackPanel Spacing="8">
-                    <TextBlock Classes="AtomPixInspectorCaption" Text="原文件名后缀" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{loc:Loc Common.Output.SuffixTitle}" />
                     <atom:TextBox x:Name="FileNameSuffixInput"
                                   Classes="AtomPixOutputInput"
-                                  AutomationProperties.Name="文件名后缀"
+                                  AutomationProperties.Name="{loc:Loc Common.Output.SuffixAutomation}"
                                   Text="{Binding FileNameSuffix, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                   PlaceholderText="_atompix" />
-                    <TextBlock Text="{Binding NamingPreview, StringFormat='名称示例：{0}'}"
-                               TextWrapping="Wrap" />
+                    <TextBlock TextWrapping="Wrap">
+                        <Run Text="{loc:Loc Common.Output.NamingPreviewPrefix}" />
+                        <Run Text="{Binding NamingPreview}" />
+                    </TextBlock>
                     <TextBlock Classes="AtomPixInspectorCaption"
-                               Text="扩展名由所选输出格式决定"
+                               Text="{loc:Loc Common.Output.ExtensionDescription}"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
             <Border x:Name="CustomPatternContextSurface" Classes="AtomPixOutputContextSurface" IsVisible="{Binding IsCustomPattern}">
                 <StackPanel Spacing="8">
-                    <TextBlock Classes="AtomPixInspectorCaption" Text="自定义名称格式" />
+                    <TextBlock Classes="AtomPixInspectorCaption" Text="{loc:Loc Common.Output.PatternTitle}" />
                     <atom:TextBox x:Name="FileNamePatternTextBox"
                                   Classes="AtomPixOutputInput"
-                                  AutomationProperties.Name="文件名格式"
+                                  AutomationProperties.Name="{loc:Loc Common.Output.PatternAutomation}"
                                   Text="{Binding CustomFileNamePattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  PlaceholderText="示例：{name}_atompix" />
+                                  PlaceholderText="{loc:Loc Common.Output.PatternPlaceholder}" />
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <atom:Button Content="＋ 原文件名" SizeType="Small" Click="InsertNameTokenClick" />
-                        <atom:Button Content="＋ 序号" SizeType="Small" Click="InsertIndexTokenClick" IsEnabled="{Binding CanInsertIndexToken}" />
+                        <atom:Button Content="{loc:Loc Common.Output.InsertNameToken}" SizeType="Small" Click="InsertNameTokenClick" />
+                        <atom:Button Content="{loc:Loc Common.Output.InsertIndexToken}" SizeType="Small" Click="InsertIndexTokenClick" IsEnabled="{Binding CanInsertIndexToken}" />
                     </StackPanel>
-                    <TextBlock Text="{Binding NamingPreview, StringFormat='名称示例：{0}'}"
-                               TextWrapping="Wrap" />
+                    <TextBlock TextWrapping="Wrap">
+                        <Run Text="{loc:Loc Common.Output.NamingPreviewPrefix}" />
+                        <Run Text="{Binding NamingPreview}" />
+                    </TextBlock>
                     <TextBlock Classes="AtomPixInspectorCaption"
-                               Text="批量处理时，若格式中没有序号，AtomPix 会自动追加"
+                               Text="{loc:Loc Common.Output.BatchIndexDescription}"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
@@ -117,8 +124,8 @@
         <Border Classes="AtomPixInspectorDivider" />
 
         <StackPanel Spacing="9">
-            <TextBlock Classes="AtomPixInspectorSectionTitle" Text="同名文件" />
-            <atom:Segmented AutomationProperties.Name="已有文件处理方式"
+            <TextBlock Classes="AtomPixInspectorSectionTitle" Text="{loc:Loc Common.Output.ExistingTitle}" />
+            <atom:Segmented AutomationProperties.Name="{loc:Loc Common.Output.ExistingAutomation}"
                             ItemsSource="{Binding OverwritePolicies}"
                             SelectedItem="{Binding SelectedOverwrite, Mode=TwoWay}"
                             IsExpanding="True" />

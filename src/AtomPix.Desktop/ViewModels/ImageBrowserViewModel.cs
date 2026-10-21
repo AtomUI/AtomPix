@@ -5,9 +5,11 @@ using AtomPix.Core.Errors;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Core.Conversion;
+using AtomPix.Desktop.Localization;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
+using AtomUI.City.Presentation;
 using AtomUI.Labs.Controls.ImageGallery;
 
 public enum BrowserItemAvailability
@@ -30,6 +32,7 @@ public enum BrowserTaskStatus
 
 public sealed class BrowserItemViewModel : ObservableObject
 {
+    private readonly IAtomPixLocalizedText _text;
     private ImageProbeResult? _probe;
     private BrowserItemAvailability _availability;
     private BrowserTaskStatus _taskStatus;
@@ -37,12 +40,16 @@ public sealed class BrowserItemViewModel : ObservableObject
     public BrowserItemViewModel(
         LocalPath path,
         string displayName,
-        Action<BrowserItemViewModel> removeUnavailable)
+        Action<BrowserItemViewModel> removeUnavailable,
+        IAtomPixLocalizedText text,
+        IUiCommandFactory? commandFactory = null)
     {
         Path = path;
         DisplayName = displayName;
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         ArgumentNullException.ThrowIfNull(removeUnavailable);
-        RemoveCommand = new RelayCommand<object?>(_ => removeUnavailable(this), _ => IsUnavailable);
+        RemoveCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance)
+            .Create(() => removeUnavailable(this), () => IsUnavailable);
         GalleryItem = new ImageGalleryItemAdapter(this);
     }
 
@@ -95,19 +102,19 @@ public sealed class BrowserItemViewModel : ObservableObject
     public bool IsTaskCanceled => TaskStatus == BrowserTaskStatus.Canceled;
     public string TaskStatusText => TaskStatus switch
     {
-        BrowserTaskStatus.Pending => "等待处理",
-        BrowserTaskStatus.Running => "正在处理",
-        BrowserTaskStatus.Succeeded => "处理成功",
-        BrowserTaskStatus.Failed => "处理失败",
-        BrowserTaskStatus.Skipped => "已跳过",
-        BrowserTaskStatus.Canceled => "已取消",
+        BrowserTaskStatus.Pending => _text.GetString("Browser.Task.Pending"),
+        BrowserTaskStatus.Running => _text.GetString("Browser.Task.Running"),
+        BrowserTaskStatus.Succeeded => _text.GetString("Browser.Task.Succeeded"),
+        BrowserTaskStatus.Failed => _text.GetString("Browser.Task.Failed"),
+        BrowserTaskStatus.Skipped => _text.GetString("Browser.Task.Skipped"),
+        BrowserTaskStatus.Canceled => _text.GetString("Browser.Task.Canceled"),
         _ => string.Empty
     };
     public string ThumbnailAutomationName => HasTaskStatus
-        ? $"{DisplayName}，{TaskStatusText}"
+        ? _text.Format("Browser.Thumbnail.TaskStatus", DisplayName, TaskStatusText)
         : DisplayName;
 
-    public RelayCommand<object?> RemoveCommand { get; }
+    public IRelayCommand RemoveCommand { get; }
 
     public void SetProbe(ImageProbeResult probe)
     {
@@ -116,14 +123,17 @@ public sealed class BrowserItemViewModel : ObservableObject
     }
 }
 
-public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
+public sealed class ImageBrowserViewModel : ViewModelBase
 {
     private readonly OpenImageWorkflow _openImage;
     private readonly ImageProcessorCapabilities _capabilities;
     private readonly IDesktopNavigator _navigator;
     private readonly IDesktopLauncherService _launcher;
     private readonly IDesktopPickerService? _picker;
+    private readonly IAtomPixLocalizedText _text;
     private readonly BoundedLruCache<string, ImageProbeResult> _probeCache;
+    private readonly IUiCommandFactory _commands;
+    private readonly CommandExecutionDomain _interactionDomain = new();
     private readonly object _cacheSync = new();
     private CancellationTokenSource? _loadCancellation;
     private int _generation;
@@ -145,7 +155,9 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         IDesktopNavigator navigator,
         IDesktopLauncherService launcher,
         IDesktopClipboardService clipboard,
-        IDesktopPickerService? picker = null)
+        IAtomPixLocalizedText text,
+        IDesktopPickerService? picker = null,
+        IUiCommandFactory? commandFactory = null)
     {
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
         _capabilities = (imageProcessor ?? throw new ArgumentNullException(nameof(imageProcessor))).Capabilities;
@@ -159,26 +171,52 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
                 : resources.MaxInputPixelCount * 4);
         _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         _picker = picker;
+        _commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
+        var activationOwner = commandFactory is null ? null : this;
         var pathComparer = PathComparer();
         _probeCache = new BoundedLruCache<string, ImageProbeResult>(
             256,
             256,
             _ => 1,
             pathComparer);
-        Diagnostic = new DiagnosticErrorViewModel(clipboard);
+        Diagnostic = new DiagnosticErrorViewModel(clipboard, _commands);
 
-        BackCommand = new RelayCommand<object?>(_ => NavigateHome());
-        SelectItemCommand = new AsyncCommand<BrowserItemViewModel>(SelectItemAsync);
-        PreviousCommand = new AsyncCommand(cancellationToken => MoveAsync(-1, cancellationToken), () => CanGoPrevious);
-        NextCommand = new AsyncCommand(cancellationToken => MoveAsync(1, cancellationToken), () => CanGoNext);
-        RemoveUnavailableCommand = new RelayCommand<BrowserItemViewModel>(RemoveUnavailable, item => item.IsUnavailable);
-        CompressCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Compress), _ => CanCompress);
-        ConvertCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Convert), _ => CanConvert);
-        ResizeCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Resize), _ => CanResize);
-        CropCommand = new RelayCommand<object?>(_ => NavigateToFeature(DesktopRoute.Crop), _ => CanCrop);
-        OpenDirectoryCommand = new AsyncCommand(OpenDirectoryAsync, () => DirectoryPath is not null || CurrentItem is not null);
-        AddImagesCommand = new AsyncCommand(AddImagesAsync, () => _picker is not null && !_isInteractionLocked && State != DesktopContentState.Loading);
+        BackCommand = _commands.Create(NavigateHome);
+        SelectItemCommand = _commands.CreateAsync<BrowserItemViewModel>(
+            _interactionDomain,
+            (item, _, token) => item is null ? Task.CompletedTask : SelectItemAsync(item, token),
+            activationOwner: activationOwner,
+            concurrencyPolicy: CommandConcurrencyPolicy.Allow);
+        PreviousCommand = _commands.CreateAsync(
+            _interactionDomain,
+            (_, token) => MoveAsync(-1, token),
+            () => CanGoPrevious,
+            activationOwner: activationOwner,
+            concurrencyPolicy: CommandConcurrencyPolicy.Allow);
+        NextCommand = _commands.CreateAsync(
+            _interactionDomain,
+            (_, token) => MoveAsync(1, token),
+            () => CanGoNext,
+            activationOwner: activationOwner,
+            concurrencyPolicy: CommandConcurrencyPolicy.Allow);
+        RemoveUnavailableCommand = _commands.Create<BrowserItemViewModel>(
+            item => { if (item is not null) RemoveUnavailable(item); },
+            item => item is { IsUnavailable: true });
+        CompressCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Compress), () => CanCompress);
+        ConvertCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Convert), () => CanConvert);
+        ResizeCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Resize), () => CanResize);
+        CropCommand = _commands.Create(() => NavigateToFeature(DesktopRoute.Crop), () => CanCrop);
+        OpenDirectoryCommand = _commands.CreateAsync(
+            OpenDirectoryAsync,
+            () => DirectoryPath is not null || CurrentItem is not null,
+            activationOwner: activationOwner);
+        AddImagesCommand = _commands.CreateAsync(
+            _interactionDomain,
+            (_, token) => AddImagesAsync(token),
+            () => _picker is not null && !_isInteractionLocked && State != DesktopContentState.Loading,
+            activationOwner: activationOwner);
     }
 
     public DesktopContentState State
@@ -288,7 +326,7 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         {
             if (!_isInteractionLocked && value is not null && !ReferenceEquals(_currentItem, value))
             {
-                _ = SelectItemAsync(value, CancellationToken.None);
+                SelectItemCommand.Execute(value);
             }
         }
     }
@@ -328,7 +366,7 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         {
             if (DirectoryPath is null)
             {
-                return "单张图片";
+                return _text.GetString("Browser.Source.SingleImage");
             }
 
             var trimmed = Path.TrimEndingDirectorySeparator(DirectoryPath.Value.Value);
@@ -346,19 +384,21 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     public string CurrentTransparency => _currentProbe is null
         ? string.Empty
-        : _currentProbe.HasTransparency ? "有" : "无";
+        : _text.GetString(_currentProbe.HasTransparency ? "Common.Answer.Yes" : "Common.Answer.No");
 
     public string CurrentFrameSummary => _currentProbe is null
         ? string.Empty
-        : _currentProbe.FrameCount > 1 ? $"{_currentProbe.FrameCount} 帧" : "否";
+        : _currentProbe.FrameCount > 1
+            ? _text.Format("Browser.Summary.FrameCount", _currentProbe.FrameCount)
+            : _text.GetString("Common.Answer.No");
 
     public string CurrentMetadata => _currentProbe is null
         ? string.Empty
-        : _currentProbe.HasMetadata ? "包含拍摄信息" : "无拍摄信息";
+        : _text.GetString(_currentProbe.HasMetadata ? "Browser.Summary.HasMetadata" : "Browser.Summary.NoMetadata");
 
     public string CurrentColorProfile => _currentProbe is null
         ? string.Empty
-        : _currentProbe.HasColorProfile ? "包含 ICC 色彩配置" : "无 ICC 色彩配置";
+        : _text.GetString(_currentProbe.HasColorProfile ? "Browser.Summary.HasColorProfile" : "Browser.Summary.NoColorProfile");
 
     public bool CanUseCurrentImage => State == DesktopContentState.Ready && _currentProbe is not null;
 
@@ -377,9 +417,9 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         && IsSingleFrameSupportedInput
         && _capabilities.Crop?.SupportedSameFormatFormats.Contains(_currentProbe!.Format) == true;
 
-    public bool CanGoPrevious => !_isInteractionLocked && State != DesktopContentState.Loading && CurrentIndex > 0;
+    public bool CanGoPrevious => !_isInteractionLocked && CurrentIndex > 0;
 
-    public bool CanGoNext => !_isInteractionLocked && State != DesktopContentState.Loading && CurrentIndex >= 0 && CurrentIndex < Items.Count - 1;
+    public bool CanGoNext => !_isInteractionLocked && CurrentIndex >= 0 && CurrentIndex < Items.Count - 1;
 
     public bool IsInteractionLocked
     {
@@ -387,27 +427,27 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isInteractionLocked, value);
     }
 
-    public RelayCommand<object?> BackCommand { get; }
+    public IRelayCommand BackCommand { get; }
 
-    public AsyncCommand<BrowserItemViewModel> SelectItemCommand { get; }
+    public IAsyncRelayCommand<BrowserItemViewModel> SelectItemCommand { get; }
 
-    public AsyncCommand PreviousCommand { get; }
+    public IAsyncRelayCommand PreviousCommand { get; }
 
-    public AsyncCommand NextCommand { get; }
+    public IAsyncRelayCommand NextCommand { get; }
 
-    public RelayCommand<BrowserItemViewModel> RemoveUnavailableCommand { get; }
+    public IRelayCommand<BrowserItemViewModel> RemoveUnavailableCommand { get; }
 
-    public RelayCommand<object?> CompressCommand { get; }
+    public IRelayCommand CompressCommand { get; }
 
-    public RelayCommand<object?> ConvertCommand { get; }
+    public IRelayCommand ConvertCommand { get; }
 
-    public RelayCommand<object?> ResizeCommand { get; }
+    public IRelayCommand ResizeCommand { get; }
 
-    public RelayCommand<object?> CropCommand { get; }
+    public IRelayCommand CropCommand { get; }
 
-    public AsyncCommand OpenDirectoryCommand { get; }
+    public IAsyncRelayCommand OpenDirectoryCommand { get; }
 
-    public AsyncCommand AddImagesCommand { get; }
+    public IAsyncRelayCommand AddImagesCommand { get; }
 
     public async Task LoadAsync(BrowserNavigationContext context, CancellationToken cancellationToken = default)
     {
@@ -423,7 +463,9 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
             .Select(item => new BrowserItemViewModel(
                 item.Path,
                 item.DisplayName,
-                RemoveUnavailable))
+                RemoveUnavailable,
+                _text,
+                _commands))
             .ToArray();
         ClearCurrent();
         ErrorMessage = null;
@@ -459,14 +501,25 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         }
 
         State = DesktopContentState.Failure;
-        ErrorMessage = "文件夹中没有可读取的图片。";
+                ErrorMessage = _text.GetString("Browser.Error.NoReadableImages");
         Diagnostic.Clear();
     }
 
-    public void Dispose()
+    protected override void OnDisposed()
     {
         CancelLoading();
-        ClearSessionData();
+        ++_generation;
+        _items = Array.Empty<BrowserItemViewModel>();
+        _galleryItems = Array.Empty<ImageGalleryItemAdapter>();
+        _currentItem = null;
+        _currentProbe = null;
+        _directoryPath = null;
+        _cropEditor = null;
+        lock (_cacheSync)
+        {
+            _probeCache.Clear();
+        }
+        _interactionDomain.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     public void EndSession() => ReleaseSession();
@@ -574,7 +627,7 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         {
             if (!await _launcher.OpenDirectoryAsync(directory, cancellationToken))
             {
-                ErrorMessage = "无法在系统文件管理器中打开当前目录。";
+                ErrorMessage = _text.GetString("Browser.Error.OpenDirectoryFailed");
                 Diagnostic.Clear();
             }
         }
@@ -587,7 +640,7 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
         if (selection.Status != DesktopSelectionStatus.Selected)
         {
-            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage);
+            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage, _text);
             return;
         }
 
@@ -602,7 +655,9 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
                 appended.Add(new BrowserItemViewModel(
                     path,
                     Path.GetFileName(path.Value),
-                    RemoveUnavailable));
+                    RemoveUnavailable,
+                    _text,
+                    _commands));
             }
         }
 
@@ -805,7 +860,7 @@ public sealed class ImageBrowserViewModel : ObservableObject, IDisposable
 
     private void SetWorkflowError(AtomPixError? error)
     {
-        ErrorMessage = DesktopErrorText.FromWorkflow(error);
+        ErrorMessage = DesktopErrorText.FromWorkflow(error, _text);
         Diagnostic.Set(error);
     }
 

@@ -95,6 +95,10 @@ public sealed class ProductionStressTests : IDisposable
         using (var image = new MagickImage(MagickColors.CornflowerBlue, 4096, 4096))
         {
             image.Format = MagickFormat.Png;
+            // The test measures large-image probe/preview behavior, not PNG encoder
+            // optimization. Avoid spending the CI budget compressing a synthetic
+            // fixture before the behavior under test even starts.
+            image.SetCompression(CompressionMethod.NoCompression);
             image.Write(input);
         }
 

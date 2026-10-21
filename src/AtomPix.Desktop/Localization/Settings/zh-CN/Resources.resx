@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="Settings.Title" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="Settings.Error.LoadFailed" xml:space="preserve">
+    <value>无法读取设置</value>
+  </data>
+  <data name="Settings.Action.OpenDirectory" xml:space="preserve">
+    <value>打开设置目录</value>
+  </data>
+  <data name="Settings.Action.RestoreDraft" xml:space="preserve">
+    <value>恢复默认草稿</value>
+  </data>
+  <data name="Settings.Action.RestoreDefaults" xml:space="preserve">
+    <value>恢复默认</value>
+  </data>
+  <data name="Settings.Action.Back" xml:space="preserve">
+    <value>返回</value>
+  </data>
+  <data name="Settings.Action.BackToPrevious" xml:space="preserve">
+    <value>返回设置前页面</value>
+  </data>
+  <data name="Settings.Action.Save" xml:space="preserve">
+    <value>保存设置</value>
+  </data>
+  <data name="Settings.Section.Compression" xml:space="preserve">
+    <value>压缩配置</value>
+  </data>
+  <data name="Settings.Section.Conversion" xml:space="preserve">
+    <value>转换配置</value>
+  </data>
+  <data name="Settings.Section.Output" xml:space="preserve">
+    <value>输出配置</value>
+  </data>
+  <data name="Settings.Section.About" xml:space="preserve">
+    <value>关于 AtomPix</value>
+  </data>
+  <data name="Settings.Compression.Description" xml:space="preserve">
+    <value>设定之后新建压缩任务使用的默认参数。</value>
+  </data>
+  <data name="Settings.Compression.DefaultsTitle" xml:space="preserve">
+    <value>默认压缩</value>
+  </data>
+  <data name="Settings.Compression.ModeTitle" xml:space="preserve">
+    <value>压缩模式</value>
+  </data>
+  <data name="Settings.Compression.ModeDescription" xml:space="preserve">
+    <value>新建压缩任务时使用的默认策略</value>
+  </data>
+  <data name="Settings.Compression.ModeAutomation" xml:space="preserve">
+    <value>默认压缩模式</value>
+  </data>
+  <data name="Settings.Compression.QualityAutomation" xml:space="preserve">
+    <value>默认压缩质量</value>
+  </data>
+  <data name="Settings.Compression.QualityValueAutomation" xml:space="preserve">
+    <value>默认压缩质量数值</value>
+  </data>
+  <data name="Settings.Compression.MetadataTitle" xml:space="preserve">
+    <value>图片信息</value>
+  </data>
+  <data name="Settings.Compression.MetadataDescription" xml:space="preserve">
+    <value>控制新任务是否保留拍摄与位置数据</value>
+  </data>
+  <data name="Settings.Compression.RemoveMetadataDefault" xml:space="preserve">
+    <value>默认移除拍摄信息与位置数据</value>
+  </data>
+  <data name="Settings.Conversion.Description" xml:space="preserve">
+    <value>设定之后新建格式转换任务使用的默认参数。</value>
+  </data>
+  <data name="Settings.Conversion.DefaultsTitle" xml:space="preserve">
+    <value>默认转换</value>
+  </data>
+  <data name="Settings.Conversion.FormatTitle" xml:space="preserve">
+    <value>输出格式</value>
+  </data>
+  <data name="Settings.Conversion.FormatDescription" xml:space="preserve">
+    <value>新建转换任务时预先选择的格式</value>
+  </data>
+  <data name="Settings.Conversion.FormatAutomation" xml:space="preserve">
+    <value>默认转换格式</value>
+  </data>
+  <data name="Settings.Conversion.QualityAutomation" xml:space="preserve">
+    <value>默认转换质量</value>
+  </data>
+  <data name="Settings.Conversion.QualityValueAutomation" xml:space="preserve">
+    <value>默认转换质量数值</value>
+  </data>
+  <data name="Settings.Conversion.TransparentBackgroundTitle" xml:space="preserve">
+    <value>透明区域背景</value>
+  </data>
+  <data name="Settings.Conversion.TransparentBackgroundDescription" xml:space="preserve">
+    <value>转换为 JPEG 时用于铺设透明像素</value>
+  </data>
+  <data name="Settings.Output.Description" xml:space="preserve">
+    <value>设定之后新建图片处理任务使用的默认输出规则。</value>
+  </data>
+  <data name="Settings.Output.DefaultsTitle" xml:space="preserve">
+    <value>默认输出</value>
+  </data>
+  <data name="Settings.Output.LocationTitle" xml:space="preserve">
+    <value>输出位置</value>
+  </data>
+  <data name="Settings.Output.LocationDescription" xml:space="preserve">
+    <value>新建任务默认使用的保存位置</value>
+  </data>
+  <data name="Settings.Output.LocationAutomation" xml:space="preserve">
+    <value>默认输出位置</value>
+  </data>
+  <data name="Settings.Output.SubfolderName" xml:space="preserve">
+    <value>子目录名称</value>
+  </data>
+  <data name="Settings.Output.SubfolderAutomation" xml:space="preserve">
+    <value>默认输出子目录</value>
+  </data>
+  <data name="Settings.Output.SameAsInput" xml:space="preserve">
+    <value>输出到原图片所在目录</value>
+  </data>
+  <data name="Settings.Output.ExistingPolicyHint" xml:space="preserve">
+    <value>同名情况由下方的同名文件策略处理</value>
+  </data>
+  <data name="Settings.Output.CustomDirectoryTitle" xml:space="preserve">
+    <value>指定输出文件夹</value>
+  </data>
+  <data name="Settings.Output.CustomDirectoryAutomation" xml:space="preserve">
+    <value>默认自定义输出目录</value>
+  </data>
+  <data name="Settings.Output.DirectoryNotSelected" xml:space="preserve">
+    <value>尚未选择输出文件夹</value>
+  </data>
+  <data name="Settings.Output.ChooseDirectory" xml:space="preserve">
+    <value>选择目录</value>
+  </data>
+  <data name="Settings.Output.ChooseDirectoryAutomation" xml:space="preserve">
+    <value>选择默认输出目录</value>
+  </data>
+  <data name="Settings.Output.FixedDirectoryDescription" xml:space="preserve">
+    <value>所有图片都将输出到这个固定目录</value>
+  </data>
+  <data name="Settings.Output.NamingTitle" xml:space="preserve">
+    <value>文件命名</value>
+  </data>
+  <data name="Settings.Output.NamingDescription" xml:space="preserve">
+    <value>支持 {name} 与 {index} 占位符</value>
+  </data>
+  <data name="Settings.Output.NamingAutomation" xml:space="preserve">
+    <value>默认文件名格式</value>
+  </data>
+  <data name="Settings.Output.ExistingTitle" xml:space="preserve">
+    <value>同名文件</value>
+  </data>
+  <data name="Settings.Output.ExistingDescription" xml:space="preserve">
+    <value>目标文件已经存在时的默认处理方式</value>
+  </data>
+  <data name="Settings.Output.ExistingAutomation" xml:space="preserve">
+    <value>默认已有文件处理方式</value>
+  </data>
+  <data name="Settings.About.Tagline" xml:space="preserve">
+    <value>轻巧、专注的图片处理工具</value>
+  </data>
+  <data name="Settings.About.RuntimeTitle" xml:space="preserve">
+    <value>运行信息</value>
+  </data>
+  <data name="Settings.About.ImageEngine" xml:space="preserve">
+    <value>图片引擎</value>
+  </data>
+  <data name="Settings.About.DesktopFramework" xml:space="preserve">
+    <value>桌面框架</value>
+  </data>
+  <data name="Settings.About.Platform" xml:space="preserve">
+    <value>运行平台</value>
+  </data>
+  <data name="Settings.Status.UnsavedChanges" xml:space="preserve">
+    <value>有未保存的修改</value>
+  </data>
+  <data name="Settings.Option.Theme.System" xml:space="preserve">
+    <value>跟随系统</value>
+  </data>
+  <data name="Settings.Option.Theme.Light" xml:space="preserve">
+    <value>浅色</value>
+  </data>
+  <data name="Settings.Option.Theme.Dark" xml:space="preserve">
+    <value>深色</value>
+  </data>
+  <data name="Settings.Option.Language.System" xml:space="preserve">
+    <value>跟随系统</value>
+  </data>
+  <data name="Settings.Option.Language.ChineseSimplified" xml:space="preserve">
+    <value>简体中文</value>
+  </data>
+  <data name="Settings.Dynamic.SameFormatSummary" xml:space="preserve">
+    <value>Resize/Crop：有损质量 {0} · 元数据跟随公共开关 · ICC 保留</value>
+  </data>
+  <data name="Settings.Dynamic.Version" xml:space="preserve">
+    <value>AtomPix {0}</value>
+  </data>
+  <data name="Settings.Dynamic.DevelopmentVersion" xml:space="preserve">
+    <value>开发版本</value>
+  </data>
+  <data name="Settings.Dynamic.ImageEngine" xml:space="preserve">
+    <value>图像引擎：ImageMagick（Magick.NET）</value>
+  </data>
+  <data name="Settings.Message.Saved" xml:space="preserve">
+    <value>设置已保存 · {0:HH:mm}</value>
+  </data>
+  <data name="Settings.Dialog.RestoreDefaults.Title" xml:space="preserve">
+    <value>恢复默认设置？</value>
+  </data>
+  <data name="Settings.Dialog.RestoreDefaults.Message" xml:space="preserve">
+    <value>默认值只会替换当前草稿；点击“保存设置”后才会写入磁盘。</value>
+  </data>
+  <data name="Settings.Message.DefaultDraftRestored" xml:space="preserve">
+    <value>已恢复为默认草稿，尚未保存。</value>
+  </data>
+  <data name="Settings.Error.OpenDirectoryFailed" xml:space="preserve">
+    <value>无法打开设置目录。</value>
+  </data>
+  <data name="Settings.Validation.BackgroundColor" xml:space="preserve">
+    <value>透明背景色必须使用 #RRGGBB 格式。</value>
+  </data>
+  <data name="Settings.Validation.FileNamePatternRequired" xml:space="preserve">
+    <value>默认文件名格式不能为空。</value>
+  </data>
+  <data name="Settings.Validation.CompressionQuality" xml:space="preserve">
+    <value>自定义压缩质量必须是 1 到 100 的整数。</value>
+  </data>
+  <data name="Settings.Validation.ConversionQuality" xml:space="preserve">
+    <value>转换质量必须是 1 到 100 的整数。</value>
+  </data>
+  <data name="Settings.Validation.InvalidDraft" xml:space="preserve">
+    <value>设置草稿包含无效值，请检查输出位置和文件名格式。</value>
+  </data>
+  <data name="Settings.Diagnostic.UnsupportedCompressionMode" xml:space="preserve">
+    <value>不支持的压缩模式。</value>
+  </data>
+  <data name="Settings.Diagnostic.UnsupportedOutputLocation" xml:space="preserve">
+    <value>不支持的输出位置。</value>
+  </data>
+</root>

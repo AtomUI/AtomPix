@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "source": "tests/TestAssets/Images/jpeg-detailed.jpg",
+      "target": "compress-single/compress-source.jpg",
+      "sha256": "6ee22af213d5bfab51d538d3015cebcab66c070fc6301c03e99dda09bd3dd575"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-basic.jpg",
+      "target": "compress-batch/compress-01.jpg",
+      "sha256": "ad51c7a1ad558b70d449f8e5c070cebdaabed4388c4c769a00eb70d9a2d5b01f"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-detailed.jpg",
+      "target": "compress-batch/compress-02.jpg",
+      "sha256": "6ee22af213d5bfab51d538d3015cebcab66c070fc6301c03e99dda09bd3dd575"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-basic.jpg",
+      "target": "compress-batch/compress-03.jpg",
+      "sha256": "ad51c7a1ad558b70d449f8e5c070cebdaabed4388c4c769a00eb70d9a2d5b01f"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-detailed.jpg",
+      "target": "compress-batch/compress-04.jpg",
+      "sha256": "6ee22af213d5bfab51d538d3015cebcab66c070fc6301c03e99dda09bd3dd575"
+    },
+    {
+      "source": "tests/TestAssets/Images/png-alpha.png",
+      "target": "convert-single/alpha-source.png",
+      "sha256": "9cbf57b1eb0ee602dbcb3e028231d6a85feb5848b973d69387e162f780d7bc00"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-basic.jpg",
+      "target": "convert-batch/photo.jpg",
+      "sha256": "ad51c7a1ad558b70d449f8e5c070cebdaabed4388c4c769a00eb70d9a2d5b01f"
+    },
+    {
+      "source": "tests/TestAssets/Images/png-alpha.png",
+      "target": "convert-batch/alpha.png",
+      "sha256": "9cbf57b1eb0ee602dbcb3e028231d6a85feb5848b973d69387e162f780d7bc00"
+    },
+    {
+      "source": "tests/TestAssets/Images/webp-basic.webp",
+      "target": "convert-batch/existing.webp",
+      "sha256": "c500de53f0e95997cff0bf3d490dfbaa705658171defe613abc81656595e0893"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-detailed.jpg",
+      "target": "resize-single/resize-source.jpg",
+      "sha256": "6ee22af213d5bfab51d538d3015cebcab66c070fc6301c03e99dda09bd3dd575"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-basic.jpg",
+      "target": "resize-batch/resize-01.jpg",
+      "sha256": "ad51c7a1ad558b70d449f8e5c070cebdaabed4388c4c769a00eb70d9a2d5b01f"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-detailed.jpg",
+      "target": "resize-batch/resize-02.jpg",
+      "sha256": "6ee22af213d5bfab51d538d3015cebcab66c070fc6301c03e99dda09bd3dd575"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-basic.jpg",
+      "target": "resize-batch/resize-03.jpg",
+      "sha256": "ad51c7a1ad558b70d449f8e5c070cebdaabed4388c4c769a00eb70d9a2d5b01f"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-detailed.jpg",
+      "target": "resize-batch/resize-04.jpg",
+      "sha256": "6ee22af213d5bfab51d538d3015cebcab66c070fc6301c03e99dda09bd3dd575"
+    },
+    {
+      "source": "tests/TestAssets/Images/jpeg-detailed.jpg",
+      "target": "crop-single/crop-source.jpg",
+      "sha256": "6ee22af213d5bfab51d538d3015cebcab66c070fc6301c03e99dda09bd3dd575"
+    }
+  ]
+}

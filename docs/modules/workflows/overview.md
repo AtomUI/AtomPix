@@ -3,6 +3,8 @@
 > 文档状态：架构讨论基线
 >
 > 基线时间：2026-06-25
+>
+> 2026-10-21 产品覆盖：当前版本已决定移除 Recent 的 UI 与运行时加载/写入。本文第 10.1 节仅保留为现有遗留代码/数据兼容说明，不再是目标运行时合同；City 迁移不建立 `RecentItemsState`。目标清理边界见 [`with-city-workflows.md`](../../iterations/features/with-city-workflows.md)。
 
 ## 1. 模块定位
 
@@ -749,7 +751,7 @@ Workflows 消费 Core 中定义的端口和 Imaging.Abstractions 中定义的图
 Workflows 必须可以在无 UI 环境下串联真实 Infrastructure 和 Imaging.Magick，完成打开、预览、压缩、转换、批量、跳过、覆盖、自动重命名和部分失败等用户场景。
 ## 10. 最近记录与进度流程补充
 
-### 10.1 最近记录 Workflows
+### 10.1 最近记录 Workflows（遗留兼容实现，目标移除运行时调用）
 
 最近记录使用四个显式 Workflow，Desktop 不直接读写 `IRecentItemsStore`：
 
@@ -769,7 +771,7 @@ Workflows 必须可以在无 UI 环境下串联真实 Infrastructure 和 Imaging
 4. 返回更新后的列表。
 ```
 
-这些流程不隐式绑定到 `OpenImageWorkflow`。Desktop 在打开图片或文件夹成功后显式调用 Add；打开失败、Picker 取消或最近记录设置关闭时不写入。最近记录自身读取失败不阻止用户打开图片，但也不得在未形成可信列表时继续覆盖存储。
+这些流程描述迁移前的遗留实现。目标版本中 Desktop 不再调用 Load/Add/Remove/Clear，打开图片或文件夹成功后也不写入访问历史。已有 `recent-items.json` 不主动删除；底层类型和 Store 是否物理删除由独立数据兼容清理决定。
 
 ### 10.2 批量进度快照
 

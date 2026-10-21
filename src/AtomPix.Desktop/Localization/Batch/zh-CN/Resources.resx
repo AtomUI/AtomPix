@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="Batch.Action.Start" xml:space="preserve">
+    <value>批量处理</value>
+  </data>
+  <data name="Batch.Action.RetryFailed" xml:space="preserve">
+    <value>重试失败项</value>
+  </data>
+  <data name="Batch.Action.ProcessUnfinished" xml:space="preserve">
+    <value>处理未完成项</value>
+  </data>
+  <data name="Batch.Action.ProcessSkippedAutoRename" xml:space="preserve">
+    <value>自动重命名处理跳过项</value>
+  </data>
+  <data name="Batch.Progress.Automation" xml:space="preserve">
+    <value>批量处理进度</value>
+  </data>
+  <data name="Batch.Progress.Preparing" xml:space="preserve">
+    <value>正在准备 {0} 张图片</value>
+  </data>
+  <data name="Batch.Progress.NotStarted" xml:space="preserve"><value>尚未开始</value></data>
+  <data name="Batch.Progress.Completed" xml:space="preserve"><value>已完成 {0}/{1} · 成功 {2} · 失败 {3} · 跳过 {4}</value></data>
+  <data name="Batch.Status.Waiting" xml:space="preserve"><value>等待处理</value></data>
+  <data name="Batch.Status.Processing" xml:space="preserve"><value>处理中</value></data>
+  <data name="Batch.Status.Succeeded" xml:space="preserve"><value>成功</value></data>
+  <data name="Batch.Status.Failed" xml:space="preserve"><value>失败</value></data>
+  <data name="Batch.Status.Canceled" xml:space="preserve"><value>已取消</value></data>
+  <data name="Batch.Status.Skipped" xml:space="preserve"><value>已跳过</value></data>
+  <data name="Batch.Status.NotStarted" xml:space="preserve"><value>未开始</value></data>
+  <data name="Batch.Status.Unavailable" xml:space="preserve"><value>不可用</value></data>
+  <data name="Batch.Probe.Pending" xml:space="preserve"><value>等待读取图片信息</value></data>
+  <data name="Batch.Option.Task.Compress" xml:space="preserve"><value>压缩</value></data>
+  <data name="Batch.Option.Task.Convert" xml:space="preserve"><value>转换</value></data>
+  <data name="Batch.Option.Task.Resize" xml:space="preserve"><value>调整尺寸</value></data>
+  <data name="Batch.InputCollectionSummary" xml:space="preserve"><value>浏览走廊中的 {0} 张图片；顺序与缩略图状态保持一致。</value></data>
+  <data name="Batch.Result.PreviousSummary" xml:space="preserve"><value>上一任务：{0} · 成功 {1} · 失败 {2} · 跳过 {3}</value></data>
+  <data name="Batch.Result.Summary" xml:space="preserve"><value>成功 {0} · 失败 {1} · 跳过 {2} · 取消 {3}</value></data>
+  <data name="Batch.Result.Title.Succeeded" xml:space="preserve"><value>批量任务完成</value></data>
+  <data name="Batch.Result.Title.PartiallySucceeded" xml:space="preserve"><value>批量任务部分完成</value></data>
+  <data name="Batch.Result.Title.Failed" xml:space="preserve"><value>批量任务失败</value></data>
+  <data name="Batch.Result.Title.Canceled" xml:space="preserve"><value>批量任务已取消</value></data>
+  <data name="Batch.Result.SizeUnavailable" xml:space="preserve"><value>暂无可比较结果</value></data>
+  <data name="Batch.Result.SizeReduced" xml:space="preserve"><value>总体积减少 {0}（{1:0.##}%）</value></data>
+  <data name="Batch.Result.SizeUnchanged" xml:space="preserve"><value>总体积未变化</value></data>
+  <data name="Batch.Result.SizeIncreased" xml:space="preserve"><value>总体积增加 {0}（{1:0.##}%）</value></data>
+  <data name="Batch.Notice.Appended" xml:space="preserve"><value>新增 {0} 张；重复 {1}，不支持 {2}，不可读取 {3}。</value></data>
+  <data name="Batch.Validation.InvalidConfiguration" xml:space="preserve"><value>当前批量处理配置无效。</value></data>
+  <data name="Batch.Validation.InputRequired" xml:space="preserve"><value>请至少添加一张图片。</value></data>
+  <data name="Batch.Validation.PatternInvalid" xml:space="preserve"><value>文件名格式无效，只能使用 {name} 与 {index} 占位符。</value></data>
+  <data name="Batch.Validation.Compression" xml:space="preserve"><value>自定义质量必须是 1 到 100 的整数。</value></data>
+  <data name="Batch.Validation.Conversion" xml:space="preserve"><value>转换质量必须是 1 到 100 的整数，背景色必须使用 #RRGGBB。</value></data>
+  <data name="Batch.Validation.Resize" xml:space="preserve"><value>Resize 参数无效；保持比例时至少填写一边，关闭时必须同时填写宽高。</value></data>
+  <data name="Batch.Conflict.Some" xml:space="preserve"><value>一部分</value></data>
+  <data name="Batch.Dialog.SourceOverwrite.Message" xml:space="preserve"><value>有 {0} 张图片的输出路径与任务输入相同。AtomPix 禁止覆盖任何源图片。</value></data>
+  <data name="Batch.Dialog.Cancel.Title" xml:space="preserve"><value>取消批量任务</value></data>
+  <data name="Batch.Dialog.Cancel.Message" xml:space="preserve"><value>已完成的输出会保留，当前项和未开始项将进入可恢复状态。</value></data>
+  <data name="Batch.Dialog.Cancel.Confirm" xml:space="preserve"><value>确认取消</value></data>
+  <data name="Batch.Dialog.Cancel.Continue" xml:space="preserve"><value>继续处理</value></data>
+  <data name="Batch.Recovery.Failed" xml:space="preserve"><value>已从失败项建立新草稿；尚未重新执行。</value></data>
+  <data name="Batch.Recovery.Unfinished" xml:space="preserve"><value>已从未完成项建立新草稿；尚未重新执行。</value></data>
+  <data name="Batch.Recovery.Skipped" xml:space="preserve"><value>已从跳过项建立自动重命名草稿；尚未重新执行。</value></data>
+  <data name="Batch.Error.OutputMissing" xml:space="preserve"><value>输出文件已不存在，无法打开输出目录。</value></data>
+  <data name="Batch.Error.OpenOutputDirectoryFailed" xml:space="preserve"><value>无法打开输出目录，目录可能已被移动。</value></data>
+  <data name="Batch.Error.OpenInputDirectoryFailed" xml:space="preserve"><value>无法打开输入目录，目录可能已被移动。</value></data>
+  <data name="Batch.Details.Input" xml:space="preserve"><value>输入：{0}</value></data>
+  <data name="Batch.Details.Status" xml:space="preserve"><value>状态：{0}</value></data>
+  <data name="Batch.Details.Image" xml:space="preserve"><value>图片：{0}</value></data>
+  <data name="Batch.Details.Output" xml:space="preserve"><value>输出：{0}</value></data>
+  <data name="Batch.Details.Reason" xml:space="preserve"><value>原因：{0}</value></data>
+  <data name="Batch.Details.DiagnosticId" xml:space="preserve"><value>诊断编号：{0}</value></data>
+  <data name="Batch.Details.Title" xml:space="preserve"><value>批量项目详情</value></data>
+  <data name="Batch.Relocate.NewDraft" xml:space="preserve"><value>已重新定位并建立新草稿；原任务结果保持只读，尚未重新执行。</value></data>
+  <data name="Batch.Relocate.Updated" xml:space="preserve"><value>已更新输入路径，请确认任务设置后开始。</value></data>
+  <data name="Batch.OutputExample.Empty" xml:space="preserve"><value>添加图片后显示实际示例</value></data>
+</root>
