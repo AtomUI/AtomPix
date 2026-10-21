@@ -158,7 +158,9 @@ public sealed class DesktopUiAutomationTests
 
             shell.Settings.CloseCommand.Execute(null);
             await WaitUntilAsync(() => !shell.IsSettingsOpen
-                && workspace.GetVisualDescendants().OfType<HomePageView>().Count() == 1);
+                && workspace.GetVisualDescendants().OfType<HomePageView>().Count() == 1
+                && shell.Home.IsActive
+                && settingsEntry.IsDisposed);
             Assert.False(shell.IsSettingsOpen);
             var homeView = Assert.Single(workspace.GetVisualDescendants().OfType<HomePageView>());
             Assert.Same(shell.Home, homeView.DataContext);
