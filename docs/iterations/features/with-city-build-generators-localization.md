@@ -57,7 +57,7 @@ AtomPix RESX 编辑输入按以下 catalog 划分，并使用同名 key prefix�
 
 原 RESX 只是编辑/构建输入；City Build 生成 embedded locpack 和 attribute/generated source，模块初始化由生成 registrar 原子注册一次。View/route/service attribute 与手工注册只能选一个事实源，禁止双注册。
 
-当前已建立 `Common`、`Shell`、`Home`、`Browser`、`Tools`、`Batch`、`Settings`、`Errors` 八个 `zh-CN` RESX 目录，共 27 个生成 key。City Build 已生成八个 embedded locpack、attribute 和强类型 key，`AtomPixDesktopModule.OnApplicationInitializationAsync` 通过唯一 generated registrar 注册。Shell 与 Home 已作为首个生产纵切迁入生成 key；这证明真实 View 已消费 catalog，但不代表现有生产中文已经迁完。
+当前已建立 `Common`、`Shell`、`Home`、`Browser`、`Tools`、`Batch`、`Settings`、`Errors` 八个 `zh-CN` RESX 目录，共 155 个生成 key。City Build 已生成八个 embedded locpack、attribute 和强类型 key，`AtomPixDesktopModule.OnApplicationInitializationAsync` 通过唯一 generated registrar 注册。Shell、Home、Settings、Browser、工具面板、输出策略和批量结果等全部 AXAML 已迁入生成 key；C# 动态文案仍在后续施工范围内。
 
 ## 4. Culture 与 UI bridge
 
@@ -65,7 +65,7 @@ AtomPix RESX 编辑输入按以下 catalog 划分，并使用同名 key prefix�
 
 AtomPix 组合层实现 `IPresentationLocalizationBridge`，把后台 culture 变更显式切到 Avalonia UI dispatcher。ViewModel 持有的 `ILocalizedText`/订阅随 activation scope 释放。同一 culture revision 的组合文案要么全部来自旧 revision，要么全部来自新 revision，不向用户提交混合语言状态。
 
-当前 `AvaloniaPresentationLocalizationBridge` 复用 City `IUiDispatcher`，在 UI 线程统一更新当前线程/默认线程 culture 和 AtomUI `LanguageVariant`；组合根把它注册为 `IPresentationLocalizationBridge`。`AtomPixLocalizedTextProjection` 在应用模块生命周期内持有 module scope 和 27 个 City `ILocalizedText`，只在同一 culture revision 的全部 handle 就绪后原子发布只读 snapshot；`LocExtension` 订阅 projection revision，使 Shell/Home 的文本、Tooltip 与 AutomationName 使用同一入口。Headless Avalonia 运行时测试已验证真实 DI 类型、bridge、八个 descriptor、27 keys、`Settings.Title -> 设置`、Settings 按钮真实可访问名称和生命周期释放。
+当前 `AvaloniaPresentationLocalizationBridge` 复用 City `IUiDispatcher`，在 UI 线程统一更新当前线程/默认线程 culture 和 AtomUI `LanguageVariant`；组合根把它注册为 `IPresentationLocalizationBridge`。`AtomPixLocalizedTextProjection` 在应用模块生命周期内持有 module scope 和 155 个 City `ILocalizedText`，只在同一 culture revision 的全部 handle 就绪后原子发布只读 snapshot；`LocExtension` 订阅 projection revision，使 AXAML 文本、Tooltip 与 AutomationName 使用同一入口。Headless Avalonia 运行时测试已验证真实 DI 类型、bridge、八个 descriptor、155 keys、跨 Settings/Browser/Tools 的资源查询、Settings 按钮真实可访问名称和生命周期释放。
 
 首次把 projection 放入同步 Host 启动路径时，测试发现 City 的 package single-flight、mutation queue 与 localized-text refresh 使用 `Task.Yield()` 捕获 Avalonia `SynchronizationContext`，会让非泵送 UI 线程同步等待 Host 时死锁。City 固定提交 `c2e41761` 改为“锁内先登记共享 completion、锁外在线程池执行”，并新增 non-pumping context 回归；Localization `97/97` 与 AtomPix 完整 UI 项目 `19/19`（非压力 `18` + virtualization 压力 `1`）通过。该问题归属 City 基础能力，不由 AtomPix 业务绕过。
 
@@ -81,4 +81,4 @@ AtomPix 组合层实现 `IPresentationLocalizationBridge`，把后台 culture �
 - runtime ProjectReference SHA、Build package source SHA 和证据记录完全一致。
 - 干净环境 restore/build、Partial Trim、single-file 通过；NativeAOT 仅在正式采用时进入强制门。
 
-截至 2026-10-21，构建管线、八目录/27 keys registrar、UI bridge、应用级 text projection 和 Shell/Home 生产纵切已经通过；两个已迁 AXAML 的硬编码中文为零。最新 win-x64 Partial Trim single-file 已重新发布，发布窗口/图标轨/Settings UIA 与真实发布 GUI `9/9` 通过，并从发布物查询到本纵切的本地化可访问名称；EXE SHA-256 为 `85CC96E…E827C`，功能报告为 `.artifacts/published-functional/20261021T090611571Z-29764-976985d3/`。全 Desktop 源码（排除 catalog）仍有 465 行、28 个文件含中文，其中 AXAML 146 行，因此内容迁移尚未结束；missing/duplicate key、逐项 allowlist 和剩余生产文案仍是开放项。本专项保持 `Implementation In Progress`。
+截至 2026-10-21，构建管线、八目录/155 keys registrar、UI bridge、应用级 text projection 和全部 AXAML 迁移已经通过；Desktop AXAML 的硬编码中文为零。`eng/verify-localization.ps1` 对固定八目录、空值、全局重复 key、AXAML 缺失 key 和中文回流进行确定性失败，并由 `eng/verify.ps1` 调用；完整 UI 项目 `19/19` 通过。上一轮 win-x64 Partial Trim single-file、UIA 与真实发布 GUI `9/9` 证明了 Shell/Home 纵切；扩展后的 155-key locpack 尚须在本轮 C# 文案迁移结束后重新发布验收。全 Desktop 源码（排除 catalog）仍有 319 行、18 个 C# 文件含中文，因此动态文案迁移和逐项 allowlist 仍是开放项。本专项保持 `Implementation In Progress`。

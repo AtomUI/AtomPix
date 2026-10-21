@@ -3,4 +3,118 @@
   <data name="Tools.Action.StartSingle" xml:space="preserve">
     <value>单张处理</value>
   </data>
+  <data name="Tools.Common.RemoveMetadata" xml:space="preserve">
+    <value>移除拍摄信息与位置数据</value>
+  </data>
+  <data name="Tools.Common.WidthPixels" xml:space="preserve">
+    <value>宽度（px）</value>
+  </data>
+  <data name="Tools.Common.HeightPixels" xml:space="preserve">
+    <value>高度（px）</value>
+  </data>
+  <data name="Tools.Compression.ModeTitle" xml:space="preserve">
+    <value>压缩模式</value>
+  </data>
+  <data name="Tools.Compression.ModeAutomation" xml:space="preserve">
+    <value>压缩模式</value>
+  </data>
+  <data name="Tools.Compression.QualityAutomation" xml:space="preserve">
+    <value>自定义压缩质量</value>
+  </data>
+  <data name="Tools.Compression.QualityValueAutomation" xml:space="preserve">
+    <value>自定义压缩质量数值</value>
+  </data>
+  <data name="Tools.Compression.QualityUnavailable" xml:space="preserve">
+    <value>当前格式不使用有损质量参数</value>
+  </data>
+  <data name="Tools.Compression.SmartDescription" xml:space="preserve">
+    <value>智能模式自动平衡体积与画质，不改变像素尺寸</value>
+  </data>
+  <data name="Tools.Conversion.FormatTitle" xml:space="preserve">
+    <value>输出格式</value>
+  </data>
+  <data name="Tools.Conversion.FormatAutomation" xml:space="preserve">
+    <value>转换输出格式</value>
+  </data>
+  <data name="Tools.Conversion.QualityAutomation" xml:space="preserve">
+    <value>转换输出质量</value>
+  </data>
+  <data name="Tools.Conversion.QualityValueAutomation" xml:space="preserve">
+    <value>转换输出质量数值</value>
+  </data>
+  <data name="Tools.Conversion.QualityDescription" xml:space="preserve">
+    <value>有损格式使用质量值；PNG 自动忽略</value>
+  </data>
+  <data name="Tools.Conversion.TransparencyTitle" xml:space="preserve">
+    <value>透明区域</value>
+  </data>
+  <data name="Tools.Conversion.BackgroundTitle" xml:space="preserve">
+    <value>JPEG 背景色</value>
+  </data>
+  <data name="Tools.Conversion.BackgroundAutomation" xml:space="preserve">
+    <value>透明区域背景色</value>
+  </data>
+  <data name="Tools.Conversion.White" xml:space="preserve">
+    <value>白</value>
+  </data>
+  <data name="Tools.Conversion.Black" xml:space="preserve">
+    <value>黑</value>
+  </data>
+  <data name="Tools.Resize.ModeTitle" xml:space="preserve">
+    <value>调整方式</value>
+  </data>
+  <data name="Tools.Resize.ModeAutomation" xml:space="preserve">
+    <value>尺寸调整方式</value>
+  </data>
+  <data name="Tools.Resize.WidthAutomation" xml:space="preserve">
+    <value>目标宽度</value>
+  </data>
+  <data name="Tools.Resize.HeightAutomation" xml:space="preserve">
+    <value>目标高度</value>
+  </data>
+  <data name="Tools.Resize.MaintainAspect" xml:space="preserve">
+    <value>保持宽高比</value>
+  </data>
+  <data name="Tools.Resize.PreventUpscale" xml:space="preserve">
+    <value>小于目标尺寸时不放大</value>
+  </data>
+  <data name="Tools.Resize.PercentageAutomation" xml:space="preserve">
+    <value>调整百分比</value>
+  </data>
+  <data name="Tools.Resize.PercentageValueAutomation" xml:space="preserve">
+    <value>调整百分比数值</value>
+  </data>
+  <data name="Tools.Resize.EstimatedOutput" xml:space="preserve">
+    <value>预计输出</value>
+  </data>
+  <data name="Tools.Crop.RatioTitle" xml:space="preserve">
+    <value>剪裁比例</value>
+  </data>
+  <data name="Tools.Crop.RatioAutomation" xml:space="preserve">
+    <value>裁剪比例</value>
+  </data>
+  <data name="Tools.Crop.WidthAutomation" xml:space="preserve">
+    <value>裁剪宽度</value>
+  </data>
+  <data name="Tools.Crop.HeightAutomation" xml:space="preserve">
+    <value>裁剪高度</value>
+  </data>
+  <data name="Tools.Crop.XTitle" xml:space="preserve">
+    <value>位置 X（px）</value>
+  </data>
+  <data name="Tools.Crop.XAutomation" xml:space="preserve">
+    <value>裁剪起点X</value>
+  </data>
+  <data name="Tools.Crop.YTitle" xml:space="preserve">
+    <value>位置 Y（px）</value>
+  </data>
+  <data name="Tools.Crop.YAutomation" xml:space="preserve">
+    <value>裁剪起点Y</value>
+  </data>
+  <data name="Tools.Crop.EstimatedOutput" xml:space="preserve">
+    <value>剪裁输出</value>
+  </data>
+  <data name="Tools.Crop.StartAction" xml:space="preserve">
+    <value>开始剪裁</value>
+  </data>
 </root>

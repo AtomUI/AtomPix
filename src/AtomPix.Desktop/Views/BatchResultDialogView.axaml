@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:atom="https://atomui.net"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:vm="using:AtomPix.Desktop.ViewModels"
              x:Class="AtomPix.Desktop.Views.BatchResultDialogView"
              x:DataType="vm:BatchTaskViewModel">
@@ -36,11 +37,11 @@
         </Border>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <atom:Button Content="重试失败项" Command="{Binding RetryFailedCommand}"
+            <atom:Button Content="{loc:Loc Batch.Action.RetryFailed}" Command="{Binding RetryFailedCommand}"
                          IsVisible="{Binding HasFailedItems}" />
-            <atom:Button Content="处理未完成项" Command="{Binding ProcessUnfinishedCommand}"
+            <atom:Button Content="{loc:Loc Batch.Action.ProcessUnfinished}" Command="{Binding ProcessUnfinishedCommand}"
                          IsVisible="{Binding HasUnfinishedItems}" />
-            <atom:Button Content="自动重命名处理跳过项" Command="{Binding ProcessSkippedWithAutoRenameCommand}"
+            <atom:Button Content="{loc:Loc Batch.Action.ProcessSkippedAutoRename}" Command="{Binding ProcessSkippedWithAutoRenameCommand}"
                          IsVisible="{Binding HasSkippedItems}" />
         </StackPanel>
     </Grid>

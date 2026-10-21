@@ -3,4 +3,88 @@
   <data name="Common.Action.Cancel" xml:space="preserve">
     <value>取消</value>
   </data>
+  <data name="Common.Action.CancelTask" xml:space="preserve">
+    <value>取消任务</value>
+  </data>
+  <data name="Common.Action.CopyDiagnosticId" xml:space="preserve">
+    <value>复制诊断编号</value>
+  </data>
+  <data name="Common.Output.LocationTitle" xml:space="preserve">
+    <value>输出位置</value>
+  </data>
+  <data name="Common.Output.SubfolderName" xml:space="preserve">
+    <value>子目录名称</value>
+  </data>
+  <data name="Common.Output.SubfolderAutomation" xml:space="preserve">
+    <value>输出子目录名称</value>
+  </data>
+  <data name="Common.Output.SameAsInput" xml:space="preserve">
+    <value>输出到原图所在目录</value>
+  </data>
+  <data name="Common.Output.ExistingPolicyHint" xml:space="preserve">
+    <value>同名文件按照下方的同名文件策略处理</value>
+  </data>
+  <data name="Common.Output.CustomDirectoryTitle" xml:space="preserve">
+    <value>指定输出文件夹</value>
+  </data>
+  <data name="Common.Output.CustomDirectoryAutomation" xml:space="preserve">
+    <value>自定义输出目录</value>
+  </data>
+  <data name="Common.Output.DirectoryNotSelected" xml:space="preserve">
+    <value>尚未选择输出文件夹</value>
+  </data>
+  <data name="Common.Output.ChooseDirectoryAutomation" xml:space="preserve">
+    <value>选择或更改输出文件夹</value>
+  </data>
+  <data name="Common.Output.FixedDirectoryDescription" xml:space="preserve">
+    <value>所有图片都将输出到这个固定目录</value>
+  </data>
+  <data name="Common.Output.NamingTitle" xml:space="preserve">
+    <value>文件命名</value>
+  </data>
+  <data name="Common.Output.NamingModeAutomation" xml:space="preserve">
+    <value>文件命名方式</value>
+  </data>
+  <data name="Common.Output.KeepOriginalNameTitle" xml:space="preserve">
+    <value>沿用原图片名称</value>
+  </data>
+  <data name="Common.Output.KeepOriginalNameDescription" xml:space="preserve">
+    <value>不添加后缀；同名情况由下方策略处理</value>
+  </data>
+  <data name="Common.Output.NamingPreviewPrefix" xml:space="preserve">
+    <value>名称示例：</value>
+  </data>
+  <data name="Common.Output.SuffixTitle" xml:space="preserve">
+    <value>原文件名后缀</value>
+  </data>
+  <data name="Common.Output.SuffixAutomation" xml:space="preserve">
+    <value>文件名后缀</value>
+  </data>
+  <data name="Common.Output.ExtensionDescription" xml:space="preserve">
+    <value>扩展名由所选输出格式决定</value>
+  </data>
+  <data name="Common.Output.PatternTitle" xml:space="preserve">
+    <value>自定义名称格式</value>
+  </data>
+  <data name="Common.Output.PatternAutomation" xml:space="preserve">
+    <value>文件名格式</value>
+  </data>
+  <data name="Common.Output.PatternPlaceholder" xml:space="preserve">
+    <value>示例：{name}_atompix</value>
+  </data>
+  <data name="Common.Output.InsertNameToken" xml:space="preserve">
+    <value>＋ 原文件名</value>
+  </data>
+  <data name="Common.Output.InsertIndexToken" xml:space="preserve">
+    <value>＋ 序号</value>
+  </data>
+  <data name="Common.Output.BatchIndexDescription" xml:space="preserve">
+    <value>批量处理时，若格式中没有序号，AtomPix 会自动追加</value>
+  </data>
+  <data name="Common.Output.ExistingTitle" xml:space="preserve">
+    <value>同名文件</value>
+  </data>
+  <data name="Common.Output.ExistingAutomation" xml:space="preserve">
+    <value>已有文件处理方式</value>
+  </data>
 </root>

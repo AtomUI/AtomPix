@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
-  <data name="Browser.Automation.Name" xml:space="preserve">
+  <data name="Browser.Automation.Workspace" xml:space="preserve">
     <value>图片浏览器</value>
+  </data>
+  <data name="Browser.Automation.Gallery" xml:space="preserve">
+    <value>图片集预览器</value>
   </data>
 </root>

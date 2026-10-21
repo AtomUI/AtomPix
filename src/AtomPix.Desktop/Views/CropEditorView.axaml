@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:atom="https://atomui.net" xmlns:controls="using:AtomPix.Desktop.Controls"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:vm="using:AtomPix.Desktop.ViewModels" x:Class="AtomPix.Desktop.Views.CropEditorView"
              x:DataType="vm:CropEditorViewModel">
     <Grid RowDefinitions="*,Auto" Background="{DynamicResource AtomPixInspectorSurfaceBrush}">
@@ -12,8 +13,8 @@
                 </StackPanel>
                 <atom:Spin IsVisible="{Binding IsContentLoading}" HorizontalAlignment="Center" />
                 <StackPanel Spacing="11">
-                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="剪裁比例" />
-                    <atom:Segmented AutomationProperties.Name="裁剪比例"
+                    <TextBlock Classes="AtomPixInspectorSectionTitle" Text="{loc:Loc Tools.Crop.RatioTitle}" />
+                    <atom:Segmented AutomationProperties.Name="{loc:Loc Tools.Crop.RatioAutomation}"
                                     ItemsSource="{Binding Ratios}"
                                     SelectedItem="{Binding SelectedRatio, Mode=TwoWay}"
                                     IsExpanding="True" />
@@ -21,39 +22,39 @@
                 <StackPanel x:Name="CustomCropOptions" IsVisible="{Binding IsCustomRatio}" Spacing="0">
                     <Border Padding="0,10" BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}" BorderThickness="0,0,0,1">
                         <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
-                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="宽度（px）" />
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{loc:Loc Tools.Common.WidthPixels}" />
                             <atom:NumericUpDown x:Name="CropWidthInput" Grid.Column="1" Width="112"
-                                                AutomationProperties.Name="裁剪宽度" Minimum="1" FormatString="0"
+                                                AutomationProperties.Name="{loc:Loc Tools.Crop.WidthAutomation}" Minimum="1" FormatString="0"
                                                 Value="{Binding CropWidth, Mode=TwoWay}" />
                         </Grid>
                     </Border>
                     <Border Padding="0,10" BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}" BorderThickness="0,0,0,1">
                         <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
-                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="高度（px）" />
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{loc:Loc Tools.Common.HeightPixels}" />
                             <atom:NumericUpDown x:Name="CropHeightInput" Grid.Column="1" Width="112"
-                                                AutomationProperties.Name="裁剪高度" Minimum="1" FormatString="0"
+                                                AutomationProperties.Name="{loc:Loc Tools.Crop.HeightAutomation}" Minimum="1" FormatString="0"
                                                 Value="{Binding CropHeight, Mode=TwoWay}" />
                         </Grid>
                     </Border>
                     <Border Padding="0,10" BorderBrush="{atom:SharedTokenResource ColorBorderSecondary}" BorderThickness="0,0,0,1">
                         <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
-                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="位置 X（px）" />
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{loc:Loc Tools.Crop.XTitle}" />
                             <atom:NumericUpDown x:Name="CropXInput" Grid.Column="1" Width="112"
-                                                AutomationProperties.Name="裁剪起点X" Minimum="0" FormatString="0"
+                                                AutomationProperties.Name="{loc:Loc Tools.Crop.XAutomation}" Minimum="0" FormatString="0"
                                                 Value="{Binding CropX, Mode=TwoWay}" />
                         </Grid>
                     </Border>
                     <Border Padding="0,10">
                         <Grid ColumnDefinitions="*,112" ColumnSpacing="12">
-                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="位置 Y（px）" />
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{loc:Loc Tools.Crop.YTitle}" />
                             <atom:NumericUpDown x:Name="CropYInput" Grid.Column="1" Width="112"
-                                                AutomationProperties.Name="裁剪起点Y" Minimum="0" FormatString="0"
+                                                AutomationProperties.Name="{loc:Loc Tools.Crop.YAutomation}" Minimum="0" FormatString="0"
                                                 Value="{Binding CropY, Mode=TwoWay}" />
                         </Grid>
                     </Border>
                     <Border Padding="14,11" Background="{DynamicResource AtomPixInspectorInfoSurfaceBrush}" CornerRadius="8">
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                            <TextBlock Classes="AtomPixInspectorCaption" Text="剪裁输出" VerticalAlignment="Center" />
+                            <TextBlock Classes="AtomPixInspectorCaption" Text="{loc:Loc Tools.Crop.EstimatedOutput}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="{Binding EstimatedOutput}"
                                        Foreground="{atom:SharedTokenResource ColorPrimary}"
                                        FontSize="15" FontWeight="SemiBold" TextAlignment="Right" />
@@ -69,9 +70,9 @@
         <Border Grid.Row="1" Padding="20,12" Background="{DynamicResource AtomPixInspectorSurfaceBrush}"
                 BorderBrush="{DynamicResource AtomPixInspectorDividerBrush}" BorderThickness="0,1,0,0">
             <Grid>
-                <atom:Button Classes="AtomPixInspectorPrimaryAction" Content="开始剪裁" ButtonType="Primary"
+                <atom:Button Classes="AtomPixInspectorPrimaryAction" Content="{loc:Loc Tools.Crop.StartAction}" ButtonType="Primary"
                              Command="{Binding StartCommand}" IsVisible="{Binding !IsProcessing}" />
-                <atom:Button Classes="AtomPixInspectorPrimaryAction" Content="取消任务" IsDanger="True"
+                <atom:Button Classes="AtomPixInspectorPrimaryAction" Content="{loc:Loc Common.Action.CancelTask}" IsDanger="True"
                              Command="{Binding CancelCommand}" IsVisible="{Binding IsProcessing}" />
             </Grid>
         </Border>

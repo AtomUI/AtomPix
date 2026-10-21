@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:atom="https://atomui.net" xmlns:vm="using:AtomPix.Desktop.ViewModels"
+             xmlns:atom="https://atomui.net" xmlns:loc="using:AtomPix.Desktop.Localization"
+             xmlns:vm="using:AtomPix.Desktop.ViewModels"
              x:Class="AtomPix.Desktop.Views.ToolDrawerSessionView" x:DataType="vm:ToolDrawerSessionViewModel">
     <Grid RowDefinitions="*,Auto" Background="{DynamicResource AtomPixInspectorSurfaceBrush}">
         <ContentControl Content="{Binding SingleContent}" IsEnabled="{Binding CanEditContent}" />
@@ -21,13 +22,13 @@
                 </Grid>
 
                 <atom:Button Classes="AtomPixInspectorPrimaryAction"
-                             Content="取消任务" IsDanger="True"
+                             Content="{loc:Loc Common.Action.CancelTask}" IsDanger="True"
                              Command="{Binding SingleCancelCommand}"
                              IsVisible="{Binding IsSingleProcessing}" />
 
                 <StackPanel Spacing="8" IsVisible="{Binding IsBatchExecuting}">
                     <atom:ProgressBar x:Name="BatchProgressBar"
-                                      AutomationProperties.Name="批量处理进度"
+                                      AutomationProperties.Name="{loc:Loc Batch.Progress.Automation}"
                                       Minimum="0" Maximum="1"
                                       IsProgressInfoVisible="False"
                                       Value="{Binding BatchProgressRatio}" />
@@ -35,7 +36,7 @@
                         <TextBlock VerticalAlignment="Center"
                                    Text="{Binding BatchProgressSummary}"
                                    TextWrapping="Wrap" Opacity="0.7" />
-                        <atom:Button Grid.Column="1" Content="取消任务" IsDanger="True"
+                        <atom:Button Grid.Column="1" Content="{loc:Loc Common.Action.CancelTask}" IsDanger="True"
                                      Command="{Binding BatchCancelCommand}"
                                      IsEnabled="{Binding IsBatchProcessing}" />
                     </Grid>

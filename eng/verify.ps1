@@ -51,6 +51,8 @@ function Assert-CityReleaseClosure {
 
 Push-Location $repoRoot
 try {
+    Write-Host "==> Localization catalog and AXAML integrity"
+    & (Join-Path $PSScriptRoot "verify-localization.ps1")
     if (-not $NoRestore) {
         Invoke-Checked "Restore" { dotnet restore $solution --configfile $nugetConfig }
     }

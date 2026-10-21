@@ -3,4 +3,16 @@
   <data name="Batch.Action.Start" xml:space="preserve">
     <value>批量处理</value>
   </data>
+  <data name="Batch.Action.RetryFailed" xml:space="preserve">
+    <value>重试失败项</value>
+  </data>
+  <data name="Batch.Action.ProcessUnfinished" xml:space="preserve">
+    <value>处理未完成项</value>
+  </data>
+  <data name="Batch.Action.ProcessSkippedAutoRename" xml:space="preserve">
+    <value>自动重命名处理跳过项</value>
+  </data>
+  <data name="Batch.Progress.Automation" xml:space="preserve">
+    <value>批量处理进度</value>
+  </data>
 </root>

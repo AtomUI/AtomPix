@@ -48,7 +48,7 @@ public sealed class DesktopUiAutomationTests
             Assert.Equal(
                 new[] { "zh-CN" },
                 AtomUI.City.Generated.GeneratedLocalizationManifest.SupportedCultures);
-            Assert.Equal(27, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
+            Assert.Equal(155, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
 
             var localization = harness.Services.GetRequiredService<ILocalizationService>();
             var presentationBridge = harness.Services.GetRequiredService<IPresentationLocalizationBridge>();
@@ -57,6 +57,9 @@ public sealed class DesktopUiAutomationTests
             Assert.Same(projection, LocalizationHost.Current);
             Assert.Equal("设置", projection.GetString(
                 AtomUI.City.Generated.GeneratedLocalizationManifest.Keys.Shell_Navigation_Settings));
+            Assert.Equal("轻巧、专注的图片处理工具", projection.GetString("Settings.About.Tagline"));
+            Assert.Equal("图片集预览器", projection.GetString("Browser.Automation.Gallery"));
+            Assert.Equal("开始剪裁", projection.GetString("Tools.Crop.StartAction"));
 
             var presentationResult = await presentationBridge.ApplyCultureAsync(
                 localization.CultureState.Value);
@@ -258,6 +261,7 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Image_browser_hosts_the_official_labs_gallery_and_crop_resource_surface() => RunAsync(() =>
     {
+        using var services = DesktopCompositionRoot.Build();
         var view = new ImageBrowserView();
         var window = Show(view);
         try
@@ -470,6 +474,7 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Processing_editors_use_cardless_inspectors_with_consistent_primary_actions() => RunAsync(() =>
     {
+        using var services = DesktopCompositionRoot.Build();
         (Control Editor, int ExpectedActions)[] editors =
         [
             (new CompressionEditorView(), 0),
@@ -653,6 +658,7 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Output_directory_uses_atomui_inputs_and_aligns_custom_input_with_picker_button() => RunAsync(() =>
     {
+        using var services = DesktopCompositionRoot.Build();
         var viewModel = new OutputPolicyEditorViewModel(new CanceledPicker());
         viewModel.SelectedLocation = viewModel.Locations.Single(
             option => option.Value == AtomPix.Core.Output.OutputLocationMode.CustomDirectory);
