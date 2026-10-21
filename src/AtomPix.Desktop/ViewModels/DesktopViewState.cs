@@ -1,5 +1,7 @@
 namespace AtomPix.Desktop.ViewModels;
 
+using AtomPix.Desktop.Localization;
+
 public enum DesktopContentState
 {
     Empty,
@@ -41,36 +43,36 @@ public sealed record DesktopChoiceOption<T>(string Label, T Value)
 
 public static class DesktopErrorText
 {
-    public static string FromPicker(string? message) =>
-        string.IsNullOrWhiteSpace(message) ? "无法打开系统选择器，请重试。" : message;
+    public static string FromPicker(string? message, IAtomPixLocalizedText text) =>
+        string.IsNullOrWhiteSpace(message) ? text.GetString("Errors.PickerFailed") : message;
 
-    public static string FromWorkflow(AtomPix.Core.Errors.AtomPixError? error) => error?.Code switch
+    public static string FromWorkflow(AtomPix.Core.Errors.AtomPixError? error, IAtomPixLocalizedText text) => error?.Code switch
     {
-        AtomPix.Core.Errors.AtomPixErrorCode.InputFileNotFound => "图片已不存在，请重新选择。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InputDirectoryNotFound => "文件夹已不存在，请重新选择。",
-        AtomPix.Core.Errors.AtomPixErrorCode.UnsupportedInputFormat => "该文件不是 AtomPix 当前支持的图片格式。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InvalidImageFile => "图片已损坏或无法识别，请选择其他图片。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InputFileTooLarge => "图片文件超过当前处理上限。",
-        AtomPix.Core.Errors.AtomPixErrorCode.ImageDimensionsExceedLimit => "图片分辨率超过当前处理上限。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InvalidResizeOptions => "调整尺寸参数无效，请检查宽度、高度或百分比。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InvalidCropOptions => "裁剪区域无效，请检查位置和尺寸。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InvalidCompressionQuality => "压缩质量必须是 1 到 100 的整数。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InvalidConversionOptions => "转换参数无效，请检查输出格式、质量或透明背景色。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InvalidOutputNamingPattern => "文件名格式无效，请只使用 {name} 和 {index} 占位符。",
-        AtomPix.Core.Errors.AtomPixErrorCode.OutputPathConflictsWithInput => "无法覆盖原始图片，请改用自动重命名。",
-        AtomPix.Core.Errors.AtomPixErrorCode.OutputFileAlreadyExists => "目标文件已存在。",
-        AtomPix.Core.Errors.AtomPixErrorCode.SettingsLoadFailed => "设置读取失败，请恢复默认设置或检查配置目录。",
-        AtomPix.Core.Errors.AtomPixErrorCode.SettingsSaveFailed => "设置保存失败，修改尚未丢失，请重试。",
-        AtomPix.Core.Errors.AtomPixErrorCode.ImageCompressFailed => "压缩失败，请重试或更换图片。",
-        AtomPix.Core.Errors.AtomPixErrorCode.ImageConvertFailed => "转换失败，请重试或更换图片。",
-        AtomPix.Core.Errors.AtomPixErrorCode.ImageResizeFailed => "调整尺寸失败，请重试或更换图片。",
-        AtomPix.Core.Errors.AtomPixErrorCode.ImageCropFailed => "裁剪失败，请重试或更换图片。",
-        AtomPix.Core.Errors.AtomPixErrorCode.ImageWriteFailed => "无法写入输出文件，请检查目录权限或选择其他输出位置。",
-        AtomPix.Core.Errors.AtomPixErrorCode.ImageResourceLimitExceeded => "图片处理超出当前资源保护上限，请使用更小的图片或尺寸。",
-        AtomPix.Core.Errors.AtomPixErrorCode.InsufficientDiskSpace => "磁盘空间不足，请释放空间或选择其他输出目录。",
+        AtomPix.Core.Errors.AtomPixErrorCode.InputFileNotFound => text.GetString("Errors.InputFileNotFound"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InputDirectoryNotFound => text.GetString("Errors.InputDirectoryNotFound"),
+        AtomPix.Core.Errors.AtomPixErrorCode.UnsupportedInputFormat => text.GetString("Errors.UnsupportedInputFormat"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InvalidImageFile => text.GetString("Errors.InvalidImageFile"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InputFileTooLarge => text.GetString("Errors.InputFileTooLarge"),
+        AtomPix.Core.Errors.AtomPixErrorCode.ImageDimensionsExceedLimit => text.GetString("Errors.ImageDimensionsExceedLimit"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InvalidResizeOptions => text.GetString("Errors.InvalidResizeOptions"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InvalidCropOptions => text.GetString("Errors.InvalidCropOptions"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InvalidCompressionQuality => text.GetString("Errors.InvalidCompressionQuality"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InvalidConversionOptions => text.GetString("Errors.InvalidConversionOptions"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InvalidOutputNamingPattern => text.GetString("Errors.InvalidOutputNamingPattern"),
+        AtomPix.Core.Errors.AtomPixErrorCode.OutputPathConflictsWithInput => text.GetString("Errors.OutputPathConflictsWithInput"),
+        AtomPix.Core.Errors.AtomPixErrorCode.OutputFileAlreadyExists => text.GetString("Errors.OutputFileAlreadyExists"),
+        AtomPix.Core.Errors.AtomPixErrorCode.SettingsLoadFailed => text.GetString("Errors.SettingsLoadFailed"),
+        AtomPix.Core.Errors.AtomPixErrorCode.SettingsSaveFailed => text.GetString("Errors.SettingsSaveFailed"),
+        AtomPix.Core.Errors.AtomPixErrorCode.ImageCompressFailed => text.GetString("Errors.ImageCompressFailed"),
+        AtomPix.Core.Errors.AtomPixErrorCode.ImageConvertFailed => text.GetString("Errors.ImageConvertFailed"),
+        AtomPix.Core.Errors.AtomPixErrorCode.ImageResizeFailed => text.GetString("Errors.ImageResizeFailed"),
+        AtomPix.Core.Errors.AtomPixErrorCode.ImageCropFailed => text.GetString("Errors.ImageCropFailed"),
+        AtomPix.Core.Errors.AtomPixErrorCode.ImageWriteFailed => text.GetString("Errors.ImageWriteFailed"),
+        AtomPix.Core.Errors.AtomPixErrorCode.ImageResourceLimitExceeded => text.GetString("Errors.ImageResourceLimitExceeded"),
+        AtomPix.Core.Errors.AtomPixErrorCode.InsufficientDiskSpace => text.GetString("Errors.InsufficientDiskSpace"),
         AtomPix.Core.Errors.AtomPixErrorCode.OperationCanceled => string.Empty,
-        AtomPix.Core.Errors.AtomPixErrorCode.Unknown => "发生未预期错误，请使用诊断编号定位本地日志。",
-        _ => "操作未完成，请检查输入与输出设置后重试。"
+        AtomPix.Core.Errors.AtomPixErrorCode.Unknown => text.GetString("Errors.Unknown"),
+        _ => text.GetString("Errors.Default")
     };
 
     public static string? DiagnosticId(AtomPix.Core.Errors.AtomPixError? error) =>
@@ -83,7 +85,7 @@ public static class DesktopErrorText
 
 public static class DesktopResultText
 {
-    public static string FormatSizeChange(AtomPix.Core.Jobs.ImageJobResult? result)
+    public static string FormatSizeChange(AtomPix.Core.Jobs.ImageJobResult? result, IAtomPixLocalizedText text)
     {
         if (result?.SizeChangeKind is null || result.SizeDeltaBytes is null)
         {
@@ -94,9 +96,9 @@ public static class DesktopResultText
         var ratio = Math.Abs(result.SizeDeltaRatio ?? 0) * 100;
         return result.SizeChangeKind switch
         {
-            AtomPix.Core.Jobs.FileSizeChangeKind.Reduced => $"体积减少 {FormatBytes(bytes)}（{ratio:0.##}%）",
-            AtomPix.Core.Jobs.FileSizeChangeKind.Unchanged => "文件大小未变化",
-            AtomPix.Core.Jobs.FileSizeChangeKind.Increased => $"体积增加 {FormatBytes(bytes)}（{ratio:0.##}%）",
+            AtomPix.Core.Jobs.FileSizeChangeKind.Reduced => text.Format("Common.Result.SizeReduced", FormatBytes(bytes), ratio),
+            AtomPix.Core.Jobs.FileSizeChangeKind.Unchanged => text.GetString("Common.Result.SizeUnchanged"),
+            AtomPix.Core.Jobs.FileSizeChangeKind.Increased => text.Format("Common.Result.SizeIncreased", FormatBytes(bytes), ratio),
             _ => string.Empty
         };
     }

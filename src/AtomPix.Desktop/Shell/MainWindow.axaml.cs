@@ -123,7 +123,7 @@ public sealed partial class MainWindow : AtomUI.Desktop.Controls.Window
         {
             _feedback.ShowMessage(
                 settings.SaveMessage,
-                settings.SaveMessage.StartsWith("设置已保存", StringComparison.Ordinal)
+                settings.IsSaveMessageSuccess
                     ? DesktopFeedbackSeverity.Success
                     : DesktopFeedbackSeverity.Information);
         }

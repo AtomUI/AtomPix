@@ -5,6 +5,7 @@ using AtomPix.Core.Errors;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Core.Conversion;
+using AtomPix.Desktop.Localization;
 using AtomPix.Imaging.Abstractions.Formats;
 using AtomPix.Imaging.Abstractions.Processing;
 using AtomPix.Workflows.Images;
@@ -31,6 +32,7 @@ public enum BrowserTaskStatus
 
 public sealed class BrowserItemViewModel : ObservableObject
 {
+    private readonly IAtomPixLocalizedText _text;
     private ImageProbeResult? _probe;
     private BrowserItemAvailability _availability;
     private BrowserTaskStatus _taskStatus;
@@ -39,10 +41,12 @@ public sealed class BrowserItemViewModel : ObservableObject
         LocalPath path,
         string displayName,
         Action<BrowserItemViewModel> removeUnavailable,
+        IAtomPixLocalizedText text,
         IUiCommandFactory? commandFactory = null)
     {
         Path = path;
         DisplayName = displayName;
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         ArgumentNullException.ThrowIfNull(removeUnavailable);
         RemoveCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance)
             .Create(() => removeUnavailable(this), () => IsUnavailable);
@@ -98,16 +102,16 @@ public sealed class BrowserItemViewModel : ObservableObject
     public bool IsTaskCanceled => TaskStatus == BrowserTaskStatus.Canceled;
     public string TaskStatusText => TaskStatus switch
     {
-        BrowserTaskStatus.Pending => "等待处理",
-        BrowserTaskStatus.Running => "正在处理",
-        BrowserTaskStatus.Succeeded => "处理成功",
-        BrowserTaskStatus.Failed => "处理失败",
-        BrowserTaskStatus.Skipped => "已跳过",
-        BrowserTaskStatus.Canceled => "已取消",
+        BrowserTaskStatus.Pending => _text.GetString("Browser.Task.Pending"),
+        BrowserTaskStatus.Running => _text.GetString("Browser.Task.Running"),
+        BrowserTaskStatus.Succeeded => _text.GetString("Browser.Task.Succeeded"),
+        BrowserTaskStatus.Failed => _text.GetString("Browser.Task.Failed"),
+        BrowserTaskStatus.Skipped => _text.GetString("Browser.Task.Skipped"),
+        BrowserTaskStatus.Canceled => _text.GetString("Browser.Task.Canceled"),
         _ => string.Empty
     };
     public string ThumbnailAutomationName => HasTaskStatus
-        ? $"{DisplayName}，{TaskStatusText}"
+        ? _text.Format("Browser.Thumbnail.TaskStatus", DisplayName, TaskStatusText)
         : DisplayName;
 
     public IRelayCommand RemoveCommand { get; }
@@ -126,6 +130,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
     private readonly IDesktopNavigator _navigator;
     private readonly IDesktopLauncherService _launcher;
     private readonly IDesktopPickerService? _picker;
+    private readonly IAtomPixLocalizedText _text;
     private readonly BoundedLruCache<string, ImageProbeResult> _probeCache;
     private readonly IUiCommandFactory _commands;
     private readonly CommandExecutionDomain _interactionDomain = new();
@@ -150,6 +155,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
         IDesktopNavigator navigator,
         IDesktopLauncherService launcher,
         IDesktopClipboardService clipboard,
+        IAtomPixLocalizedText text,
         IDesktopPickerService? picker = null,
         IUiCommandFactory? commandFactory = null)
     {
@@ -165,6 +171,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
                 : resources.MaxInputPixelCount * 4);
         _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         _picker = picker;
         _commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
@@ -359,7 +366,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
         {
             if (DirectoryPath is null)
             {
-                return "单张图片";
+                return _text.GetString("Browser.Source.SingleImage");
             }
 
             var trimmed = Path.TrimEndingDirectorySeparator(DirectoryPath.Value.Value);
@@ -377,19 +384,21 @@ public sealed class ImageBrowserViewModel : ViewModelBase
 
     public string CurrentTransparency => _currentProbe is null
         ? string.Empty
-        : _currentProbe.HasTransparency ? "有" : "无";
+        : _text.GetString(_currentProbe.HasTransparency ? "Common.Answer.Yes" : "Common.Answer.No");
 
     public string CurrentFrameSummary => _currentProbe is null
         ? string.Empty
-        : _currentProbe.FrameCount > 1 ? $"{_currentProbe.FrameCount} 帧" : "否";
+        : _currentProbe.FrameCount > 1
+            ? _text.Format("Browser.Summary.FrameCount", _currentProbe.FrameCount)
+            : _text.GetString("Common.Answer.No");
 
     public string CurrentMetadata => _currentProbe is null
         ? string.Empty
-        : _currentProbe.HasMetadata ? "包含拍摄信息" : "无拍摄信息";
+        : _text.GetString(_currentProbe.HasMetadata ? "Browser.Summary.HasMetadata" : "Browser.Summary.NoMetadata");
 
     public string CurrentColorProfile => _currentProbe is null
         ? string.Empty
-        : _currentProbe.HasColorProfile ? "包含 ICC 色彩配置" : "无 ICC 色彩配置";
+        : _text.GetString(_currentProbe.HasColorProfile ? "Browser.Summary.HasColorProfile" : "Browser.Summary.NoColorProfile");
 
     public bool CanUseCurrentImage => State == DesktopContentState.Ready && _currentProbe is not null;
 
@@ -455,6 +464,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
                 item.Path,
                 item.DisplayName,
                 RemoveUnavailable,
+                _text,
                 _commands))
             .ToArray();
         ClearCurrent();
@@ -491,7 +501,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
         }
 
         State = DesktopContentState.Failure;
-        ErrorMessage = "文件夹中没有可读取的图片。";
+                ErrorMessage = _text.GetString("Browser.Error.NoReadableImages");
         Diagnostic.Clear();
     }
 
@@ -617,7 +627,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
         {
             if (!await _launcher.OpenDirectoryAsync(directory, cancellationToken))
             {
-                ErrorMessage = "无法在系统文件管理器中打开当前目录。";
+                ErrorMessage = _text.GetString("Browser.Error.OpenDirectoryFailed");
                 Diagnostic.Clear();
             }
         }
@@ -630,7 +640,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
         if (selection.Status != DesktopSelectionStatus.Selected)
         {
-            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage);
+            ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage, _text);
             return;
         }
 
@@ -646,6 +656,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
                     path,
                     Path.GetFileName(path.Value),
                     RemoveUnavailable,
+                    _text,
                     _commands));
             }
         }
@@ -849,7 +860,7 @@ public sealed class ImageBrowserViewModel : ViewModelBase
 
     private void SetWorkflowError(AtomPixError? error)
     {
-        ErrorMessage = DesktopErrorText.FromWorkflow(error);
+        ErrorMessage = DesktopErrorText.FromWorkflow(error, _text);
         Diagnostic.Set(error);
     }
 

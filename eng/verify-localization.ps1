@@ -48,6 +48,7 @@ $usagePattern = [regex]::new('\{loc:Loc\s+(?<key>[A-Za-z0-9_.-]+)\}')
 $hanPattern = [regex]::new('[\u3400-\u4DBF\u4E00-\u9FFF]')
 $usageKeys = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 $hardCodedLines = [System.Collections.Generic.List[string]]::new()
+$hardCodedCodeLines = [System.Collections.Generic.List[string]]::new()
 
 foreach ($axamlFile in Get-ChildItem -LiteralPath $desktopRoot -Recurse -Filter "*.axaml") {
     $text = Get-Content -LiteralPath $axamlFile.FullName -Raw
@@ -69,9 +70,30 @@ if ($hardCodedLines.Count -gt 0) {
     throw "Hard-coded Chinese text remains in AXAML: $($hardCodedLines -join ', ')."
 }
 
+foreach ($codeFile in Get-ChildItem -LiteralPath $desktopRoot -Recurse -Filter "*.cs") {
+    if ($codeFile.FullName.StartsWith($localizationRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $codeFile.FullName.Contains("$([System.IO.Path]::DirectorySeparatorChar)obj$([System.IO.Path]::DirectorySeparatorChar)", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $codeFile.FullName.Contains("$([System.IO.Path]::DirectorySeparatorChar)bin$([System.IO.Path]::DirectorySeparatorChar)", [System.StringComparison]::OrdinalIgnoreCase)) {
+        continue
+    }
+
+    $lineNumber = 0
+    foreach ($line in Get-Content -LiteralPath $codeFile.FullName) {
+        $lineNumber++
+        if ($hanPattern.IsMatch($line)) {
+            $relativePath = [System.IO.Path]::GetRelativePath($repoRoot, $codeFile.FullName)
+            $hardCodedCodeLines.Add("${relativePath}:${lineNumber}")
+        }
+    }
+}
+
+if ($hardCodedCodeLines.Count -gt 0) {
+    throw "Hard-coded Chinese text remains in Desktop C#: $($hardCodedCodeLines -join ', ')."
+}
+
 $missingKeys = @($usageKeys | Where-Object { -not $keyOwners.ContainsKey($_) } | Sort-Object)
 if ($missingKeys.Count -gt 0) {
     throw "AXAML references missing localization keys: $($missingKeys -join ', ')."
 }
 
-Write-Host "Localization integrity passed: $($catalogFiles.Count) catalogs, $($keyOwners.Count) unique keys, $($usageKeys.Count) AXAML keys, 0 hard-coded AXAML Chinese lines."
+Write-Host "Localization integrity passed: $($catalogFiles.Count) catalogs, $($keyOwners.Count) unique keys, $($usageKeys.Count) AXAML keys, 0 hard-coded AXAML/C# Chinese lines."

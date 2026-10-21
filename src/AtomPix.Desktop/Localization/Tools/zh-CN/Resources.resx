@@ -117,4 +117,121 @@
   <data name="Tools.Crop.StartAction" xml:space="preserve">
     <value>开始剪裁</value>
   </data>
+  <data name="Tools.Compression.Status.Succeeded" xml:space="preserve">
+    <value>压缩完成</value>
+  </data>
+  <data name="Tools.Compression.Status.Failed" xml:space="preserve">
+    <value>压缩失败</value>
+  </data>
+  <data name="Tools.Compression.AppliedQuality" xml:space="preserve">
+    <value>实际质量：{0}</value>
+  </data>
+  <data name="Tools.Compression.Validation.InvalidProfile" xml:space="preserve">
+    <value>当前压缩配置无效。</value>
+  </data>
+  <data name="Tools.Compression.Validation.UnsupportedFormat" xml:space="preserve">
+    <value>当前格式不能直接压缩，请先转换为 JPEG、PNG 或单帧 WebP。</value>
+  </data>
+  <data name="Tools.Compression.Validation.CustomQuality" xml:space="preserve">
+    <value>自定义质量必须是 1 到 100 的整数。</value>
+  </data>
+  <data name="Tools.Conversion.Status.Succeeded" xml:space="preserve">
+    <value>转换完成</value>
+  </data>
+  <data name="Tools.Conversion.Status.Failed" xml:space="preserve">
+    <value>转换失败</value>
+  </data>
+  <data name="Tools.Conversion.Transparency.NoneDetected" xml:space="preserve">
+    <value>未检测到透明区域</value>
+  </data>
+  <data name="Tools.Conversion.Transparency.WillFlatten" xml:space="preserve">
+    <value>透明区域将使用 {0} 填充</value>
+  </data>
+  <data name="Tools.Conversion.Transparency.WillPreserve" xml:space="preserve">
+    <value>透明区域将保留</value>
+  </data>
+  <data name="Tools.Conversion.Transparency.NotPresent" xml:space="preserve">
+    <value>无透明区域</value>
+  </data>
+  <data name="Tools.Conversion.Transparency.Preserved" xml:space="preserve">
+    <value>已保留透明区域</value>
+  </data>
+  <data name="Tools.Conversion.Transparency.Flattened" xml:space="preserve">
+    <value>已使用 {0} 填充透明区域</value>
+  </data>
+  <data name="Tools.Conversion.Validation.InvalidProfile" xml:space="preserve">
+    <value>当前转换配置无效。</value>
+  </data>
+  <data name="Tools.Conversion.Validation.AnimatedUnsupported" xml:space="preserve">
+    <value>动画或多帧图片暂不参与转换。</value>
+  </data>
+  <data name="Tools.Conversion.Validation.BackgroundColor" xml:space="preserve">
+    <value>背景色必须使用六位 #RRGGBB 格式。</value>
+  </data>
+  <data name="Tools.Conversion.Validation.Quality" xml:space="preserve">
+    <value>输出质量必须是 1 到 100 的整数。</value>
+  </data>
+  <data name="Tools.Resize.Status.Succeeded" xml:space="preserve">
+    <value>调整尺寸完成</value>
+  </data>
+  <data name="Tools.Resize.Status.Failed" xml:space="preserve">
+    <value>调整尺寸失败</value>
+  </data>
+  <data name="Tools.Resize.EncodingSummary" xml:space="preserve">
+    <value>保留原格式 · 有损质量 {0} · {1} · ICC 保留</value>
+  </data>
+  <data name="Tools.Resize.Validation.InvalidProfile" xml:space="preserve">
+    <value>当前尺寸配置无效。</value>
+  </data>
+  <data name="Tools.Resize.Validation.UnsupportedFormat" xml:space="preserve">
+    <value>当前格式不能直接调整尺寸，请先转换为 JPEG、PNG、BMP 或单帧 WebP。</value>
+  </data>
+  <data name="Tools.Resize.Validation.PixelDimensions" xml:space="preserve">
+    <value>请输入有效的整数宽度和高度；保持比例时至少填写一项。</value>
+  </data>
+  <data name="Tools.Resize.Validation.Percentage" xml:space="preserve">
+    <value>请输入大于 0 的百分比。</value>
+  </data>
+  <data name="Tools.Resize.Validation.OutputTooLarge" xml:space="preserve">
+    <value>预计输出尺寸超过当前处理上限。</value>
+  </data>
+  <data name="Tools.Crop.Status.Succeeded" xml:space="preserve">
+    <value>裁剪完成</value>
+  </data>
+  <data name="Tools.Crop.Status.Failed" xml:space="preserve">
+    <value>裁剪失败</value>
+  </data>
+  <data name="Tools.Crop.EncodingSummary" xml:space="preserve">
+    <value>保留原格式 · 有损质量 {0} · {1} · ICC 保留</value>
+  </data>
+  <data name="Tools.Crop.ActualOutput" xml:space="preserve">
+    <value>实际输出：{0} × {1} px</value>
+  </data>
+  <data name="Tools.Crop.Validation.InvalidSelection" xml:space="preserve">
+    <value>当前剪裁区域无效。</value>
+  </data>
+  <data name="Tools.Crop.Validation.UnsupportedFormat" xml:space="preserve">
+    <value>当前格式不能直接裁剪，请先转换为 JPEG、PNG、BMP 或单帧 WebP。</value>
+  </data>
+  <data name="Tools.Crop.Validation.InsideImage" xml:space="preserve">
+    <value>选区必须完全位于原图内。</value>
+  </data>
+  <data name="Tools.Crop.Validation.IntegerBounds" xml:space="preserve">
+    <value>位置必须是非负整数，宽度和高度必须是正整数。</value>
+  </data>
+  <data name="Tools.Crop.CanvasAutomation" xml:space="preserve">
+    <value>裁剪选区画布</value>
+  </data>
+  <data name="Tools.Crop.CanvasHelp" xml:space="preserve">
+    <value>使用方向键移动选区一像素，按住 Shift 时移动十像素。拖动选区或八个控制点可调整裁剪区域。</value>
+  </data>
+  <data name="Tools.Conversion.ColorPickerAutomation" xml:space="preserve">
+    <value>透明区域背景颜色</value>
+  </data>
+  <data name="Tools.Conversion.ColorPickerHelp" xml:space="preserve">
+    <value>选择透明像素转换到不支持透明通道的格式时使用的背景颜色。</value>
+  </data>
+  <data name="Tools.Diagnostic.EditorContractRequired" xml:space="preserve">
+    <value>工具编辑器必须公开统一操作契约。</value>
+  </data>
 </root>

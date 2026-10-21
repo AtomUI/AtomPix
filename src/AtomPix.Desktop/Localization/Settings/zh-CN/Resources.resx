@@ -174,4 +174,67 @@
   <data name="Settings.Status.UnsavedChanges" xml:space="preserve">
     <value>有未保存的修改</value>
   </data>
+  <data name="Settings.Option.Theme.System" xml:space="preserve">
+    <value>跟随系统</value>
+  </data>
+  <data name="Settings.Option.Theme.Light" xml:space="preserve">
+    <value>浅色</value>
+  </data>
+  <data name="Settings.Option.Theme.Dark" xml:space="preserve">
+    <value>深色</value>
+  </data>
+  <data name="Settings.Option.Language.System" xml:space="preserve">
+    <value>跟随系统</value>
+  </data>
+  <data name="Settings.Option.Language.ChineseSimplified" xml:space="preserve">
+    <value>简体中文</value>
+  </data>
+  <data name="Settings.Dynamic.SameFormatSummary" xml:space="preserve">
+    <value>Resize/Crop：有损质量 {0} · 元数据跟随公共开关 · ICC 保留</value>
+  </data>
+  <data name="Settings.Dynamic.Version" xml:space="preserve">
+    <value>AtomPix {0}</value>
+  </data>
+  <data name="Settings.Dynamic.DevelopmentVersion" xml:space="preserve">
+    <value>开发版本</value>
+  </data>
+  <data name="Settings.Dynamic.ImageEngine" xml:space="preserve">
+    <value>图像引擎：ImageMagick（Magick.NET）</value>
+  </data>
+  <data name="Settings.Message.Saved" xml:space="preserve">
+    <value>设置已保存 · {0:HH:mm}</value>
+  </data>
+  <data name="Settings.Dialog.RestoreDefaults.Title" xml:space="preserve">
+    <value>恢复默认设置？</value>
+  </data>
+  <data name="Settings.Dialog.RestoreDefaults.Message" xml:space="preserve">
+    <value>默认值只会替换当前草稿；点击“保存设置”后才会写入磁盘。</value>
+  </data>
+  <data name="Settings.Message.DefaultDraftRestored" xml:space="preserve">
+    <value>已恢复为默认草稿，尚未保存。</value>
+  </data>
+  <data name="Settings.Error.OpenDirectoryFailed" xml:space="preserve">
+    <value>无法打开设置目录。</value>
+  </data>
+  <data name="Settings.Validation.BackgroundColor" xml:space="preserve">
+    <value>透明背景色必须使用 #RRGGBB 格式。</value>
+  </data>
+  <data name="Settings.Validation.FileNamePatternRequired" xml:space="preserve">
+    <value>默认文件名格式不能为空。</value>
+  </data>
+  <data name="Settings.Validation.CompressionQuality" xml:space="preserve">
+    <value>自定义压缩质量必须是 1 到 100 的整数。</value>
+  </data>
+  <data name="Settings.Validation.ConversionQuality" xml:space="preserve">
+    <value>转换质量必须是 1 到 100 的整数。</value>
+  </data>
+  <data name="Settings.Validation.InvalidDraft" xml:space="preserve">
+    <value>设置草稿包含无效值，请检查输出位置和文件名格式。</value>
+  </data>
+  <data name="Settings.Diagnostic.UnsupportedCompressionMode" xml:space="preserve">
+    <value>不支持的压缩模式。</value>
+  </data>
+  <data name="Settings.Diagnostic.UnsupportedOutputLocation" xml:space="preserve">
+    <value>不支持的输出位置。</value>
+  </data>
 </root>

@@ -145,7 +145,8 @@ public sealed class DesktopInteractionTests
             processor,
             navigation,
             new TestLauncher(),
-            new TestClipboard());
+            new TestClipboard(),
+            TestLocalizedText.Instance);
         var context = new BrowserNavigationContext(
             null,
             [new BrowserImageCandidate(path, "browser.jpg")]);
@@ -203,7 +204,8 @@ public sealed class DesktopInteractionTests
             processor,
             navigation,
             new TestLauncher(),
-            new TestClipboard());
+            new TestClipboard(),
+            TestLocalizedText.Instance);
         var candidates = Enumerable.Range(0, 6)
             .Select(index => new BrowserImageCandidate(
                 new LocalPath(Path.Combine("C:\\images", $"image-{index}.jpg")),
@@ -880,7 +882,8 @@ public sealed class DesktopInteractionTests
             processor,
             navigation,
             new TestLauncher(),
-            new TestClipboard());
+            new TestClipboard(),
+            TestLocalizedText.Instance);
 
         await browser.LoadAsync(new BrowserNavigationContext(
             null,
@@ -906,7 +909,8 @@ public sealed class DesktopInteractionTests
     [Fact]
     public void Output_policy_editor_validates_conditional_fields_and_builds_snapshot()
     {
-        var editor = new OutputPolicyEditorViewModel(new TestPicker(DesktopSelectionResult.Canceled()));
+        var editor = new OutputPolicyEditorViewModel(
+            new TestPicker(DesktopSelectionResult.Canceled()), TestLocalizedText.Instance);
         editor.SelectedLocation = editor.Locations.Single(option => option.Value == OutputLocationMode.CustomDirectory);
         editor.CustomDirectory = string.Empty;
         Assert.False(editor.IsValid);
@@ -926,7 +930,8 @@ public sealed class DesktopInteractionTests
     [Fact]
     public void Output_policy_editor_exposes_one_contextual_location_surface_and_live_subfolder_hint()
     {
-        var editor = new OutputPolicyEditorViewModel(new TestPicker(DesktopSelectionResult.Canceled()));
+        var editor = new OutputPolicyEditorViewModel(
+            new TestPicker(DesktopSelectionResult.Canceled()), TestLocalizedText.Instance);
 
         Assert.True(editor.IsSubfolder);
         Assert.False(editor.IsSameAsInput);
@@ -948,7 +953,8 @@ public sealed class DesktopInteractionTests
     [Fact]
     public void Output_policy_editor_builds_all_three_naming_contracts_and_updates_live_preview()
     {
-        var editor = new OutputPolicyEditorViewModel(new TestPicker(DesktopSelectionResult.Canceled()));
+        var editor = new OutputPolicyEditorViewModel(
+            new TestPicker(DesktopSelectionResult.Canceled()), TestLocalizedText.Instance);
 
         Assert.True(editor.IsAppendSuffix);
         editor.FileNameSuffix = "_export";
@@ -1098,6 +1104,7 @@ public sealed class DesktopInteractionTests
             new DesktopNavigationCoordinator(),
             new TestLauncher(),
             new TestClipboard(),
+            TestLocalizedText.Instance,
             picker: picker);
         await browser.LoadAsync(new BrowserNavigationContext(
             null,
@@ -1132,7 +1139,8 @@ public sealed class DesktopInteractionTests
             1,
             _ => Task.FromResult(true),
             static () => { },
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
 
         Assert.False(session.HasBatchOption);
         session.UpdateItemCount(3);
@@ -1169,7 +1177,8 @@ public sealed class DesktopInteractionTests
                 return Task.FromResult(false);
             },
             static () => { },
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
 
         Assert.True(session.CanStartBatch);
         Assert.True(session.StartBatchCommand.CanExecute(null));
@@ -1202,7 +1211,8 @@ public sealed class DesktopInteractionTests
                 return batch.DraftError is null && batch.CanAttemptStart;
             },
             static () => { },
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
 
         await session.StartBatchCommand.ExecuteAsync();
 
@@ -1227,7 +1237,8 @@ public sealed class DesktopInteractionTests
             2,
             _ => Task.FromResult(true),
             static () => { },
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
 
         Assert.True(session.CanStartBatch);
         await editor.StartCommand.ExecuteAsync();
@@ -1302,14 +1313,14 @@ public sealed class DesktopInteractionTests
         var settingsStore = new TestSettingsStore();
         var services = CreateImageWorkflowServices(processor, fileSystem);
         var browser = new ImageBrowserViewModel(
-            new OpenImageWorkflow(processor), processor, navigation, launcher, clipboard);
+            new OpenImageWorkflow(processor), processor, navigation, launcher, clipboard, TestLocalizedText.Instance);
         var compress = CreateCompressionEditor(processor, fileSystem, navigation);
         var convert = CreateConversionEditor(processor, fileSystem, navigation);
         var resize = CreateResizeEditor(picker, processor, fileSystem, navigation);
         var crop = new CropEditorViewModel(
             picker, launcher, dialogs, clipboard, outputGuard,
             new OpenImageWorkflow(processor), new LoadSettingsWorkflow(settingsStore),
-            new CropImageWorkflow(services), navigation, navigation);
+            new CropImageWorkflow(services), navigation, navigation, TestLocalizedText.Instance);
         var batch = CreateBatch(picker, processor, fileSystem, dialogs, clipboard, navigation);
         var settings = CreateSettings(settingsStore, dialogs);
         var home = CreateHome(picker, processor, navigation, fileSystem);
@@ -1325,7 +1336,8 @@ public sealed class DesktopInteractionTests
             crop,
             batch,
             dialogs,
-            feedback);
+            feedback,
+            TestLocalizedText.Instance);
 
         navigation.Navigate(new DesktopNavigationRequest(
             DesktopRoute.Browse,
@@ -1367,14 +1379,14 @@ public sealed class DesktopInteractionTests
         var settingsStore = new TestSettingsStore();
         var services = CreateImageWorkflowServices(processor, fileSystem);
         var browser = new ImageBrowserViewModel(
-            new OpenImageWorkflow(processor), processor, navigation, launcher, clipboard);
+            new OpenImageWorkflow(processor), processor, navigation, launcher, clipboard, TestLocalizedText.Instance);
         var compress = CreateCompressionEditor(processor, fileSystem, navigation);
         var convert = CreateConversionEditor(processor, fileSystem, navigation);
         var resize = CreateResizeEditor(picker, processor, fileSystem, navigation);
         var crop = new CropEditorViewModel(
             picker, launcher, dialogs, clipboard, outputGuard,
             new OpenImageWorkflow(processor), new LoadSettingsWorkflow(settingsStore),
-            new CropImageWorkflow(services), navigation, navigation);
+            new CropImageWorkflow(services), navigation, navigation, TestLocalizedText.Instance);
         var batch = CreateBatch(picker, processor, fileSystem, dialogs, clipboard, navigation);
         var settings = CreateSettings(settingsStore, dialogs);
         var home = CreateHome(picker, processor, navigation, fileSystem);
@@ -1389,7 +1401,8 @@ public sealed class DesktopInteractionTests
             crop,
             batch,
             dialogs,
-            new TestFeedback());
+            new TestFeedback(),
+            TestLocalizedText.Instance);
 
         navigation.Navigate(new DesktopNavigationRequest(
             DesktopRoute.Browse,
@@ -1567,7 +1580,8 @@ public sealed class DesktopInteractionTests
     [Fact]
     public async Task Output_policy_directory_picker_cancel_preserves_existing_draft()
     {
-        var editor = new OutputPolicyEditorViewModel(new TestPicker(DesktopSelectionResult.Canceled()));
+        var editor = new OutputPolicyEditorViewModel(
+            new TestPicker(DesktopSelectionResult.Canceled()), TestLocalizedText.Instance);
         editor.CustomDirectory = "D:\\existing";
         var originalMode = editor.SelectedLocation;
 
@@ -1811,7 +1825,8 @@ public sealed class DesktopInteractionTests
             new OpenImageWorkflow(processor),
             new OpenFolderWorkflow(effectiveFileSystem, processor),
             navigation,
-            new TestClipboard());
+            new TestClipboard(),
+            TestLocalizedText.Instance);
     }
 
     private static ImageBrowserViewModel CreateBrowser(IImageProcessor processor) => new(
@@ -1819,7 +1834,8 @@ public sealed class DesktopInteractionTests
         processor,
         new DesktopNavigationCoordinator(),
         new TestLauncher(),
-        new TestClipboard());
+        new TestClipboard(),
+        TestLocalizedText.Instance);
 
     private static BatchTaskViewModel CreateBatch(
         IDesktopPickerService picker,
@@ -1843,7 +1859,8 @@ public sealed class DesktopInteractionTests
             new BatchCompressWorkflow(services),
             new BatchConvertWorkflow(services),
             new BatchResizeWorkflow(services),
-            navigation ?? new DesktopNavigationCoordinator());
+            navigation ?? new DesktopNavigationCoordinator(),
+            TestLocalizedText.Instance);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
@@ -1877,7 +1894,8 @@ public sealed class DesktopInteractionTests
             new LoadSettingsWorkflow(settings),
             new ResizeImageWorkflow(services),
             processor,
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
     }
 
     private static SettingsPageViewModel CreateSettings(
@@ -1890,7 +1908,8 @@ public sealed class DesktopInteractionTests
             new TestPicker(DesktopSelectionResult.Canceled()),
             new TestLauncher(),
             new TestPathProvider(),
-            new TestClipboard());
+            new TestClipboard(),
+            TestLocalizedText.Instance);
 
     private static CompressionEditorViewModel CreateCompressionEditor(
         IImageProcessor processor,
@@ -1909,7 +1928,8 @@ public sealed class DesktopInteractionTests
             new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new CompressImageWorkflow(services),
             navigation,
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
     }
 
     private static ConversionEditorViewModel CreateConversionEditor(
@@ -1929,7 +1949,8 @@ public sealed class DesktopInteractionTests
             new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new ConvertImageWorkflow(services),
             navigation,
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
     }
 
     private static CropEditorViewModel CreateCropEditor(
@@ -1949,7 +1970,8 @@ public sealed class DesktopInteractionTests
             new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new CropImageWorkflow(services),
             navigation,
-            navigation);
+            navigation,
+            TestLocalizedText.Instance);
     }
 
     private static ImageWorkflowServices CreateImageWorkflowServices(

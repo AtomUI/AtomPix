@@ -3,6 +3,7 @@ namespace AtomPix.Desktop.ViewModels;
 using AtomPix.Core.Errors;
 using AtomPix.Core.Ports;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Workflows.Images;
@@ -15,6 +16,7 @@ public sealed class HomePageViewModel : ViewModelBase
     private readonly OpenImageWorkflow _openImage;
     private readonly OpenFolderWorkflow _openFolder;
     private readonly IDesktopNavigator _navigator;
+    private readonly IAtomPixLocalizedText _text;
     private DesktopContentState _state = DesktopContentState.Ready;
     private string? _errorMessage;
     private bool _isDragOver;
@@ -26,6 +28,7 @@ public sealed class HomePageViewModel : ViewModelBase
         OpenFolderWorkflow openFolder,
         IDesktopNavigator navigator,
         IDesktopClipboardService clipboard,
+        IAtomPixLocalizedText text,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
@@ -33,6 +36,7 @@ public sealed class HomePageViewModel : ViewModelBase
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
         _openFolder = openFolder ?? throw new ArgumentNullException(nameof(openFolder));
         _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
         Diagnostic = new DiagnosticErrorViewModel(clipboard, commands);
@@ -123,7 +127,7 @@ public sealed class HomePageViewModel : ViewModelBase
     public void ReportDropFailure()
     {
         IsDragOver = false;
-        Fail("无法读取拖入的图片或文件夹，请改用打开按钮重试。");
+        Fail(_text.GetString("Home.Error.DropReadFailed"));
     }
 
     private bool CanOpenSource() =>
@@ -146,7 +150,7 @@ public sealed class HomePageViewModel : ViewModelBase
         BeginLoading();
         if (paths is null || paths.Count != 1 || string.IsNullOrWhiteSpace(paths[0]))
         {
-            Fail("一次只能拖入一张图片或一个文件夹。");
+            Fail(_text.GetString("Home.Error.DropSingleOnly"));
             return;
         }
 
@@ -157,7 +161,7 @@ public sealed class HomePageViewModel : ViewModelBase
         }
         catch (ArgumentException)
         {
-            Fail("拖入的路径无效，请重新选择图片或文件夹。");
+            Fail(_text.GetString("Home.Error.DropInvalidPath"));
             return;
         }
 
@@ -173,7 +177,7 @@ public sealed class HomePageViewModel : ViewModelBase
             return;
         }
 
-        Fail("拖入的图片或文件夹已不存在，或当前无法访问。");
+        Fail(_text.GetString("Home.Error.DropUnavailable"));
     }
 
     private async Task OpenForFeatureAsync(
@@ -202,7 +206,7 @@ public sealed class HomePageViewModel : ViewModelBase
 
         if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count == 0)
         {
-            Fail(DesktopErrorText.FromPicker(selection.ErrorMessage));
+            Fail(DesktopErrorText.FromPicker(selection.ErrorMessage, _text));
             return null;
         }
 
@@ -230,7 +234,7 @@ public sealed class HomePageViewModel : ViewModelBase
 
         if (candidates.Count == 0)
         {
-            Fail("没有可打开的图片路径，请重新选择。");
+            Fail(_text.GetString("Home.Error.NoOpenablePath"));
             return null;
         }
 
@@ -250,7 +254,7 @@ public sealed class HomePageViewModel : ViewModelBase
 
         if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1)
         {
-            Fail(DesktopErrorText.FromPicker(selection.ErrorMessage));
+            Fail(DesktopErrorText.FromPicker(selection.ErrorMessage, _text));
             return;
         }
 
@@ -311,7 +315,7 @@ public sealed class HomePageViewModel : ViewModelBase
 
     private void SetWorkflowError(AtomPixError? error)
     {
-        var message = DesktopErrorText.FromWorkflow(error);
+        var message = DesktopErrorText.FromWorkflow(error, _text);
         if (string.IsNullOrEmpty(message))
         {
             State = DesktopContentState.Ready;

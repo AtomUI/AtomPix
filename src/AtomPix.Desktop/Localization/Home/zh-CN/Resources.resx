@@ -21,4 +21,19 @@
   <data name="Home.Drop.Release" xml:space="preserve">
     <value>松开以打开图片来源</value>
   </data>
+  <data name="Home.Error.DropReadFailed" xml:space="preserve">
+    <value>无法读取拖入的图片或文件夹，请改用打开按钮重试。</value>
+  </data>
+  <data name="Home.Error.DropSingleOnly" xml:space="preserve">
+    <value>一次只能拖入一张图片或一个文件夹。</value>
+  </data>
+  <data name="Home.Error.DropInvalidPath" xml:space="preserve">
+    <value>拖入的路径无效，请重新选择图片或文件夹。</value>
+  </data>
+  <data name="Home.Error.DropUnavailable" xml:space="preserve">
+    <value>拖入的图片或文件夹已不存在，或当前无法访问。</value>
+  </data>
+  <data name="Home.Error.NoOpenablePath" xml:space="preserve">
+    <value>没有可打开的图片路径，请重新选择。</value>
+  </data>
 </root>

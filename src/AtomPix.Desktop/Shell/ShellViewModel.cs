@@ -5,6 +5,7 @@ using System.ComponentModel;
 using AtomPix.Core.Jobs;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Desktop.Composition;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Desktop.ViewModels;
@@ -33,6 +34,7 @@ public sealed class ShellViewModel : ViewModelBase
     private SettingsPageViewModel? _settings;
     private readonly IDesktopDialogService _dialogs;
     private readonly IDesktopFeedbackService _feedback;
+    private readonly IAtomPixLocalizedText _text;
     private readonly AtomPixCityNavigator? _cityNavigator;
     private readonly IUiCommandFactory _commandFactory;
     private PrimaryWorkspaceKind _primaryWorkspace = PrimaryWorkspaceKind.Home;
@@ -64,6 +66,7 @@ public sealed class ShellViewModel : ViewModelBase
         BatchTaskViewModel batch,
         IDesktopDialogService dialogs,
         IDesktopFeedbackService feedback,
+        IAtomPixLocalizedText text,
         AtomPixCityNavigator? cityNavigator = null,
         IUiCommandFactory? commandFactory = null)
     {
@@ -78,6 +81,7 @@ public sealed class ShellViewModel : ViewModelBase
         _batch = batch ?? throw new ArgumentNullException(nameof(batch));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _feedback = feedback ?? throw new ArgumentNullException(nameof(feedback));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         _cityNavigator = cityNavigator;
         _commandFactory = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
@@ -318,10 +322,10 @@ public sealed class ShellViewModel : ViewModelBase
         if (IsForegroundTaskActive)
         {
             var cancel = await _dialogs.ConfirmAsync(
-                "取消任务并退出？",
-                "AtomPix 会请求取消当前任务，保留已经完成并成功提交的输出，然后等待任务进入终态再关闭。",
-                "取消任务并退出",
-                "继续处理",
+                _text.GetString("Shell.Dialog.ExitTask.Title"),
+                _text.GetString("Shell.Dialog.ExitTask.Message"),
+                _text.GetString("Shell.Dialog.ExitTask.Confirm"),
+                _text.GetString("Shell.Dialog.ExitTask.Continue"),
                 cancellationToken);
             if (!cancel) return false;
 
@@ -414,7 +418,7 @@ public sealed class ShellViewModel : ViewModelBase
                 break;
 
             case DesktopRoute.Batch:
-                _feedback.ShowMessage("批量处理请从压缩、转换或调整尺寸面板直接开始。", DesktopFeedbackSeverity.Information);
+                _feedback.ShowMessage(_text.GetString("Shell.Batch.StartHint"), DesktopFeedbackSeverity.Information);
                 break;
 
             case DesktopRoute.Compress or DesktopRoute.Convert or DesktopRoute.Resize or DesktopRoute.Crop:
@@ -451,7 +455,7 @@ public sealed class ShellViewModel : ViewModelBase
                 PrimaryWorkspace = previousWorkspace;
                 CurrentRoute = previousRoute;
                 _feedback.ShowMessage(
-                    "页面切换未能完成，已保留先前界面。",
+                    _text.GetString("Shell.Navigation.PresentationFailed"),
                     DesktopFeedbackSeverity.Error);
                 return;
             }
@@ -575,6 +579,7 @@ public sealed class ShellViewModel : ViewModelBase
                 cancellationToken => PrepareBatchForToolAsync(route, editorContent, cancellationToken),
                 () => SynchronizeSingleDraftFromBatch(editorContent),
                 _foregroundTasks,
+                _text,
                 _commandFactory);
             if (_compositionRoot is not null)
             {
@@ -613,21 +618,21 @@ public sealed class ShellViewModel : ViewModelBase
         return false;
     }
 
-    private static string ResolveBatchStartBlockReason(BatchTaskViewModel batch)
+    private string ResolveBatchStartBlockReason(BatchTaskViewModel batch)
     {
-        if (!batch.HasInputs) return "当前图片集合为空，无法开始批量处理。";
-        if (batch.IsAppending) return "正在追加或读取图片，请稍后再试。";
-        if (batch.IsProcessing) return "已有批量任务正在运行。";
-        if (batch.HasResult) return "请先结束当前批量结果上下文，再开始新任务。";
-        return "批量任务尚未准备完成，请重试。";
+        if (!batch.HasInputs) return _text.GetString("Shell.Batch.Block.Empty");
+        if (batch.IsAppending) return _text.GetString("Shell.Batch.Block.Appending");
+        if (batch.IsProcessing) return _text.GetString("Shell.Batch.Block.Processing");
+        if (batch.HasResult) return _text.GetString("Shell.Batch.Block.ResultOpen");
+        return _text.GetString("Shell.Batch.Block.NotReady");
     }
 
-    private static string ResolveBatchDraftError(object editor) => editor switch
+    private string ResolveBatchDraftError(object editor) => editor switch
     {
-        CompressionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? "当前压缩配置无效。",
-        ConversionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? "当前转换配置无效。",
-        ResizeEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? "当前尺寸配置无效。",
-        _ => "当前批量处理配置无效。"
+        CompressionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? _text.GetString("Shell.Batch.Invalid.Compression"),
+        ConversionEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? _text.GetString("Shell.Batch.Invalid.Conversion"),
+        ResizeEditorViewModel vm => vm.DraftError ?? vm.Output.ValidationError ?? _text.GetString("Shell.Batch.Invalid.Resize"),
+        _ => _text.GetString("Shell.Batch.Invalid.Default")
     };
 
     internal static bool TryCaptureBatchDraft(object editor, BatchTaskViewModel batch, out Action? applyDraft)
@@ -748,16 +753,16 @@ public sealed class ShellViewModel : ViewModelBase
         IsToolDrawerOpen = false;
     }
 
-    private static string GetToolTitle(DesktopRoute route, bool batch) => route switch
+    private string GetToolTitle(DesktopRoute route, bool batch) => route switch
     {
-        DesktopRoute.Compress => batch ? "批量压缩" : "压缩图片",
-        DesktopRoute.Convert => batch ? "批量转换" : "转换格式",
-        DesktopRoute.Resize => batch ? "批量调整尺寸" : "调整尺寸",
-        DesktopRoute.Crop => "裁剪图片",
+        DesktopRoute.Compress => _text.GetString(batch ? "Shell.Title.BatchCompress" : "Shell.Title.Compress"),
+        DesktopRoute.Convert => _text.GetString(batch ? "Shell.Title.BatchConvert" : "Shell.Title.Convert"),
+        DesktopRoute.Resize => _text.GetString(batch ? "Shell.Title.BatchResize" : "Shell.Title.Resize"),
+        DesktopRoute.Crop => _text.GetString("Shell.Title.Crop"),
         _ => string.Empty
     };
 
-    private static string BuildDrawerTitle(DesktopRoute route) => GetToolTitle(route, false);
+    private string BuildDrawerTitle(DesktopRoute route) => GetToolTitle(route, false);
 
     private void HandleForegroundTaskStateChanged(object? sender, bool isLocked)
     {
@@ -896,14 +901,14 @@ public sealed class ShellViewModel : ViewModelBase
                 : DesktopFeedbackSeverity.Warning;
         var operation = _batch.SelectedTask.Value switch
         {
-            BatchTaskKind.Compress => "批量压缩",
-            BatchTaskKind.Convert => "批量转换",
-            BatchTaskKind.Resize => "批量调整尺寸",
-            _ => "批量处理"
+            BatchTaskKind.Compress => _text.GetString("Shell.Title.BatchCompress"),
+            BatchTaskKind.Convert => _text.GetString("Shell.Title.BatchConvert"),
+            BatchTaskKind.Resize => _text.GetString("Shell.Title.BatchResize"),
+            _ => _text.GetString("Batch.Action.Start")
         };
-        var content = $"{_batch.ResultSummary}{Environment.NewLine}{_batch.ResultSizeChange}{Environment.NewLine}点击查看处理详情";
+        var content = _text.Format("Shell.Batch.Notification.Content", _batch.ResultSummary, _batch.ResultSizeChange);
         _feedback.ShowNotification(new DesktopNotificationRequest(
-            $"{operation}：{_batch.ResultTitle}",
+            _text.Format("Shell.Batch.Notification.Title", operation, _batch.ResultTitle),
             content,
             severity,
             isCleanSuccess ? TimeSpan.FromSeconds(6) : TimeSpan.Zero,
@@ -987,7 +992,7 @@ public sealed class ShellViewModel : ViewModelBase
                 ImageJobStatus.Failed => BrowserTaskStatus.Failed,
                 ImageJobStatus.Skipped => BrowserTaskStatus.Skipped,
                 ImageJobStatus.Canceled => BrowserTaskStatus.Canceled,
-                _ when item.StatusText == "不可用" => BrowserTaskStatus.Failed,
+                _ when item.HasError => BrowserTaskStatus.Failed,
                 _ => BrowserTaskStatus.Pending
             };
         _browser.SetBatchStatus(item.Path, status);

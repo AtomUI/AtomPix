@@ -8,6 +8,7 @@ using AtomPix.Core.Jobs;
 using AtomPix.Core.Output;
 using AtomPix.Core.Resize;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Imaging.Abstractions.Formats;
@@ -25,9 +26,10 @@ public enum BatchTaskKind
 
 public sealed class BatchItemViewModel : ObservableObject
 {
+    private readonly IAtomPixLocalizedText _text;
     private LocalPath _path;
     private ImageProbeResult? _probe;
-    private string _statusText = "等待处理";
+    private string _statusText;
     private string? _outputPath;
     private string? _errorText;
     private string _estimatedSize = "—";
@@ -35,10 +37,13 @@ public sealed class BatchItemViewModel : ObservableObject
     private AtomPixErrorCode? _errorCode;
     private string? _diagnosticId;
     private bool _canRemove = true;
+    private bool _isRunning;
 
-    public BatchItemViewModel(LocalPath path)
+    public BatchItemViewModel(LocalPath path, IAtomPixLocalizedText text)
     {
         _path = path;
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        _statusText = _text.GetString("Batch.Status.Waiting");
     }
 
     public LocalPath Path { get => _path; private set { if (SetProperty(ref _path, value)) { OnPropertyChanged(nameof(DisplayName)); OnPropertyChanged(nameof(FullPath)); } } }
@@ -47,8 +52,8 @@ public sealed class BatchItemViewModel : ObservableObject
     public ImageProbeResult? Probe => _probe;
     public bool HasTransparency => _probe?.HasTransparency == true;
     public bool UsesLossyQuality => _probe?.Format is ImageFormatKind.Jpeg or ImageFormatKind.WebP;
-    public string ProbeSummary => _probe is null ? "等待读取图片信息" : $"{_probe.Width} × {_probe.Height} · {_probe.Format}";
-    public string StatusText { get => _statusText; private set { if (SetProperty(ref _statusText, value)) OnPropertyChanged(nameof(IsRunning)); } }
+    public string ProbeSummary => _probe is null ? _text.GetString("Batch.Probe.Pending") : $"{_probe.Width} × {_probe.Height} · {_probe.Format}";
+    public string StatusText { get => _statusText; private set => SetProperty(ref _statusText, value); }
     public string OutputPath { get => _outputPath ?? string.Empty; private set => SetProperty(ref _outputPath, value); }
     public string? ErrorText { get => _errorText; private set { if (SetProperty(ref _errorText, value)) OnPropertyChanged(nameof(HasError)); } }
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorText);
@@ -60,7 +65,7 @@ public sealed class BatchItemViewModel : ObservableObject
     public bool CanViewDetails => TerminalStatus is not null || HasError;
     public bool CanRelocate => HasError && ErrorCode is AtomPixErrorCode.InputFileNotFound or AtomPixErrorCode.InvalidImageFile;
     public bool CanRemove { get => _canRemove; private set => SetProperty(ref _canRemove, value); }
-    public bool IsRunning => StatusText == "处理中";
+    public bool IsRunning { get => _isRunning; private set => SetProperty(ref _isRunning, value); }
 
     public void SetProbe(ImageProbeResult? probe)
     {
@@ -74,7 +79,8 @@ public sealed class BatchItemViewModel : ObservableObject
     public void SetPlan(string outputPath)
     {
         OutputPath = outputPath;
-        StatusText = "等待处理";
+        StatusText = _text.GetString("Batch.Status.Waiting");
+        IsRunning = false;
         TerminalStatus = null;
         ErrorText = null;
         ErrorCode = null;
@@ -83,7 +89,8 @@ public sealed class BatchItemViewModel : ObservableObject
 
     public void SetRunning()
     {
-        StatusText = "处理中";
+        StatusText = _text.GetString("Batch.Status.Processing");
+        IsRunning = true;
         TerminalStatus = null;
         ErrorText = null;
         ErrorCode = null;
@@ -94,15 +101,16 @@ public sealed class BatchItemViewModel : ObservableObject
     {
         TerminalStatus = result.Status;
         if (result.OutputPath is not null) OutputPath = result.OutputPath.Value.Value;
-        ErrorText = result.Error is null ? null : DesktopErrorText.FromWorkflow(result.Error);
+        IsRunning = false;
+        ErrorText = result.Error is null ? null : DesktopErrorText.FromWorkflow(result.Error, _text);
         ErrorCode = result.Error?.Code;
         DiagnosticId = DesktopErrorText.DiagnosticId(result.Error);
         StatusText = result.Status switch
         {
-            ImageJobStatus.Succeeded => "成功",
-            ImageJobStatus.Failed => "失败",
-            ImageJobStatus.Canceled => "已取消",
-            ImageJobStatus.Skipped => "已跳过",
+            ImageJobStatus.Succeeded => _text.GetString("Batch.Status.Succeeded"),
+            ImageJobStatus.Failed => _text.GetString("Batch.Status.Failed"),
+            ImageJobStatus.Canceled => _text.GetString("Batch.Status.Canceled"),
+            ImageJobStatus.Skipped => _text.GetString("Batch.Status.Skipped"),
             _ => result.Status.ToString()
         };
         OnPropertyChanged(nameof(CanViewDetails));
@@ -112,7 +120,8 @@ public sealed class BatchItemViewModel : ObservableObject
     public void SetNotStarted()
     {
         TerminalStatus = null;
-        StatusText = "未开始";
+        StatusText = _text.GetString("Batch.Status.NotStarted");
+        IsRunning = false;
         OnPropertyChanged(nameof(CanViewDetails));
         OnPropertyChanged(nameof(CanRelocate));
     }
@@ -125,9 +134,10 @@ public sealed class BatchItemViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(error);
         _probe = null;
-        StatusText = "不可用";
+        StatusText = _text.GetString("Batch.Status.Unavailable");
+        IsRunning = false;
         TerminalStatus = null;
-        ErrorText = DesktopErrorText.FromWorkflow(error);
+        ErrorText = DesktopErrorText.FromWorkflow(error, _text);
         ErrorCode = error.Code;
         DiagnosticId = DesktopErrorText.DiagnosticId(error);
         OnPropertyChanged(nameof(Probe));
@@ -140,7 +150,8 @@ public sealed class BatchItemViewModel : ObservableObject
     {
         Path = path;
         SetProbe(probe);
-        StatusText = "等待处理";
+        StatusText = _text.GetString("Batch.Status.Waiting");
+        IsRunning = false;
         OutputPath = string.Empty;
         TerminalStatus = null;
         ErrorText = null;
@@ -172,6 +183,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     private readonly BatchConvertWorkflow _batchConvert;
     private readonly BatchResizeWorkflow _batchResize;
     private readonly IDesktopForegroundTaskGate _navigation;
+    private readonly IAtomPixLocalizedText _text;
     private CancellationTokenSource? _executionCancellation;
     private bool _initialized;
     private bool _isAppending;
@@ -196,7 +208,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     private string? _noticeMessage;
     private string? _diagnosticId;
     private double _progressRatio;
-    private string _progressSummary = "尚未开始";
+    private string _progressSummary = string.Empty;
     private BatchResult? _lastBatchResult;
     private BatchResult? _previousBatchResult;
     private SubmittedBatchSnapshot? _submittedSnapshot;
@@ -218,6 +230,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         BatchConvertWorkflow batchConvert,
         BatchResizeWorkflow batchResize,
         IDesktopForegroundTaskGate navigation,
+        IAtomPixLocalizedText text,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
@@ -233,23 +246,25 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         _batchConvert = batchConvert ?? throw new ArgumentNullException(nameof(batchConvert));
         _batchResize = batchResize ?? throw new ArgumentNullException(nameof(batchResize));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        _progressSummary = _text.GetString("Batch.Progress.NotStarted");
         var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
-        Output = new OutputPolicyEditorViewModel(_picker, NotifyDraft, commandFactory: commands);
+        Output = new OutputPolicyEditorViewModel(_picker, _text, NotifyDraft, commandFactory: commands);
 
         TaskKinds =
         [
-            new DesktopChoiceOption<BatchTaskKind>("压缩", BatchTaskKind.Compress),
-            new DesktopChoiceOption<BatchTaskKind>("转换", BatchTaskKind.Convert),
-            new DesktopChoiceOption<BatchTaskKind>("调整尺寸", BatchTaskKind.Resize)
+            new DesktopChoiceOption<BatchTaskKind>(_text.GetString("Batch.Option.Task.Compress"), BatchTaskKind.Compress),
+            new DesktopChoiceOption<BatchTaskKind>(_text.GetString("Batch.Option.Task.Convert"), BatchTaskKind.Convert),
+            new DesktopChoiceOption<BatchTaskKind>(_text.GetString("Batch.Option.Task.Resize"), BatchTaskKind.Resize)
         ];
         CompressionModes = Enum.GetValues<CompressionMode>().Select(mode => new DesktopChoiceOption<CompressionMode>(mode switch
         {
-            CompressionMode.Smart => "智能",
-            CompressionMode.HighQuality => "高质量",
-            CompressionMode.Balanced => "平衡",
-            CompressionMode.Maximum => "极限",
-            _ => "自定义"
+            CompressionMode.Smart => _text.GetString("Common.Option.Compression.Smart"),
+            CompressionMode.HighQuality => _text.GetString("Common.Option.Compression.HighQuality"),
+            CompressionMode.Balanced => _text.GetString("Common.Option.Compression.Balanced"),
+            CompressionMode.Maximum => _text.GetString("Common.Option.Compression.Maximum"),
+            _ => _text.GetString("Common.Option.Compression.Custom")
         }, mode)).ToArray();
         ConversionFormats =
         [
@@ -259,8 +274,8 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         ];
         ResizeModes =
         [
-            new DesktopChoiceOption<ResizeDraftMode>("按像素", ResizeDraftMode.Pixel),
-            new DesktopChoiceOption<ResizeDraftMode>("按百分比", ResizeDraftMode.Percentage)
+            new DesktopChoiceOption<ResizeDraftMode>(_text.GetString("Common.Option.Resize.Pixel"), ResizeDraftMode.Pixel),
+            new DesktopChoiceOption<ResizeDraftMode>(_text.GetString("Common.Option.Resize.Percentage"), ResizeDraftMode.Percentage)
         ];
         _selectedTask = TaskKinds[0];
         _selectedCompressionMode = CompressionModes[0];
@@ -339,7 +354,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     public bool IsCanceling { get => _isCanceling; private set { if (SetProperty(ref _isCanceling, value)) NotifyState(); } }
     public bool IsEmpty => Items.Count == 0;
     public bool HasInputs => Items.Count > 0;
-    public string InputCollectionSummary => $"浏览走廊中的 {Items.Count} 张图片；顺序与缩略图状态保持一致。";
+    public string InputCollectionSummary => _text.Format("Batch.InputCollectionSummary", Items.Count);
     public bool CanEditInputs => !IsAppending && !IsProcessing && !HasResult;
     public bool CanEditDraft => !IsProcessing && !HasResult;
     public bool IsCompressTask => SelectedTask.Value == BatchTaskKind.Compress;
@@ -369,9 +384,9 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     public string ProgressSummary { get => _progressSummary; private set => SetProperty(ref _progressSummary, value); }
     public bool HasResult => _lastBatchResult is not null;
     public bool HasPreviousResult => _previousBatchResult is not null;
-    public string PreviousResultSummary => _previousBatchResult is null ? string.Empty : $"上一任务：{FormatBatchStatus(_previousBatchResult.Status)} · 成功 {_previousBatchResult.SucceededCount} · 失败 {_previousBatchResult.FailedCount} · 跳过 {_previousBatchResult.SkippedCount}";
+    public string PreviousResultSummary => _previousBatchResult is null ? string.Empty : _text.Format("Batch.Result.PreviousSummary", FormatBatchStatus(_previousBatchResult.Status), _previousBatchResult.SucceededCount, _previousBatchResult.FailedCount, _previousBatchResult.SkippedCount);
     public string ResultTitle => _lastBatchResult is null ? string.Empty : FormatBatchStatus(_lastBatchResult.Status);
-    public string ResultSummary => _lastBatchResult is null ? string.Empty : $"成功 {_lastBatchResult.SucceededCount} · 失败 {_lastBatchResult.FailedCount} · 跳过 {_lastBatchResult.SkippedCount} · 取消 {_lastBatchResult.CanceledCount}";
+    public string ResultSummary => _lastBatchResult is null ? string.Empty : _text.Format("Batch.Result.Summary", _lastBatchResult.SucceededCount, _lastBatchResult.FailedCount, _lastBatchResult.SkippedCount, _lastBatchResult.CanceledCount);
     public string ResultSizeChange => FormatBatchSizeChange(_lastBatchResult);
     public bool HasFailedItems => _lastBatchResult?.Items.Any(item => item.Status == ImageJobStatus.Failed) == true;
     public bool HasSkippedItems => _lastBatchResult?.Items.Any(item => item.Status == ImageJobStatus.Skipped) == true;
@@ -453,7 +468,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         _submittedSnapshot = null;
         Items.Clear();
         ProgressRatio = 0;
-        ProgressSummary = "尚未开始";
+        ProgressSummary = _text.GetString("Batch.Progress.NotStarted");
         ClearError();
         NoticeMessage = null;
         SelectedTask = TaskKinds.First(option => option.Value == kind);
@@ -534,7 +549,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     {
         var selection = await _picker.PickImagesAsync(cancellationToken);
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
-        if (selection.Status != DesktopSelectionStatus.Selected) { SetPlainError(DesktopErrorText.FromPicker(selection.ErrorMessage)); return; }
+        if (selection.Status != DesktopSelectionStatus.Selected) { SetPlainError(DesktopErrorText.FromPicker(selection.ErrorMessage, _text)); return; }
         await AppendAsync(selection.Paths.Select(path => new LocalPath(path)).ToArray(), [], cancellationToken);
     }
 
@@ -542,7 +557,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     {
         var selection = await _picker.PickFolderAsync(cancellationToken);
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
-        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1) { SetPlainError(DesktopErrorText.FromPicker(selection.ErrorMessage)); return; }
+        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1) { SetPlainError(DesktopErrorText.FromPicker(selection.ErrorMessage, _text)); return; }
         await AppendAsync([], [new LocalPath(selection.Paths[0])], cancellationToken);
     }
 
@@ -560,9 +575,9 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
             Items.Clear();
             foreach (var path in result.Value!.InputPaths)
             {
-                Items.Add(existingViews.TryGetValue(path.Value, out var existingView) ? existingView : new BatchItemViewModel(path));
+                Items.Add(existingViews.TryGetValue(path.Value, out var existingView) ? existingView : new BatchItemViewModel(path, _text));
             }
-            NoticeMessage = $"新增 {result.Value.AddedCount} 张；重复 {result.Value.DuplicateCount}，不支持 {result.Value.UnsupportedCount}，不可读取 {result.Value.UnreadableCount}。";
+            NoticeMessage = _text.Format("Batch.Notice.Appended", result.Value.AddedCount, result.Value.DuplicateCount, result.Value.UnsupportedCount, result.Value.UnreadableCount);
             NotifyCollectionChanged();
             await ProbeMissingItemsAsync(cancellationToken);
         }
@@ -590,10 +605,10 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     {
         if (!TryBuildSubmission(out var submission, out var submissionError))
         {
-            SetPlainError(submissionError ?? "当前批量处理配置无效。");
+            SetPlainError(submissionError ?? _text.GetString("Batch.Validation.InvalidConfiguration"));
             return;
         }
-        if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
+        if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = _text.GetString("Common.Error.ForegroundTaskBusy"); return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         var generation = ++_executionGeneration;
@@ -606,7 +621,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         IsCanceling = false;
         IsProcessing = true;
         ProgressRatio = 0;
-        ProgressSummary = $"准备 {submission!.Inputs.Count} 张图片";
+        ProgressSummary = _text.Format("Batch.Progress.Preparing", submission!.Inputs.Count);
         foreach (var item in Items) item.SetPlan(string.Empty);
         try
         {
@@ -693,7 +708,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
             else if (changed.Result is not null) Items[changed.Index].SetTerminal(resultSelector(changed.Result));
         }
         ProgressRatio = progress.Summary.CompletionRatio;
-        ProgressSummary = $"已完成 {progress.Summary.CompletedCount}/{progress.Summary.TotalCount} · 成功 {progress.Summary.SucceededCount} · 失败 {progress.Summary.FailedCount} · 跳过 {progress.Summary.SkippedCount}";
+        ProgressSummary = _text.Format("Batch.Progress.Completed", progress.Summary.CompletedCount, progress.Summary.TotalCount, progress.Summary.SucceededCount, progress.Summary.FailedCount, progress.Summary.SkippedCount);
     }
 
     private void ApplyFinalResult(long generation, BatchResult result)
@@ -723,18 +738,28 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
 
     private async Task HandleBatchSourceConflictAsync(AtomPixError error)
     {
-        var count = error.Details is not null && error.Details.TryGetValue("ConflictCount", out var value) ? value : "一部分";
-        var autoRename = await _dialogs.ConfirmAsync("无法覆盖原始图片", $"有 {count} 张图片的输出路径与任务输入相同。AtomPix 禁止覆盖任何源图片。", "改为自动重命名", "返回修改", CancellationToken.None);
+        var count = error.Details is not null && error.Details.TryGetValue("ConflictCount", out var value) ? value : _text.GetString("Batch.Conflict.Some");
+        var autoRename = await _dialogs.ConfirmAsync(
+            _text.GetString("Common.Dialog.SourceOverwrite.Title"),
+            _text.Format("Batch.Dialog.SourceOverwrite.Message", count),
+            _text.GetString("Common.Action.UseAutoRename"),
+            _text.GetString("Common.Action.BackToEdit"),
+            CancellationToken.None);
         if (autoRename)
         {
             Output.SetOverwrite(OverwritePolicy.AutoRename);
-            NoticeMessage = "已改为自动重命名，请确认后重新开始。";
+            NoticeMessage = _text.GetString("Common.Message.AutoRenameApplied");
         }
     }
 
     private async Task CancelAsync(CancellationToken cancellationToken)
     {
-        var confirmed = await _dialogs.ConfirmAsync("取消批量任务", "已完成的输出会保留，当前项和未开始项将进入可恢复状态。", "确认取消", "继续处理", cancellationToken);
+        var confirmed = await _dialogs.ConfirmAsync(
+            _text.GetString("Batch.Dialog.Cancel.Title"),
+            _text.GetString("Batch.Dialog.Cancel.Message"),
+            _text.GetString("Batch.Dialog.Cancel.Confirm"),
+            _text.GetString("Batch.Dialog.Cancel.Continue"),
+            cancellationToken);
         if (!confirmed) return;
         IsCanceling = true;
         _executionCancellation?.Cancel();
@@ -743,20 +768,20 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     private void RecoverFailed()
     {
         if (_lastBatchResult is null) return;
-        BuildRecoveryDraft(_lastBatchResult.Items.Where(item => item.Status == ImageJobStatus.Failed).Select(item => item.InputPath), false, "已从失败项建立新草稿；尚未重新执行。");
+        BuildRecoveryDraft(_lastBatchResult.Items.Where(item => item.Status == ImageJobStatus.Failed).Select(item => item.InputPath), false, _text.GetString("Batch.Recovery.Failed"));
     }
 
     private void RecoverUnfinished()
     {
         if (_lastBatchResult is null || _submittedSnapshot is null) return;
         var completedSafe = _lastBatchResult.Items.Where(item => item.Status is ImageJobStatus.Succeeded or ImageJobStatus.Skipped).Select(item => item.InputPath).ToArray();
-        BuildRecoveryDraft(_submittedSnapshot.Inputs.Where(path => !completedSafe.Any(done => PathsEqual(done, path))), false, "已从未完成项建立新草稿；尚未重新执行。");
+        BuildRecoveryDraft(_submittedSnapshot.Inputs.Where(path => !completedSafe.Any(done => PathsEqual(done, path))), false, _text.GetString("Batch.Recovery.Unfinished"));
     }
 
     private void RecoverSkipped()
     {
         if (_lastBatchResult is null) return;
-        BuildRecoveryDraft(_lastBatchResult.Items.Where(item => item.Status == ImageJobStatus.Skipped).Select(item => item.InputPath), true, "已从跳过项建立自动重命名草稿；尚未重新执行。");
+        BuildRecoveryDraft(_lastBatchResult.Items.Where(item => item.Status == ImageJobStatus.Skipped).Select(item => item.InputPath), true, _text.GetString("Batch.Recovery.Skipped"));
     }
 
     private void BuildRecoveryDraft(IEnumerable<LocalPath> paths, bool autoRename, string notice)
@@ -771,13 +796,13 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         Items.Clear();
         foreach (var path in selected)
         {
-            var replacement = new BatchItemViewModel(path);
+            var replacement = new BatchItemViewModel(path, _text);
             if (existing.TryGetValue(path.Value, out var oldItem)) replacement.SetProbe(oldItem.Probe);
             Items.Add(replacement);
         }
         if (autoRename) Output.SetOverwrite(OverwritePolicy.AutoRename);
         ProgressRatio = 0;
-        ProgressSummary = "尚未开始";
+        ProgressSummary = _text.GetString("Batch.Progress.NotStarted");
         NoticeMessage = notice;
         ClearError();
         NotifyCollectionChanged();
@@ -829,7 +854,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         _lastBatchResult = null;
         Items.Clear();
         ProgressRatio = 0;
-        ProgressSummary = "尚未开始";
+        ProgressSummary = _text.GetString("Batch.Progress.NotStarted");
         ClearError();
         NoticeMessage = null;
         NotifyCollectionChanged();
@@ -840,18 +865,18 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     {
         if (!HasAvailableOutput)
         {
-            SetPlainError("输出文件已不存在，无法打开输出目录。");
+            SetPlainError(_text.GetString("Batch.Error.OutputMissing"));
             NotifyResult();
             return;
         }
-        if (!await _launcher.OpenDirectoryAsync(OutputDirectory, cancellationToken)) SetPlainError("无法打开输出目录，目录可能已被移动。");
+        if (!await _launcher.OpenDirectoryAsync(OutputDirectory, cancellationToken)) SetPlainError(_text.GetString("Batch.Error.OpenOutputDirectoryFailed"));
     }
 
     private async Task OpenInputDirectoryAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(InputDirectory) || !await _launcher.OpenDirectoryAsync(InputDirectory, cancellationToken))
         {
-            SetPlainError("无法打开输入目录，目录可能已被移动。");
+            SetPlainError(_text.GetString("Batch.Error.OpenInputDirectoryFailed"));
         }
     }
 
@@ -859,14 +884,14 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     {
         var lines = new List<string>
         {
-            $"输入：{item.FullPath}",
-            $"状态：{item.StatusText}",
-            $"图片：{item.ProbeSummary}"
+            _text.Format("Batch.Details.Input", item.FullPath),
+            _text.Format("Batch.Details.Status", item.StatusText),
+            _text.Format("Batch.Details.Image", item.ProbeSummary)
         };
-        if (!string.IsNullOrWhiteSpace(item.OutputPath)) lines.Add($"输出：{item.OutputPath}");
-        if (!string.IsNullOrWhiteSpace(item.ErrorText)) lines.Add($"原因：{item.ErrorText}");
-        if (item.HasDiagnosticId) lines.Add($"诊断编号：{item.DiagnosticId}");
-        await _dialogs.ShowInformationAsync("批量项目详情", string.Join(Environment.NewLine, lines), cancellationToken);
+        if (!string.IsNullOrWhiteSpace(item.OutputPath)) lines.Add(_text.Format("Batch.Details.Output", item.OutputPath));
+        if (!string.IsNullOrWhiteSpace(item.ErrorText)) lines.Add(_text.Format("Batch.Details.Reason", item.ErrorText));
+        if (item.HasDiagnosticId) lines.Add(_text.Format("Batch.Details.DiagnosticId", item.DiagnosticId!));
+        await _dialogs.ShowInformationAsync(_text.GetString("Batch.Details.Title"), string.Join(Environment.NewLine, lines), cancellationToken);
     }
 
     private async Task RelocateInputAsync(BatchItemViewModel item, CancellationToken cancellationToken)
@@ -875,7 +900,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
         if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1)
         {
-            SetPlainError(DesktopErrorText.FromPicker(selection.ErrorMessage));
+            SetPlainError(DesktopErrorText.FromPicker(selection.ErrorMessage, _text));
             return;
         }
 
@@ -894,12 +919,12 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
             _lastBatchResult = null;
             if (submitted is not null) RestoreSubmittedDraft(submitted);
             Items.Clear();
-            var replacementItem = new BatchItemViewModel(replacement);
+            var replacementItem = new BatchItemViewModel(replacement, _text);
             replacementItem.SetProbe(opened.Value!.ProbeResult);
             Items.Add(replacementItem);
             ProgressRatio = 0;
-            ProgressSummary = "尚未开始";
-            NoticeMessage = "已重新定位并建立新草稿；原任务结果保持只读，尚未重新执行。";
+            ProgressSummary = _text.GetString("Batch.Progress.NotStarted");
+            NoticeMessage = _text.GetString("Batch.Relocate.NewDraft");
             ClearError();
             NotifyCollectionChanged();
             NotifyResult();
@@ -907,7 +932,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         }
 
         item.ReplacePath(replacement, opened.Value!.ProbeResult);
-        NoticeMessage = "已更新输入路径，请确认任务设置后开始。";
+        NoticeMessage = _text.GetString("Batch.Relocate.Updated");
         ClearError();
         NotifyCollectionChanged();
     }
@@ -922,11 +947,11 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     {
         snapshot = null;
         error = null;
-        if (Items.Count == 0) { error = "请至少添加一张图片。"; return false; }
+        if (Items.Count == 0) { error = _text.GetString("Batch.Validation.InputRequired"); return false; }
         if (!Output.TryBuild(out var outputDraft, out error)) return false;
         OutputNamingPolicy naming;
         try { naming = new OutputNamingPolicy(OutputNamingMode.CustomPattern, null, EffectivePattern); }
-        catch (ArgumentException) { error = "文件名格式无效，只能使用 {name} 与 {index} 占位符。"; return false; }
+        catch (ArgumentException) { error = _text.GetString("Batch.Validation.PatternInvalid"); return false; }
         var output = new OutputPolicy(outputDraft!.LocationPolicy, naming, outputDraft.OverwritePolicy);
         object profile;
         try
@@ -943,9 +968,9 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         {
             error = SelectedTask.Value switch
             {
-                BatchTaskKind.Compress => "自定义质量必须是 1 到 100 的整数。",
-                BatchTaskKind.Convert => "转换质量必须是 1 到 100 的整数，背景色必须使用 #RRGGBB。",
-                _ => "Resize 参数无效；保持比例时至少填写一边，关闭时必须同时填写宽高。"
+                BatchTaskKind.Compress => _text.GetString("Batch.Validation.Compression"),
+                BatchTaskKind.Convert => _text.GetString("Batch.Validation.Conversion"),
+                _ => _text.GetString("Batch.Validation.Resize")
             };
             return false;
         }
@@ -1070,7 +1095,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
 
     private void SetWorkflowError(AtomPixError? error)
     {
-        ErrorMessage = DesktopErrorText.FromWorkflow(error);
+        ErrorMessage = DesktopErrorText.FromWorkflow(error, _text);
         DiagnosticId = DesktopErrorText.DiagnosticId(error);
     }
 
@@ -1100,13 +1125,13 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
                 var size = policy.Resolve(new ImageSize(item.Probe.Width, item.Probe.Height));
                 item.SetEstimatedSize($"{size.Width} × {size.Height}");
             }
-            catch (ArgumentException) { item.SetEstimatedSize("不可用"); }
+            catch (ArgumentException) { item.SetEstimatedSize(_text.GetString("Batch.Status.Unavailable")); }
         }
     }
 
     private string BuildOutputExamples()
     {
-        if (Items.Count == 0) return "添加图片后显示实际示例";
+        if (Items.Count == 0) return _text.GetString("Batch.OutputExample.Empty");
         string effective;
         try
         {
@@ -1139,25 +1164,25 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         if (value <= 0 || value > int.MaxValue || value != decimal.Truncate(value.Value)) throw new ArgumentOutOfRangeException(nameof(value));
         return decimal.ToInt32(value.Value);
     }
-    private static string FormatBatchStatus(BatchJobStatus status) => status switch
+    private string FormatBatchStatus(BatchJobStatus status) => status switch
     {
-        BatchJobStatus.Succeeded => "批量任务完成",
-        BatchJobStatus.PartiallySucceeded => "批量任务部分完成",
-        BatchJobStatus.Failed => "批量任务失败",
-        BatchJobStatus.Canceled => "批量任务已取消",
+        BatchJobStatus.Succeeded => _text.GetString("Batch.Result.Title.Succeeded"),
+        BatchJobStatus.PartiallySucceeded => _text.GetString("Batch.Result.Title.PartiallySucceeded"),
+        BatchJobStatus.Failed => _text.GetString("Batch.Result.Title.Failed"),
+        BatchJobStatus.Canceled => _text.GetString("Batch.Result.Title.Canceled"),
         _ => status.ToString()
     };
-    private static string FormatBatchSizeChange(BatchResult? result)
+    private string FormatBatchSizeChange(BatchResult? result)
     {
-        if (result?.TotalSizeChangeKind is null || result.TotalSizeDeltaBytes is null) return result is null ? string.Empty : "暂无可比较结果";
+        if (result?.TotalSizeChangeKind is null || result.TotalSizeDeltaBytes is null) return result is null ? string.Empty : _text.GetString("Batch.Result.SizeUnavailable");
         var bytes = Math.Abs(result.TotalSizeDeltaBytes.Value);
         var ratio = Math.Abs(result.TotalSizeDeltaRatio ?? 0) * 100;
         return result.TotalSizeChangeKind switch
         {
-            FileSizeChangeKind.Reduced => $"总体积减少 {DesktopResultText.FormatBytes(bytes)}（{ratio:0.##}%）",
-            FileSizeChangeKind.Unchanged => "总体积未变化",
-            FileSizeChangeKind.Increased => $"总体积增加 {DesktopResultText.FormatBytes(bytes)}（{ratio:0.##}%）",
-            _ => "暂无可比较结果"
+            FileSizeChangeKind.Reduced => _text.Format("Batch.Result.SizeReduced", DesktopResultText.FormatBytes(bytes), ratio),
+            FileSizeChangeKind.Unchanged => _text.GetString("Batch.Result.SizeUnchanged"),
+            FileSizeChangeKind.Increased => _text.Format("Batch.Result.SizeIncreased", DesktopResultText.FormatBytes(bytes), ratio),
+            _ => _text.GetString("Batch.Result.SizeUnavailable")
         };
     }
     private static StringComparer StringComparerForPaths() => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;

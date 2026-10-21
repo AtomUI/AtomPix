@@ -1,5 +1,6 @@
 namespace AtomPix.Desktop.Controls;
 
+using AtomPix.Desktop.Localization;
 using AtomUI.Desktop.Controls;
 using Avalonia;
 using Avalonia.Automation;
@@ -19,6 +20,8 @@ public sealed class RgbColorPickerBridge : UserControl
 
     public RgbColorPickerBridge()
     {
+        var text = LocalizationHost.Current
+            ?? throw new InvalidOperationException("AtomPix localization has not been initialized.");
         _picker = new AtomUI.Desktop.Controls.ColorPicker
         {
             IsAlphaEnabled = false,
@@ -26,9 +29,10 @@ public sealed class RgbColorPickerBridge : UserControl
             IsTextVisible = false,
             Value = Color.Parse("#FFFFFF")
         };
-        AutomationProperties.SetName(this, "透明区域背景颜色");
-        AutomationProperties.SetName(_picker, "透明区域背景颜色");
-        AutomationProperties.SetHelpText(_picker, "选择透明像素转换到不支持透明通道的格式时使用的背景颜色。");
+        var automationName = text.GetString("Tools.Conversion.ColorPickerAutomation");
+        AutomationProperties.SetName(this, automationName);
+        AutomationProperties.SetName(_picker, automationName);
+        AutomationProperties.SetHelpText(_picker, text.GetString("Tools.Conversion.ColorPickerHelp"));
         _picker.ValueChanged += HandleValueChanged;
         Content = _picker;
     }

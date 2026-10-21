@@ -7,6 +7,7 @@ using AtomPix.Core.Output;
 using AtomPix.Core.Resize;
 using AtomPix.Core.ValueObjects;
 using AtomPix.Desktop.Controls;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Imaging.Abstractions.Formats;
@@ -33,6 +34,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
     private readonly CropImageWorkflow _crop;
     private readonly IDesktopNavigator _navigator;
     private readonly IDesktopForegroundTaskGate _foregroundTasks;
+    private readonly IAtomPixLocalizedText _text;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -63,6 +65,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
         CropImageWorkflow crop,
         IDesktopNavigator navigator,
         IDesktopForegroundTaskGate foregroundTasks,
+        IAtomPixLocalizedText text,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
@@ -75,13 +78,15 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
         _crop = crop ?? throw new ArgumentNullException(nameof(crop));
         _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
         _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        ResultFeedback = new OperationResultFeedback(_text);
         var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
+        Output = new OutputPolicyEditorViewModel(_picker, _text, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
 
         Ratios =
         [
-            new CropRatioOption("自定义", null, null),
+            new CropRatioOption(_text.GetString("Common.Option.Crop.Custom"), null, null),
             new CropRatioOption("3:2", 3, 2),
             new CropRatioOption("4:3", 4, 3),
             new CropRatioOption("5:4", 5, 4),
@@ -98,7 +103,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
 
     public IReadOnlyList<CropRatioOption> Ratios { get; }
     public OutputPolicyEditorViewModel Output { get; }
-    public OperationResultFeedback ResultFeedback { get; } = new();
+    public OperationResultFeedback ResultFeedback { get; }
     public DesktopContentState ContentState { get => _contentState; private set { if (SetProperty(ref _contentState, value)) NotifyState(); } }
     public DesktopExecutionState ExecutionState { get => _executionState; private set { if (SetProperty(ref _executionState, value)) NotifyState(); } }
     public CropRatioOption SelectedRatio
@@ -184,23 +189,30 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
         }
     }
     public bool HasDraftError => !string.IsNullOrWhiteSpace(DraftError);
-    public string EncodingSummary => $"保留原格式 · 有损质量 {_encodingPolicy.LossyQuality.Value} · {(_encodingPolicy.MetadataPolicy == AtomPix.Core.Compression.MetadataPolicy.Remove ? "移除拍摄信息" : "保留拍摄信息")} · ICC 保留";
+    public string EncodingSummary => _text.Format(
+        "Tools.Crop.EncodingSummary",
+        _encodingPolicy.LossyQuality.Value,
+        _text.GetString(_encodingPolicy.MetadataPolicy == AtomPix.Core.Compression.MetadataPolicy.Remove
+            ? "Common.Metadata.Remove"
+            : "Common.Metadata.Preserve"));
     public SameFormatEncodingPolicy EncodingPolicy => _encodingPolicy;
     public string? ErrorMessage { get => _errorMessage; private set { if (SetProperty(ref _errorMessage, value)) OnPropertyChanged(nameof(HasError)); } }
     public string? DiagnosticId { get => _diagnosticId; private set { if (SetProperty(ref _diagnosticId, value)) { OnPropertyChanged(nameof(HasDiagnosticId)); CopyDiagnosticIdCommand.NotifyCanExecuteChanged(); } } }
     public string ResultTitle => _lastResult?.Status switch
     {
-        ImageJobStatus.Succeeded => "裁剪完成",
-        ImageJobStatus.Canceled => "任务已取消",
-        ImageJobStatus.Skipped => "目标已存在，未生成新文件",
-        ImageJobStatus.Failed => "裁剪失败",
+        ImageJobStatus.Succeeded => _text.GetString("Tools.Crop.Status.Succeeded"),
+        ImageJobStatus.Canceled => _text.GetString("Common.Status.TaskCanceled"),
+        ImageJobStatus.Skipped => _text.GetString("Common.Status.SkippedExisting"),
+        ImageJobStatus.Failed => _text.GetString("Tools.Crop.Status.Failed"),
         _ => string.Empty
     };
     public string ResultOutputPath => _lastResult?.OutputPath?.Value ?? string.Empty;
     public bool IsResultOutputAvailable => IsSuccess && _outputGuard.FileExists(_lastResult?.OutputPath);
     public bool IsResultOutputMissing => IsSuccess && _lastResult?.OutputPath is not null && !IsResultOutputAvailable;
-    public string ResultDetails => _actualOutputSize is null ? string.Empty : $"实际输出：{_actualOutputSize.Value.Width} × {_actualOutputSize.Value.Height} px";
-    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult);
+    public string ResultDetails => _actualOutputSize is null
+        ? string.Empty
+        : _text.Format("Tools.Crop.ActualOutput", _actualOutputSize.Value.Width, _actualOutputSize.Value.Height);
+    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult, _text);
 
     public IAsyncRelayCommand SelectImageCommand { get; }
     public IAsyncRelayCommand StartCommand { get; }
@@ -291,7 +303,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
     {
         var selection = await _picker.PickSingleImageAsync(cancellationToken);
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
-        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1) { ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage); return; }
+        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1) { ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage, _text); return; }
         var path = new LocalPath(selection.Paths[0]);
         var opened = await _openImage.ExecuteAsync(new OpenImageRequest(path), cancellationToken);
         if (!opened.Succeeded) { SetError(opened.Error); return; }
@@ -303,15 +315,15 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
         if (_inputPath is null) return;
         if (!TryBuildCropRectangle(out var area, out var cropError))
         {
-            ResultFeedback.ShowWarning(cropError ?? "当前剪裁区域无效。");
+            ResultFeedback.ShowWarning(cropError ?? _text.GetString("Tools.Crop.Validation.InvalidSelection"));
             return;
         }
         if (!Output.TryBuild(out var outputPolicy, out var outputError))
         {
-            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
+            ResultFeedback.ShowWarning(outputError ?? _text.GetString("Common.Validation.Output.Invalid"));
             return;
         }
-        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
+        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = _text.GetString("Common.Error.ForegroundTaskBusy"); return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
@@ -333,7 +345,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
             _actualOutputSize = result.Value.ActualOutputSize;
             ExecutionState = ToExecutionState(_lastResult.Status);
             if (_lastResult.Status == ImageJobStatus.Failed) SetError(_lastResult.Error);
-            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, "裁剪完成", ResultDetails);
+            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, _text.GetString("Tools.Crop.Status.Succeeded"), ResultDetails);
             NotifyResult();
         }
         finally { _executionCancellation = null; _foregroundTasks.EndForegroundTask(); }
@@ -341,20 +353,25 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
 
     private async Task HandleSourceConflictAsync(CancellationToken cancellationToken)
     {
-        var useAutoRename = await _dialogs.ConfirmAsync("无法覆盖原始图片", "当前输出位置和文件名会覆盖源文件。AtomPix 禁止原地覆盖输入图片。", "改为自动重命名", "返回修改", cancellationToken);
+        var useAutoRename = await _dialogs.ConfirmAsync(
+            _text.GetString("Common.Dialog.SourceOverwrite.Title"),
+            _text.GetString("Common.Dialog.SourceOverwrite.Message"),
+            _text.GetString("Common.Action.UseAutoRename"),
+            _text.GetString("Common.Action.BackToEdit"),
+            cancellationToken);
         if (useAutoRename)
         {
             Output.SetOverwrite(OverwritePolicy.AutoRename);
-            ErrorMessage = "已改为自动重命名，请确认后重新开始。";
+            ErrorMessage = _text.GetString("Common.Message.AutoRenameApplied");
         }
-        else ErrorMessage = "无法覆盖原始图片，请修改输出设置。";
+        else ErrorMessage = _text.GetString("Common.Error.SourceOverwriteChangeOutput");
     }
 
     private async Task OpenOutputAsync(CancellationToken cancellationToken)
     {
         if (!EnsureResultOutputAvailable()) return;
         var directory = Path.GetDirectoryName(ResultOutputPath);
-        if (string.IsNullOrWhiteSpace(directory) || !await _launcher.OpenDirectoryAsync(directory, cancellationToken)) ErrorMessage = "无法打开输出目录，文件可能已被移动。";
+        if (string.IsNullOrWhiteSpace(directory) || !await _launcher.OpenDirectoryAsync(directory, cancellationToken)) ErrorMessage = _text.GetString("Common.Error.OpenOutputDirectoryFailed");
     }
 
     private void ContinueResize()
@@ -366,7 +383,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
     private bool EnsureResultOutputAvailable()
     {
         if (IsResultOutputAvailable) return true;
-        ErrorMessage = "输出文件已不存在，无法继续操作。请重新处理原图片。";
+        ErrorMessage = _text.GetString("Common.Error.OutputMissingReprocess");
         NotifyResult();
         return false;
     }
@@ -424,22 +441,22 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
     {
         rectangle = null;
         error = null;
-        if (_probe is null) { error = "请先选择图片。"; return false; }
+        if (_probe is null) { error = _text.GetString("Common.Validation.SelectImageFirst"); return false; }
         if (_probe.IsAnimated || _probe.FrameCount != 1 || _probe.Format is not (ImageFormatKind.Jpeg or ImageFormatKind.Png or ImageFormatKind.WebP or ImageFormatKind.Bmp))
         {
-            error = "当前格式不能直接裁剪，请先转换为 JPEG、PNG、BMP 或单帧 WebP。";
+            error = _text.GetString("Tools.Crop.Validation.UnsupportedFormat");
             return false;
         }
         try
         {
             rectangle = new CropRectangle(ToNonNegativeInteger(CropX), ToNonNegativeInteger(CropY), ToPositiveInteger(CropWidth), ToPositiveInteger(CropHeight));
             var validation = CropRules.ValidateCropRectangle(new ImageSize(_probe.Width, _probe.Height), rectangle);
-            if (!validation.Succeeded) { error = "选区必须完全位于原图内。"; rectangle = null; return false; }
+            if (!validation.Succeeded) { error = _text.GetString("Tools.Crop.Validation.InsideImage"); rectangle = null; return false; }
             return true;
         }
         catch (ArgumentException)
         {
-            error = "位置必须是非负整数，宽度和高度必须是正整数。";
+            error = _text.GetString("Tools.Crop.Validation.IntegerBounds");
             return false;
         }
     }
@@ -473,7 +490,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
             DiagnosticId = null;
         }
     }
-    private void SetError(AtomPixError? error) { ErrorMessage = DesktopErrorText.FromWorkflow(error); DiagnosticId = DesktopErrorText.DiagnosticId(error); }
+    private void SetError(AtomPixError? error) { ErrorMessage = DesktopErrorText.FromWorkflow(error, _text); DiagnosticId = DesktopErrorText.DiagnosticId(error); }
     private int BeginLoad(CancellationToken cancellationToken, out CancellationTokenSource source) { CancelLoad(); source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); _loadCancellation = source; return ++_loadGeneration; }
     private bool IsCurrentLoad(int generation, CancellationTokenSource source) => generation == _loadGeneration && !source.IsCancellationRequested;
     private void CancelLoad() { _loadCancellation?.Cancel(); _loadCancellation?.Dispose(); _loadCancellation = null; }

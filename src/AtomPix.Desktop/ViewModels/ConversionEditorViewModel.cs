@@ -6,6 +6,7 @@ using AtomPix.Core.Errors;
 using AtomPix.Core.Jobs;
 using AtomPix.Core.Output;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Localization;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Imaging.Abstractions.Processing;
@@ -25,6 +26,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     private readonly ConvertImageWorkflow _convert;
     private readonly IDesktopNavigator _navigator;
     private readonly IDesktopForegroundTaskGate _foregroundTasks;
+    private readonly IAtomPixLocalizedText _text;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -52,6 +54,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         ConvertImageWorkflow convert,
         IDesktopNavigator navigator,
         IDesktopForegroundTaskGate foregroundTasks,
+        IAtomPixLocalizedText text,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
@@ -64,9 +67,11 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         _convert = convert ?? throw new ArgumentNullException(nameof(convert));
         _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
         _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+        ResultFeedback = new OperationResultFeedback(_text);
         var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
-        Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
+        Output = new OutputPolicyEditorViewModel(_picker, _text, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
 
         Formats =
         [
@@ -87,7 +92,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
 
     public IReadOnlyList<DesktopChoiceOption<OutputImageFormat>> Formats { get; }
     public OutputPolicyEditorViewModel Output { get; }
-    public OperationResultFeedback ResultFeedback { get; } = new();
+    public OperationResultFeedback ResultFeedback { get; }
     public DesktopContentState ContentState { get => _contentState; private set { if (SetProperty(ref _contentState, value)) NotifyState(); } }
     public DesktopExecutionState ExecutionState { get => _executionState; private set { if (SetProperty(ref _executionState, value)) NotifyState(); } }
     public DesktopChoiceOption<OutputImageFormat> SelectedFormat
@@ -109,7 +114,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
             MidpointRounding.AwayFromZero);
     }
 
-    public string StartActionLabel => "单张处理";
+    public string StartActionLabel => _text.GetString("Tools.Action.StartSingle");
 
     System.Windows.Input.ICommand IToolEditorActions.StartActionCommand => StartCommand;
 
@@ -132,10 +137,10 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     public bool IsLossyFormat => SelectedFormat.Value is OutputImageFormat.Jpeg or OutputImageFormat.WebP;
     public bool ShowTransparencyBackground => _probe?.HasTransparency == true && SelectedFormat.Value == OutputImageFormat.Jpeg;
     public string TransparencySummary => _probe?.HasTransparency != true
-        ? "未检测到透明区域"
+        ? _text.GetString("Tools.Conversion.Transparency.NoneDetected")
         : SelectedFormat.Value == OutputImageFormat.Jpeg
-            ? $"透明区域将使用 {NormalizedBackgroundHex} 填充"
-            : "透明区域将保留";
+            ? _text.Format("Tools.Conversion.Transparency.WillFlatten", NormalizedBackgroundHex)
+            : _text.GetString("Tools.Conversion.Transparency.WillPreserve");
     public string NormalizedBackgroundHex => RgbColor.TryParse(BackgroundHex, out var color) ? color.ToHexString() : BackgroundHex;
     public string? PreviewBackgroundHex => ShowTransparencyBackground && RgbColor.TryParse(BackgroundHex, out var color)
         ? color.ToHexString()
@@ -161,21 +166,21 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     public string? DiagnosticId { get => _diagnosticId; private set { if (SetProperty(ref _diagnosticId, value)) { OnPropertyChanged(nameof(HasDiagnosticId)); CopyDiagnosticIdCommand.NotifyCanExecuteChanged(); } } }
     public string ResultTitle => _lastResult?.Status switch
     {
-        ImageJobStatus.Succeeded => "转换完成",
-        ImageJobStatus.Canceled => "任务已取消",
-        ImageJobStatus.Skipped => "目标已存在，未生成新文件",
-        ImageJobStatus.Failed => "转换失败",
+        ImageJobStatus.Succeeded => _text.GetString("Tools.Conversion.Status.Succeeded"),
+        ImageJobStatus.Canceled => _text.GetString("Common.Status.TaskCanceled"),
+        ImageJobStatus.Skipped => _text.GetString("Common.Status.SkippedExisting"),
+        ImageJobStatus.Failed => _text.GetString("Tools.Conversion.Status.Failed"),
         _ => string.Empty
     };
     public string ResultOutputPath => _lastResult?.OutputPath?.Value ?? string.Empty;
     public bool IsResultOutputAvailable => IsSuccess && _outputGuard.FileExists(_lastResult?.OutputPath);
     public bool IsResultOutputMissing => IsSuccess && _lastResult?.OutputPath is not null && !IsResultOutputAvailable;
-    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult);
+    public string ResultSizeChange => DesktopResultText.FormatSizeChange(_lastResult, _text);
     public string ResultTransparency => _transparencyResult?.Outcome switch
     {
-        TransparencyOutcome.NotPresent => "无透明区域",
-        TransparencyOutcome.Preserved => "已保留透明区域",
-        TransparencyOutcome.Flattened => $"已使用 {_transparencyResult.BackgroundColor!.ToHexString()} 填充透明区域",
+        TransparencyOutcome.NotPresent => _text.GetString("Tools.Conversion.Transparency.NotPresent"),
+        TransparencyOutcome.Preserved => _text.GetString("Tools.Conversion.Transparency.Preserved"),
+        TransparencyOutcome.Flattened => _text.Format("Tools.Conversion.Transparency.Flattened", _transparencyResult.BackgroundColor!.ToHexString()),
         _ => string.Empty
     };
 
@@ -255,7 +260,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     {
         var selection = await _picker.PickSingleImageAsync(cancellationToken);
         if (selection.Status == DesktopSelectionStatus.Canceled) return;
-        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1) { ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage); return; }
+        if (selection.Status != DesktopSelectionStatus.Selected || selection.Paths.Count != 1) { ErrorMessage = DesktopErrorText.FromPicker(selection.ErrorMessage, _text); return; }
         var path = new LocalPath(selection.Paths[0]);
         var opened = await _openImage.ExecuteAsync(new OpenImageRequest(path), cancellationToken);
         if (!opened.Succeeded) { SetError(opened.Error); return; }
@@ -267,15 +272,15 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         if (_inputPath is null) return;
         if (!TryBuildProfile(out var profile, out var profileError))
         {
-            ResultFeedback.ShowWarning(profileError ?? "当前转换配置无效。");
+            ResultFeedback.ShowWarning(profileError ?? _text.GetString("Tools.Conversion.Validation.InvalidProfile"));
             return;
         }
         if (!Output.TryBuild(out var outputPolicy, out var outputError))
         {
-            ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
+            ResultFeedback.ShowWarning(outputError ?? _text.GetString("Common.Validation.Output.Invalid"));
             return;
         }
-        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
+        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = _text.GetString("Common.Error.ForegroundTaskBusy"); return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
@@ -298,7 +303,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
             _transparencyResult = result.Value.Transparency;
             ExecutionState = ToExecutionState(_lastResult.Status);
             if (_lastResult.Status == ImageJobStatus.Failed) SetError(_lastResult.Error);
-            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, "转换完成", ResultSizeChange);
+            else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, _text.GetString("Tools.Conversion.Status.Succeeded"), ResultSizeChange);
             NotifyResult();
         }
         finally
@@ -311,24 +316,24 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     private async Task HandleSourceConflictAsync(CancellationToken cancellationToken)
     {
         var useAutoRename = await _dialogs.ConfirmAsync(
-            "无法覆盖原始图片",
-            "当前输出位置和文件名会覆盖源文件。AtomPix 禁止原地覆盖输入图片。",
-            "改为自动重命名",
-            "返回修改",
+            _text.GetString("Common.Dialog.SourceOverwrite.Title"),
+            _text.GetString("Common.Dialog.SourceOverwrite.Message"),
+            _text.GetString("Common.Action.UseAutoRename"),
+            _text.GetString("Common.Action.BackToEdit"),
             cancellationToken);
         if (useAutoRename)
         {
             Output.SetOverwrite(OverwritePolicy.AutoRename);
-            ErrorMessage = "已改为自动重命名，请确认后重新开始。";
+            ErrorMessage = _text.GetString("Common.Message.AutoRenameApplied");
         }
-        else ErrorMessage = "无法覆盖原始图片，请修改输出设置。";
+        else ErrorMessage = _text.GetString("Common.Error.SourceOverwriteChangeOutput");
     }
 
     private async Task OpenOutputAsync(CancellationToken cancellationToken)
     {
         if (!EnsureResultOutputAvailable()) return;
         var directory = Path.GetDirectoryName(ResultOutputPath);
-        if (string.IsNullOrWhiteSpace(directory) || !await _launcher.OpenDirectoryAsync(directory, cancellationToken)) ErrorMessage = "无法打开输出目录，文件可能已被移动。";
+        if (string.IsNullOrWhiteSpace(directory) || !await _launcher.OpenDirectoryAsync(directory, cancellationToken)) ErrorMessage = _text.GetString("Common.Error.OpenOutputDirectoryFailed");
     }
 
     private void ContinueResize()
@@ -341,7 +346,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     private bool EnsureResultOutputAvailable()
     {
         if (IsResultOutputAvailable) return true;
-        ErrorMessage = "输出文件已不存在，无法继续操作。请重新处理原图片。";
+        ErrorMessage = _text.GetString("Common.Error.OutputMissingReprocess");
         NotifyResult();
         return false;
     }
@@ -362,8 +367,8 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     {
         profile = null;
         error = null;
-        if (_probe is null) { error = "请先选择图片。"; return false; }
-        if (_probe.IsAnimated || _probe.FrameCount != 1) { error = "动画或多帧图片暂不参与转换。"; return false; }
+        if (_probe is null) { error = _text.GetString("Common.Validation.SelectImageFirst"); return false; }
+        if (_probe.IsAnimated || _probe.FrameCount != 1) { error = _text.GetString("Tools.Conversion.Validation.AnimatedUnsupported"); return false; }
         try
         {
             ImageQuality? quality = IsLossyFormat ? new ImageQuality(ToQuality(Quality)) : null;
@@ -377,7 +382,9 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException)
         {
-            error = !RgbColor.TryParse(BackgroundHex, out _) ? "背景色必须使用六位 #RRGGBB 格式。" : "输出质量必须是 1 到 100 的整数。";
+            error = !RgbColor.TryParse(BackgroundHex, out _)
+                ? _text.GetString("Tools.Conversion.Validation.BackgroundColor")
+                : _text.GetString("Tools.Conversion.Validation.Quality");
             return false;
         }
     }
@@ -422,7 +429,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         }
     }
 
-    private void SetError(AtomPixError? error) { ErrorMessage = DesktopErrorText.FromWorkflow(error); DiagnosticId = DesktopErrorText.DiagnosticId(error); }
+    private void SetError(AtomPixError? error) { ErrorMessage = DesktopErrorText.FromWorkflow(error, _text); DiagnosticId = DesktopErrorText.DiagnosticId(error); }
     private int BeginLoad(CancellationToken cancellationToken, out CancellationTokenSource source) { CancelLoad(); source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); _loadCancellation = source; return ++_loadGeneration; }
     private bool IsCurrentLoad(int generation, CancellationTokenSource source) => generation == _loadGeneration && !source.IsCancellationRequested;
     private void CancelLoad() { _loadCancellation?.Cancel(); _loadCancellation?.Dispose(); _loadCancellation = null; }

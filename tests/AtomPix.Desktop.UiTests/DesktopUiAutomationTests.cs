@@ -48,7 +48,7 @@ public sealed class DesktopUiAutomationTests
             Assert.Equal(
                 new[] { "zh-CN" },
                 AtomUI.City.Generated.GeneratedLocalizationManifest.SupportedCultures);
-            Assert.Equal(155, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
+            Assert.Equal(407, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
 
             var localization = harness.Services.GetRequiredService<ILocalizationService>();
             var presentationBridge = harness.Services.GetRequiredService<IPresentationLocalizationBridge>();
@@ -659,7 +659,8 @@ public sealed class DesktopUiAutomationTests
     public Task Output_directory_uses_atomui_inputs_and_aligns_custom_input_with_picker_button() => RunAsync(() =>
     {
         using var services = DesktopCompositionRoot.Build();
-        var viewModel = new OutputPolicyEditorViewModel(new CanceledPicker());
+        var viewModel = new OutputPolicyEditorViewModel(
+            new CanceledPicker(), services.GetRequiredService<IAtomPixLocalizedText>());
         viewModel.SelectedLocation = viewModel.Locations.Single(
             option => option.Value == AtomPix.Core.Output.OutputLocationMode.CustomDirectory);
         viewModel.CustomDirectory = @"D:\Pictures\AtomPix";
@@ -742,6 +743,7 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Crop_canvas_receives_real_keyboard_input_with_one_and_ten_pixel_steps() => RunAsync(() =>
     {
+        using var services = DesktopCompositionRoot.Build();
         var canvas = new CropCanvas
         {
             Width = 480,
@@ -782,7 +784,8 @@ public sealed class DesktopUiAutomationTests
             services.GetRequiredService<IDesktopPickerService>(),
             services.GetRequiredService<IDesktopLauncherService>(),
             services.GetRequiredService<IAppPathProvider>(),
-            services.GetRequiredService<IDesktopClipboardService>());
+            services.GetRequiredService<IDesktopClipboardService>(),
+            services.GetRequiredService<IAtomPixLocalizedText>());
         var view = new SettingsPageView { DataContext = settings };
         var window = new AtomUI.Desktop.Controls.Window
         {
