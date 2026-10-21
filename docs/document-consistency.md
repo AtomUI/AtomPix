@@ -150,18 +150,20 @@ Published-window/icon-rail/settings UI Automation smoke: passed
 本节晚于第 7 节，是当前实现证据；第 7 节保留为施工前历史，不能覆盖本节结论。
 
 ```text
-City fixed SHA: 9097d9d0d8244a864e5b7944ef2bf7ab2be70ae3
-AtomUI.City.Build: 1.0.0-atompix.9097d9d
-Build package SHA-256: 97087E411C1FFDB7B264A45D057333BF67EC031FD409B885D2DBA6753FD2FB66
+City fixed SHA: c2e4176159b9b441af2d7ce065d5acde6a888543
+AtomUI.City.Build: 1.0.0-atompix.c2e4176
+Build package SHA-256: 5ED32116E11204D782740DA84FA4560E674FB49BCD2358D7E445FEBA08BA9F8E
+City Release tests: 2252 passed（主运行 2249；3 个沙箱网络/子 SDK 失败项在正确 SDK 与允许网络的同配置下定向复验通过）
+City aggregate check-release: 未全绿（既有非本次全库 format baseline 在首关阻断）
 
 AtomPix Release build: passed, 0 warning / 0 error
 City Release DLL closure hash check: passed
-Non-stress tests: 409 passed
+Non-stress tests: 410 passed
   Core 45
   Imaging.Abstractions 18
   Infrastructure 39
   Workflows 158
-  Desktop 76
+  Desktop 77
   Desktop Headless UI 18
   Imaging.Magick 55
 Stress: 4 passed（业务/成像/诊断 3 + UI virtualization 1）
@@ -169,14 +171,14 @@ NuGet vulnerability audit: 14/14 projects reported no vulnerable packages
 git diff --check: passed（仅 LF/CRLF working-copy 提示）
 
 win-x64 Partial Trim single-file publish/package: passed
-Published EXE SHA-256: 0f00ccf57796cca0d58cee9b88553121e1b3b21852ac2bef68b1c9fb760e14e6
-ZIP SHA-256: 26e8265ab580e4b60ea3369def07e1946732e3f0f7a7a0af6e049bca7fa6a544
+Published EXE SHA-256: 85CC96E61A48EAC807C8998CDF1BB75D8F5F11C9C1E4F2E460D242806C0E827C
+ZIP SHA-256: 0600B359BC09CEEDC39D30424FDBF3438954C496BB7E3D536D6CCBDC92263AB2
 Published window/icon rail/settings UIA smoke: passed
 Published functional matrix: 9/9 passed
-Fixture manifest SHA-256: 139898ad1b240e2066da58e1ed73fc102c307307be1896200bc71db59c31432f
-Functional report: .artifacts/published-functional/20261021T083530097Z-19232-018467b1/published-functional-results.json
+Fixture manifest SHA-256: 139898AD1B240E2066DA58E1ED73FC102C307307BE1896200BC71DB59C31432F
+Functional report: .artifacts/published-functional/20261021T090611571Z-29764-976985d3/published-functional-results.json
 ```
 
 施工中发现 Windows `Environment.GetFolderPath(LocalApplicationData)` 不会可靠地随测试父进程的 `LOCALAPPDATA` 覆盖而隔离。AtomPix 因此新增显式绝对路径环境变量 `ATOMPIX_APPDATA_DIRECTORY` 与 `ATOMPIX_TEMP_DIRECTORY`；发布功能测试为每个 case 提供独立目录并验证设置跨重启恢复。fixture manifest 校验源文件 SHA-256，所有 case 复制到唯一 run root，正常关闭失败会使测试失败而非用强制 kill 掩盖。
 
-本快照关闭 City framework、State、Routing-Presentation、Build provenance 和 Windows published functional blocker。`APX-CITY-LOC-001` 已进入 `In Progress`：八个 `zh-CN` catalog、generated registrar、City Dispatcher presentation bridge 和 Headless 资源查询已验证，但生产文案/key/订阅迁移、硬编码扫描 allowlist 与最新发布 locpack 复验尚未完成。整体迁移仍是 `Implementation In Progress / Release Blocked`：`APX-CITY-MVVM-002` 尚需 ownership map 最终收口，`APX-CITY-LIC-001` 仍受 AtomUI 传递 Alibaba Sans/Svg.Custom、替代授权、Magick.Native 材料和 SBOM/Notice/source gate 阻塞。
+本快照关闭 City framework、State、Routing-Presentation、MVVM ownership、Build provenance 和 Windows published functional blocker。`APX-CITY-MVVM-002` 已验证 Home/Settings EntryOwned、Browser workspace 保留，以及导航意图/前台任务 gate 职责拆分。`APX-CITY-LOC-001` 仍是 `In Progress`：八个 `zh-CN` catalog、generated registrar、City Dispatcher presentation bridge、应用级 text projection 与 Shell/Home 生产纵切已经验证；最新 TrimmedSingleFile 发布物的 UIA 和 GUI `9/9` 也已证明该纵切的 locpack 可被真实发布物查询。全 Desktop 源码（排除 catalog）仍有 465 行、28 个文件含中文，其中 AXAML 146 行；剩余生产文案、逐项 allowlist 及 missing/duplicate key 门仍未完成。整体迁移仍是 `Implementation In Progress / Release Blocked`；`APX-CITY-LIC-001` 仍受 AtomUI 传递 Alibaba Sans/Svg.Custom、替代授权、Magick.Native 材料和 SBOM/Notice/source gate 阻塞。

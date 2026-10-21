@@ -171,7 +171,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
     private readonly BatchCompressWorkflow _batchCompress;
     private readonly BatchConvertWorkflow _batchConvert;
     private readonly BatchResizeWorkflow _batchResize;
-    private readonly DesktopNavigationCoordinator _navigation;
+    private readonly IDesktopForegroundTaskGate _navigation;
     private CancellationTokenSource? _executionCancellation;
     private bool _initialized;
     private bool _isAppending;
@@ -217,7 +217,7 @@ public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, 
         BatchCompressWorkflow batchCompress,
         BatchConvertWorkflow batchConvert,
         BatchResizeWorkflow batchResize,
-        DesktopNavigationCoordinator navigation,
+        IDesktopForegroundTaskGate navigation,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));

@@ -36,7 +36,7 @@
 5. runtime City 项目以明确 `ProjectReference` 参与编译；build assets 只由 PackageReference 导入。
 6. clean 和 incremental build 均验证 manifest/locpack/generated source 的稳定性。
 
-当前固定事实：runtime gitlink SHA 为 `9097d9d0d8244a864e5b7944ef2bf7ab2be70ae3`；Build 包为 `AtomUI.City.Build 1.0.0-atompix.9097d9d`，SHA-256 为 `97087E411C1FFDB7B264A45D057333BF67EC031FD409B885D2DBA6753FD2FB66`。`Directory.Build.targets` 在 Desktop build 前同时校验包 hash 与 runtime source SHA；`eng/verify.ps1` 再校验 AtomPix Release closure 中每个 City DLL 与 City Release 输出 hash 相同。
+当前固定事实：runtime gitlink SHA 为 `c2e4176159b9b441af2d7ce065d5acde6a888543`；Build 包为 `AtomUI.City.Build 1.0.0-atompix.c2e4176`，SHA-256 为 `5ED32116E11204D782740DA84FA4560E674FB49BCD2358D7E445FEBA08BA9F8E`。`Directory.Build.targets` 在 Desktop build 前同时校验包 hash 与 runtime source SHA；`eng/verify.ps1` 再校验 AtomPix Release closure 中每个 City DLL 与 City Release 输出 hash 相同。
 
 ## 3. Localization catalog
 
@@ -57,7 +57,7 @@ AtomPix RESX 编辑输入按以下 catalog 划分，并使用同名 key prefix�
 
 原 RESX 只是编辑/构建输入；City Build 生成 embedded locpack 和 attribute/generated source，模块初始化由生成 registrar 原子注册一次。View/route/service attribute 与手工注册只能选一个事实源，禁止双注册。
 
-当前已建立 `Common`、`Shell`、`Home`、`Browser`、`Tools`、`Batch`、`Settings`、`Errors` 八个 `zh-CN` RESX 目录，每个目录先放置一个可验证的种子 key。City Build 已生成八个 embedded locpack、attribute 和强类型 key，`AtomPixDesktopModule.OnApplicationInitialization` 通过唯一 generated registrar 注册。这个事实只证明 catalog 管线已经接通，不代表现有生产中文已经迁完。
+当前已建立 `Common`、`Shell`、`Home`、`Browser`、`Tools`、`Batch`、`Settings`、`Errors` 八个 `zh-CN` RESX 目录，共 27 个生成 key。City Build 已生成八个 embedded locpack、attribute 和强类型 key，`AtomPixDesktopModule.OnApplicationInitializationAsync` 通过唯一 generated registrar 注册。Shell 与 Home 已作为首个生产纵切迁入生成 key；这证明真实 View 已消费 catalog，但不代表现有生产中文已经迁完。
 
 ## 4. Culture 与 UI bridge
 
@@ -65,7 +65,9 @@ AtomPix RESX 编辑输入按以下 catalog 划分，并使用同名 key prefix�
 
 AtomPix 组合层实现 `IPresentationLocalizationBridge`，把后台 culture 变更显式切到 Avalonia UI dispatcher。ViewModel 持有的 `ILocalizedText`/订阅随 activation scope 释放。同一 culture revision 的组合文案要么全部来自旧 revision，要么全部来自新 revision，不向用户提交混合语言状态。
 
-当前 `AvaloniaPresentationLocalizationBridge` 复用 City `IUiDispatcher`，在 UI 线程统一更新当前线程/默认线程 culture 和 AtomUI `LanguageVariant`；组合根把它注册为 `IPresentationLocalizationBridge`。Headless Avalonia 运行时测试已验证真实 DI 类型、bridge 应用结果、generated registrar 的八个 descriptor 以及 `Settings.Title -> 设置` 查询。production View/route/service 尚未改用生成 key 或 `ILocalizedText`，因此 revision 一致性与 activation-scope 释放仍待后续内容迁移验证。
+当前 `AvaloniaPresentationLocalizationBridge` 复用 City `IUiDispatcher`，在 UI 线程统一更新当前线程/默认线程 culture 和 AtomUI `LanguageVariant`；组合根把它注册为 `IPresentationLocalizationBridge`。`AtomPixLocalizedTextProjection` 在应用模块生命周期内持有 module scope 和 27 个 City `ILocalizedText`，只在同一 culture revision 的全部 handle 就绪后原子发布只读 snapshot；`LocExtension` 订阅 projection revision，使 Shell/Home 的文本、Tooltip 与 AutomationName 使用同一入口。Headless Avalonia 运行时测试已验证真实 DI 类型、bridge、八个 descriptor、27 keys、`Settings.Title -> 设置`、Settings 按钮真实可访问名称和生命周期释放。
+
+首次把 projection 放入同步 Host 启动路径时，测试发现 City 的 package single-flight、mutation queue 与 localized-text refresh 使用 `Task.Yield()` 捕获 Avalonia `SynchronizationContext`，会让非泵送 UI 线程同步等待 Host 时死锁。City 固定提交 `c2e41761` 改为“锁内先登记共享 completion、锁外在线程池执行”，并新增 non-pumping context 回归；Localization `97/97` 与 AtomPix 完整 UI 项目 `19/19`（非压力 `18` + virtualization 压力 `1`）通过。该问题归属 City 基础能力，不由 AtomPix 业务绕过。
 
 硬编码中文扫描允许清单仅包括测试 fixture、预期中文断言、内部日志/诊断和注释；每条生产例外必须有理由，不能用全目录排除。
 
@@ -79,4 +81,4 @@ AtomPix 组合层实现 `IPresentationLocalizationBridge`，把后台 culture �
 - runtime ProjectReference SHA、Build package source SHA 和证据记录完全一致。
 - 干净环境 restore/build、Partial Trim、single-file 通过；NativeAOT 仅在正式采用时进入强制门。
 
-截至 2026-10-21，前两项构建管线、八目录 registrar 和 UI bridge 的最小运行时链路已经通过；最新 win-x64 Partial Trim single-file 也已完成启动 UIA 与发布 GUI `9/9` 回归。由于生产 UI 尚未消费生成 key，这次发布验证不能代替裁剪后 locpack 真实查询；missing/duplicate key、生产硬编码清零/逐项 allowlist、动态文本订阅生命周期和发布物资源查询探针仍是开放项。本专项保持 `Implementation In Progress`。
+截至 2026-10-21，构建管线、八目录/27 keys registrar、UI bridge、应用级 text projection 和 Shell/Home 生产纵切已经通过；两个已迁 AXAML 的硬编码中文为零。最新 win-x64 Partial Trim single-file 已重新发布，发布窗口/图标轨/Settings UIA 与真实发布 GUI `9/9` 通过，并从发布物查询到本纵切的本地化可访问名称；EXE SHA-256 为 `85CC96E…E827C`，功能报告为 `.artifacts/published-functional/20261021T090611571Z-29764-976985d3/`。全 Desktop 源码（排除 catalog）仍有 465 行、28 个文件含中文，其中 AXAML 146 行，因此内容迁移尚未结束；missing/duplicate key、逐项 allowlist 和剩余生产文案仍是开放项。本专项保持 `Implementation In Progress`。

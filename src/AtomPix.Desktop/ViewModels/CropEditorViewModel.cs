@@ -31,7 +31,8 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
     private readonly OpenImageWorkflow _openImage;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly CropImageWorkflow _crop;
-    private readonly DesktopNavigationCoordinator _navigation;
+    private readonly IDesktopNavigator _navigator;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -60,7 +61,8 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
         OpenImageWorkflow openImage,
         LoadSettingsWorkflow loadSettings,
         CropImageWorkflow crop,
-        DesktopNavigationCoordinator navigation,
+        IDesktopNavigator navigator,
+        IDesktopForegroundTaskGate foregroundTasks,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
@@ -71,7 +73,8 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _crop = crop ?? throw new ArgumentNullException(nameof(crop));
-        _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
         var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
         Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
@@ -308,7 +311,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
             ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
             return;
         }
-        if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
+        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
@@ -333,7 +336,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
             else ResultFeedback.Show(_lastResult, result.Value.OutputDisposition, "裁剪完成", ResultDetails);
             NotifyResult();
         }
-        finally { _executionCancellation = null; _navigation.EndForegroundTask(); }
+        finally { _executionCancellation = null; _foregroundTasks.EndForegroundTask(); }
     }
 
     private async Task HandleSourceConflictAsync(CancellationToken cancellationToken)
@@ -371,7 +374,7 @@ public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask,
     {
         var opened = await _openImage.ExecuteAsync(new OpenImageRequest(output), CancellationToken.None);
         if (!opened.Succeeded) { SetError(opened.Error); return; }
-        _navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
+        _navigator.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
     }
     private async Task CopyDiagnosticIdAsync(CancellationToken cancellationToken) { if (DiagnosticId is not null) await _clipboard.SetTextAsync(DiagnosticId, cancellationToken); }
 

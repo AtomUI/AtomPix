@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using AtomPix.Core.Jobs;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Composition;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Desktop.ViewModels;
@@ -19,15 +20,17 @@ public enum PrimaryWorkspaceKind
 
 public sealed class ShellViewModel : ViewModelBase
 {
-    private readonly DesktopNavigationCoordinator _navigation;
-    private readonly HomePageViewModel _home;
+    private readonly IDesktopNavigationIntentSource _navigation;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
+    private readonly IDesktopEntryViewModelFactory _entryFactory;
+    private HomePageViewModel? _home;
     private readonly ImageBrowserViewModel _browser;
     private readonly CompressionEditorViewModel _compress;
     private readonly ConversionEditorViewModel _convert;
     private readonly ResizeEditorViewModel _resize;
     private readonly CropEditorViewModel _crop;
     private readonly BatchTaskViewModel _batch;
-    private readonly SettingsPageViewModel _settings;
+    private SettingsPageViewModel? _settings;
     private readonly IDesktopDialogService _dialogs;
     private readonly IDesktopFeedbackService _feedback;
     private readonly AtomPixCityNavigator? _cityNavigator;
@@ -50,29 +53,29 @@ public sealed class ShellViewModel : ViewModelBase
     private ViewModelCompositionLease? _toolComposition;
 
     public ShellViewModel(
-        DesktopNavigationCoordinator navigation,
-        HomePageViewModel home,
+        IDesktopNavigationIntentSource navigation,
+        IDesktopForegroundTaskGate foregroundTasks,
+        IDesktopEntryViewModelFactory entryFactory,
         ImageBrowserViewModel browser,
         CompressionEditorViewModel compress,
         ConversionEditorViewModel convert,
         ResizeEditorViewModel resize,
         CropEditorViewModel crop,
         BatchTaskViewModel batch,
-        SettingsPageViewModel settings,
         IDesktopDialogService dialogs,
         IDesktopFeedbackService feedback,
         AtomPixCityNavigator? cityNavigator = null,
         IUiCommandFactory? commandFactory = null)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
-        _home = home ?? throw new ArgumentNullException(nameof(home));
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
+        _entryFactory = entryFactory ?? throw new ArgumentNullException(nameof(entryFactory));
         _browser = browser ?? throw new ArgumentNullException(nameof(browser));
         _compress = compress ?? throw new ArgumentNullException(nameof(compress));
         _convert = convert ?? throw new ArgumentNullException(nameof(convert));
         _resize = resize ?? throw new ArgumentNullException(nameof(resize));
         _crop = crop ?? throw new ArgumentNullException(nameof(crop));
         _batch = batch ?? throw new ArgumentNullException(nameof(batch));
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _feedback = feedback ?? throw new ArgumentNullException(nameof(feedback));
         _cityNavigator = cityNavigator;
@@ -89,12 +92,11 @@ public sealed class ShellViewModel : ViewModelBase
             activationOwner: activationOwner);
 
         _navigation.NavigationRequested += HandleNavigationRequested;
-        _navigation.NavigationLockChanged += HandleNavigationLockChanged;
+        _foregroundTasks.ForegroundTaskStateChanged += HandleForegroundTaskStateChanged;
         _batch.Items.CollectionChanged += HandleBatchItemsChanged;
         _batch.PropertyChanged += HandleBatchPropertyChanged;
         _batch.RecoveryDraftCreated += HandleBatchRecoveryDraftCreated;
         _browser.PropertyChanged += HandleBrowserPropertyChanged;
-        _settings.CloseRequested += HandleSettingsCloseRequested;
         SubscribeOperationFeedback(_compress.ResultFeedback);
         SubscribeOperationFeedback(_convert.ResultFeedback);
         SubscribeOperationFeedback(_resize.ResultFeedback);
@@ -102,9 +104,22 @@ public sealed class ShellViewModel : ViewModelBase
     }
 
     public string ApplicationTitle => "AtomPix";
-    public HomePageViewModel Home => _home;
+    public HomePageViewModel Home => _home ??= _entryFactory.CreateHome();
     public ImageBrowserViewModel Browser => _browser;
-    public SettingsPageViewModel Settings => _settings;
+    public SettingsPageViewModel Settings
+    {
+        get
+        {
+            if (_settings is not null)
+            {
+                return _settings;
+            }
+
+            _settings = _entryFactory.CreateSettings();
+            _settings.CloseRequested += HandleSettingsCloseRequested;
+            return _settings;
+        }
+    }
     public CropEditorViewModel Crop => _crop;
     public BatchTaskViewModel BatchResultDetails => _batch;
 
@@ -232,7 +247,7 @@ public sealed class ShellViewModel : ViewModelBase
     public IRelayCommand CloseDrawerCommand { get; }
     public IAsyncRelayCommand CloseSettingsCommand { get; }
 
-    public void SetForegroundTaskActive(bool value) => _navigation.SetNavigationLocked(value);
+    public void SetForegroundTaskActive(bool value) => _foregroundTasks.SetForegroundTaskActive(value);
 
     public void RefreshResultAvailability()
     {
@@ -275,12 +290,11 @@ public sealed class ShellViewModel : ViewModelBase
     protected override void OnDisposed()
     {
         _navigation.NavigationRequested -= HandleNavigationRequested;
-        _navigation.NavigationLockChanged -= HandleNavigationLockChanged;
+        _foregroundTasks.ForegroundTaskStateChanged -= HandleForegroundTaskStateChanged;
         _batch.Items.CollectionChanged -= HandleBatchItemsChanged;
         _batch.PropertyChanged -= HandleBatchPropertyChanged;
         _batch.RecoveryDraftCreated -= HandleBatchRecoveryDraftCreated;
         _browser.PropertyChanged -= HandleBrowserPropertyChanged;
-        _settings.CloseRequested -= HandleSettingsCloseRequested;
         UnsubscribeOperationFeedback(_compress.ResultFeedback);
         UnsubscribeOperationFeedback(_convert.ResultFeedback);
         UnsubscribeOperationFeedback(_resize.ResultFeedback);
@@ -295,7 +309,8 @@ public sealed class ShellViewModel : ViewModelBase
         _resize.Dispose();
         _crop.Dispose();
         _batch.Dispose();
-        _settings.Dispose();
+        ReleaseEntryReference(PrimaryWorkspaceKind.Home, dispose: true);
+        ReleaseEntryReference(PrimaryWorkspaceKind.Settings, dispose: true);
     }
 
     public async Task<bool> TryCloseAsync(CancellationToken cancellationToken = default)
@@ -315,7 +330,7 @@ public sealed class ShellViewModel : ViewModelBase
             await WaitForForegroundTaskAsync(cancellationToken);
         }
 
-        return await _settings.TryLeaveAsync(cancellationToken);
+        return _settings is null || await _settings.TryLeaveAsync(cancellationToken);
     }
 
     private async Task NavigateAsync(DesktopRoute route)
@@ -351,13 +366,13 @@ public sealed class ShellViewModel : ViewModelBase
             if (!isLocked) completion.TrySetResult();
         }
 
-        _navigation.NavigationLockChanged += Handler;
+        _foregroundTasks.ForegroundTaskStateChanged += Handler;
         return AwaitAndDetachAsync();
 
         async Task AwaitAndDetachAsync()
         {
             try { await completion.Task.WaitAsync(cancellationToken); }
-            finally { _navigation.NavigationLockChanged -= Handler; }
+            finally { _foregroundTasks.ForegroundTaskStateChanged -= Handler; }
         }
     }
 
@@ -369,7 +384,7 @@ public sealed class ShellViewModel : ViewModelBase
         var previousWorkspace = PrimaryWorkspace;
         var previousRoute = CurrentRoute;
         if (IsSettingsOpen && request.Route != DesktopRoute.Settings
-            && !await _settings.TryLeaveAsync())
+            && (_settings is null || !await _settings.TryLeaveAsync()))
         {
             return;
         }
@@ -393,7 +408,7 @@ public sealed class ShellViewModel : ViewModelBase
             case DesktopRoute.Settings:
                 _routeBeforeSettings = CurrentRoute;
                 _workspaceBeforeSettings = PrimaryWorkspace;
-                await _settings.LoadAsync();
+                await Settings.LoadAsync();
                 CurrentRoute = DesktopRoute.Settings;
                 PrimaryWorkspace = PrimaryWorkspaceKind.Settings;
                 break;
@@ -425,13 +440,14 @@ public sealed class ShellViewModel : ViewModelBase
         }
 
         RefreshResultAvailability();
-        if (_cityNavigator is { IsAttached: true }
-            && (previousWorkspace != PrimaryWorkspace
-                || request.Context is BrowserNavigationContext or BrowserToolNavigationContext))
+        var presentationChanged = previousWorkspace != PrimaryWorkspace
+            || request.Context is BrowserNavigationContext or BrowserToolNavigationContext;
+        if (_cityNavigator is { IsAttached: true } && presentationChanged)
         {
             var presented = await _cityNavigator.PresentAsync(request, ResolvePrimaryViewModel());
             if (!presented)
             {
+                ReleaseCandidateEntryReference(previousWorkspace, PrimaryWorkspace);
                 PrimaryWorkspace = previousWorkspace;
                 CurrentRoute = previousRoute;
                 _feedback.ShowMessage(
@@ -439,6 +455,15 @@ public sealed class ShellViewModel : ViewModelBase
                     DesktopFeedbackSeverity.Error);
                 return;
             }
+
+            if (previousWorkspace != PrimaryWorkspace)
+            {
+                ReleaseEntryReference(previousWorkspace, dispose: false);
+            }
+        }
+        else if (previousWorkspace != PrimaryWorkspace)
+        {
+            ReleaseEntryReference(previousWorkspace, dispose: true);
         }
         NavigationRevision++;
     }
@@ -449,7 +474,7 @@ public sealed class ShellViewModel : ViewModelBase
     private async Task CloseSettingsPageAsync()
     {
         if (!IsSettingsOpen || IsForegroundTaskActive) return;
-        if (!await _settings.TryLeaveAsync()) return;
+        if (_settings is null || !await _settings.TryLeaveAsync()) return;
 
         PrimaryWorkspace = _workspaceBeforeSettings;
         CurrentRoute = _routeBeforeSettings;
@@ -459,13 +484,22 @@ public sealed class ShellViewModel : ViewModelBase
                 ? await _cityNavigator.ResumeBrowserAsync(_browser)
                 : await _cityNavigator.PresentAsync(
                     new DesktopNavigationRequest(DesktopRoute.Browse),
-                    _home);
+                    Home);
             if (!presented)
             {
+                ReleaseCandidateEntryReference(
+                    PrimaryWorkspaceKind.Settings,
+                    PrimaryWorkspace);
                 PrimaryWorkspace = PrimaryWorkspaceKind.Settings;
                 CurrentRoute = DesktopRoute.Settings;
                 return;
             }
+
+            ReleaseEntryReference(PrimaryWorkspaceKind.Settings, dispose: false);
+        }
+        else
+        {
+            ReleaseEntryReference(PrimaryWorkspaceKind.Settings, dispose: true);
         }
         RefreshResultAvailability();
         NavigationRevision++;
@@ -475,6 +509,15 @@ public sealed class ShellViewModel : ViewModelBase
     {
         if (context is null && !_browser.TryCreateCurrentContext(out context))
         {
+            if (!IsHomeVisible)
+            {
+                await HandleNavigationRequestedAsync(new DesktopNavigationRequest(DesktopRoute.Browse));
+                if (!IsHomeVisible)
+                {
+                    return;
+                }
+            }
+
             TriggerHomePicker(route);
             return;
         }
@@ -531,7 +574,7 @@ public sealed class ShellViewModel : ViewModelBase
                 _browser.Items.Count,
                 cancellationToken => PrepareBatchForToolAsync(route, editorContent, cancellationToken),
                 () => SynchronizeSingleDraftFromBatch(editorContent),
-                _navigation,
+                _foregroundTasks,
                 _commandFactory);
             if (_compositionRoot is not null)
             {
@@ -679,12 +722,13 @@ public sealed class ShellViewModel : ViewModelBase
 
     private void TriggerHomePicker(DesktopRoute route)
     {
+        var home = Home;
         var command = route switch
         {
-            DesktopRoute.Compress => _home.OpenForCompressCommand,
-            DesktopRoute.Convert => _home.OpenForConvertCommand,
-            DesktopRoute.Resize => _home.OpenForResizeCommand,
-            DesktopRoute.Crop => _home.OpenForCropCommand,
+            DesktopRoute.Compress => home.OpenForCompressCommand,
+            DesktopRoute.Convert => home.OpenForConvertCommand,
+            DesktopRoute.Resize => home.OpenForResizeCommand,
+            DesktopRoute.Crop => home.OpenForCropCommand,
             _ => null
         };
         command?.Execute(null);
@@ -715,7 +759,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     private static string BuildDrawerTitle(DesktopRoute route) => GetToolTitle(route, false);
 
-    private void HandleNavigationLockChanged(object? sender, bool isLocked)
+    private void HandleForegroundTaskStateChanged(object? sender, bool isLocked)
     {
         IsForegroundTaskActive = isLocked;
         _browser.SetInteractionLocked(isLocked);
@@ -769,11 +813,46 @@ public sealed class ShellViewModel : ViewModelBase
 
     private object ResolvePrimaryViewModel() => PrimaryWorkspace switch
     {
-        PrimaryWorkspaceKind.Home => _home,
+        PrimaryWorkspaceKind.Home => Home,
         PrimaryWorkspaceKind.Browser => _browser,
-        PrimaryWorkspaceKind.Settings => _settings,
+        PrimaryWorkspaceKind.Settings => Settings,
         _ => throw new ArgumentOutOfRangeException(nameof(PrimaryWorkspace), PrimaryWorkspace, null),
     };
+
+    private void ReleaseCandidateEntryReference(
+        PrimaryWorkspaceKind previousWorkspace,
+        PrimaryWorkspaceKind candidateWorkspace)
+    {
+        if (candidateWorkspace != previousWorkspace)
+        {
+            ReleaseEntryReference(candidateWorkspace, dispose: false);
+        }
+    }
+
+    private void ReleaseEntryReference(PrimaryWorkspaceKind workspace, bool dispose)
+    {
+        switch (workspace)
+        {
+            case PrimaryWorkspaceKind.Home:
+                var home = Interlocked.Exchange(ref _home, null);
+                if (dispose)
+                {
+                    home?.Dispose();
+                }
+                break;
+            case PrimaryWorkspaceKind.Settings:
+                var settings = Interlocked.Exchange(ref _settings, null);
+                if (settings is not null)
+                {
+                    settings.CloseRequested -= HandleSettingsCloseRequested;
+                    if (dispose)
+                    {
+                        settings.Dispose();
+                    }
+                }
+                break;
+        }
+    }
 
     private void HandleBatchItemsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {

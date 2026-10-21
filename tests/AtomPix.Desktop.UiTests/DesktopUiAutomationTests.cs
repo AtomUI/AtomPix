@@ -36,38 +36,46 @@ public sealed class DesktopUiAutomationTests
     [Fact]
     public Task Generated_localization_catalogs_register_and_resolve_through_city_runtime() => RunAsync(async () =>
     {
-        await using var harness = await CityWindowHarness.StartAsync();
-        var registry = harness.Services.GetRequiredService<LanguagePackageRegistry>();
-        var descriptors = registry.Descriptors
-            .Where(descriptor => descriptor.ScopeId == AtomPixLocalization.ModuleId)
-            .ToArray();
+        await using (var harness = await CityWindowHarness.StartAsync())
+        {
+            var registry = harness.Services.GetRequiredService<LanguagePackageRegistry>();
+            var descriptors = registry.Descriptors
+                .Where(descriptor => descriptor.ScopeId == AtomPixLocalization.ModuleId)
+                .ToArray();
 
-        Assert.Equal(8, descriptors.Length);
-        Assert.All(descriptors, descriptor => Assert.Equal("zh-CN", descriptor.Culture.Name));
-        Assert.Equal(
-            new[] { "zh-CN" },
-            AtomUI.City.Generated.GeneratedLocalizationManifest.SupportedCultures);
-        Assert.Equal(8, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
+            Assert.Equal(8, descriptors.Length);
+            Assert.All(descriptors, descriptor => Assert.Equal("zh-CN", descriptor.Culture.Name));
+            Assert.Equal(
+                new[] { "zh-CN" },
+                AtomUI.City.Generated.GeneratedLocalizationManifest.SupportedCultures);
+            Assert.Equal(27, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
 
-        var localization = harness.Services.GetRequiredService<ILocalizationService>();
-        var presentationBridge = harness.Services.GetRequiredService<IPresentationLocalizationBridge>();
-        Assert.IsType<AvaloniaPresentationLocalizationBridge>(presentationBridge);
+            var localization = harness.Services.GetRequiredService<ILocalizationService>();
+            var presentationBridge = harness.Services.GetRequiredService<IPresentationLocalizationBridge>();
+            Assert.IsType<AvaloniaPresentationLocalizationBridge>(presentationBridge);
+            var projection = harness.Services.GetRequiredService<IAtomPixLocalizedText>();
+            Assert.Same(projection, LocalizationHost.Current);
+            Assert.Equal("设置", projection.GetString(
+                AtomUI.City.Generated.GeneratedLocalizationManifest.Keys.Shell_Navigation_Settings));
 
-        var presentationResult = await presentationBridge.ApplyCultureAsync(
-            localization.CultureState.Value);
-        Assert.True(presentationResult.Succeeded);
-        Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentCulture?.Name);
-        Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentUICulture?.Name);
+            var presentationResult = await presentationBridge.ApplyCultureAsync(
+                localization.CultureState.Value);
+            Assert.True(presentationResult.Succeeded);
+            Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentCulture?.Name);
+            Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentUICulture?.Name);
 
-        var context = new LocalizationLookupContext(moduleId: AtomPixLocalization.ModuleId);
-        using var scope = localization.ActivateScope(context);
-        var title = await localization.GetStringAsync(
-            AtomUI.City.Generated.GeneratedLocalizationManifest.Keys.Settings_Title,
-            context);
+            var context = new LocalizationLookupContext(moduleId: AtomPixLocalization.ModuleId);
+            using var scope = localization.ActivateScope(context);
+            var title = await localization.GetStringAsync(
+                AtomUI.City.Generated.GeneratedLocalizationManifest.Keys.Settings_Title,
+                context);
 
-        Assert.False(title.IsMissing);
-        Assert.Equal("设置", title.Value);
-        Assert.Equal("zh-CN", title.Culture.Name);
+            Assert.False(title.IsMissing);
+            Assert.Equal("设置", title.Value);
+            Assert.Equal("zh-CN", title.Culture.Name);
+        }
+
+        Assert.Null(LocalizationHost.Current);
     });
 
     [Fact]
@@ -80,6 +88,7 @@ public sealed class DesktopUiAutomationTests
             using var frame = window.CaptureRenderedFrame();
             var initialHomeView = Assert.Single(
                 window.GetVisualDescendants().OfType<HomePageView>());
+            var initialHome = shell.Home;
             var initialHomeActivation = shell.Home.CurrentActivationScope;
             Assert.NotNull(initialHomeActivation);
             Assert.NotNull(frame);
@@ -104,13 +113,20 @@ public sealed class DesktopUiAutomationTests
             Assert.Null(window.FindControl<Border>("ImmersiveTitleBarScrim"));
             Assert.Null(window.FindControl<Control>("BrowserBackdropViewport"));
 
-            var settingsButton = rail.GetLogicalDescendants()
+            var railButtons = rail.GetLogicalDescendants()
                 .OfType<AtomUI.Desktop.Controls.Button>()
-                .Single(button => AutomationProperties.GetName(button) == "设置");
+                .ToArray();
+            var settingsButton = railButtons
+                .SingleOrDefault(button => AutomationProperties.GetName(button) == "设置");
+            Assert.True(
+                settingsButton is not null,
+                $"Settings automation name was not localized. Actual names: {string.Join(" | ", railButtons.Select(AutomationProperties.GetName))}");
+            Assert.NotNull(settingsButton);
             Assert.Equal(DesktopRoute.Settings, Assert.IsType<DesktopRoute>(settingsButton.CommandParameter));
             Assert.NotNull(settingsButton.Command);
             Assert.True(settingsButton.Command.CanExecute(settingsButton.CommandParameter));
-            await shell.Settings.LoadAsync();
+            var settingsEntry = shell.Settings;
+            await settingsEntry.LoadAsync();
             var clickPoint = settingsButton.TranslatePoint(
                 new Point(settingsButton.Bounds.Width / 2, settingsButton.Bounds.Height / 2),
                 window);
@@ -121,7 +137,8 @@ public sealed class DesktopUiAutomationTests
             await WaitUntilAsync(() => shell.IsSettingsOpen
                 && workspace.GetVisualDescendants().OfType<SettingsPageView>().Count() == 1);
             Assert.True(shell.IsSettingsOpen);
-            Assert.False(shell.Home.IsActive);
+            Assert.True(initialHome.IsDisposed);
+            Assert.False(initialHome.IsActive);
             Assert.False(rail.IsVisible);
             Assert.False(panel.IsVisible);
             var settingsSeparator = Assert.IsType<Border>(window.FindControl<Border>("SettingsTitleBarSeparator"));
@@ -142,9 +159,11 @@ public sealed class DesktopUiAutomationTests
             Assert.False(shell.IsSettingsOpen);
             var homeView = Assert.Single(workspace.GetVisualDescendants().OfType<HomePageView>());
             Assert.Same(shell.Home, homeView.DataContext);
+            Assert.NotSame(initialHome, shell.Home);
             Assert.NotSame(initialHomeView, homeView);
             Assert.NotSame(initialHomeActivation, shell.Home.CurrentActivationScope);
             Assert.True(shell.Home.IsActive);
+            Assert.True(settingsEntry.IsDisposed);
             Assert.True(rail.IsVisible);
             Assert.False(settingsSeparator.IsVisible);
         }
@@ -155,7 +174,7 @@ public sealed class DesktopUiAutomationTests
     {
         await using var harness = await CityWindowHarness.StartAsync();
         var shell = harness.Shell;
-        var navigation = harness.Services.GetRequiredService<DesktopNavigationCoordinator>();
+        var navigation = harness.Services.GetRequiredService<DesktopNavigationIntentHub>();
         var firstPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-detailed.jpg");
         var secondPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-basic.jpg");
         var context = new BrowserNavigationContext(
@@ -219,28 +238,21 @@ public sealed class DesktopUiAutomationTests
     });
 
     [Fact]
-    public Task Navigation_rail_preserves_the_six_icon_only_actions_without_hover_chrome() => RunAsync(() =>
+    public Task Navigation_rail_preserves_the_six_icon_only_actions_without_hover_chrome() => RunAsync(async () =>
     {
-        var window = new MainWindow();
-        window.Show();
-        try
+        await using var harness = await CityWindowHarness.StartAsync();
+        var window = harness.Window;
+        using var frame = window.CaptureRenderedFrame();
+        var rail = Assert.IsType<Border>(window.FindControl<Border>("NavigationRail"));
+        var buttons = rail.GetLogicalDescendants().OfType<AtomUI.Desktop.Controls.Button>().ToArray();
+        Assert.Equal(
+            new[] { "返回首页", "压缩体积", "转换格式", "调整尺寸", "剪裁尺寸", "设置" },
+            buttons.Select(AutomationProperties.GetName).ToArray());
+        Assert.All(buttons, button =>
         {
-            using var frame = window.CaptureRenderedFrame();
-            var rail = Assert.IsType<Border>(window.FindControl<Border>("NavigationRail"));
-            var buttons = rail.GetLogicalDescendants().OfType<AtomUI.Desktop.Controls.Button>().ToArray();
-            Assert.Equal(
-                new[] { "返回首页", "压缩体积", "转换格式", "调整尺寸", "剪裁尺寸", "设置" },
-                buttons.Select(AutomationProperties.GetName).ToArray());
-            Assert.All(buttons, button =>
-            {
-                Assert.Equal(new Thickness(0), button.BorderThickness);
-                Assert.Equal(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(button.Background).Color);
-            });
-        }
-        finally
-        {
-            window.Close();
-        }
+            Assert.Equal(new Thickness(0), button.BorderThickness);
+            Assert.Equal(Colors.Transparent, Assert.IsAssignableFrom<ISolidColorBrush>(button.Background).Color);
+        });
     });
 
     [Fact]
@@ -398,7 +410,7 @@ public sealed class DesktopUiAutomationTests
     {
         await using var harness = await CityWindowHarness.StartAsync();
         var shell = harness.Shell;
-        var navigation = harness.Services.GetRequiredService<DesktopNavigationCoordinator>();
+        var navigation = harness.Services.GetRequiredService<DesktopNavigationIntentHub>();
         var firstPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-detailed.jpg");
         var secondPath = Path.Combine(AppContext.BaseDirectory, "TestAssets", "jpeg-basic.jpg");
         var context = new BrowserNavigationContext(

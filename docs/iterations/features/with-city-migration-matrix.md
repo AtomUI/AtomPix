@@ -6,7 +6,7 @@
 >
 > 实施分支：`feature/with-city`
 >
-> 当前固定 City SHA：`9097d9d0d8244a864e5b7944ef2bf7ab2be70ae3`（City Release/Public API/package gate 已通过）
+> 当前固定 City SHA：`c2e4176159b9b441af2d7ce065d5acde6a888543`（City Release build、全套测试与 Build package provenance 已通过；聚合 format gate 受既有全库格式基线阻断）
 
 本文是 City 迁移的总览仪表盘和导航索引。完整施工合同、blocker 和证据以[逐决策登记表](with-city-decision-register.md)及专项文档为准；产品行为仍以 `docs/product/` 为准，模块边界仍以 `docs/architecture/` 与 `docs/modules/` 为准。
 
@@ -34,13 +34,13 @@ City 能力跟随事实、状态和生命周期 owner，而不是最先展示它
 | Imaging.Magick | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
 | Infrastructure | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 | 禁 |
 | Workflows | 否 | 否 | 否 | 否 | 采 | 否 | 否 |
-| Desktop | 已 | 采 | 已 | 已 | 间 | 否 | 采 |
+| Desktop | 已 | 已 | 已 | 已 | 间 | 否 | 采 |
 
 解释：
 
 - Workflows 只为 `AppSettingsState` 直接采用 City.State；Recent 不迁移。
 - Desktop 通过 AtomPix 只读 facade 间接观察 State，不获得 writer。
-- Mvvm 的 City 前置能力已经验证；AtomPix 逐类型 ownership map 仍在收口，因此保持“采”。
+- Mvvm 的 City 前置能力、AtomPix 逐类型 ownership、Home/Settings EntryOwned 和导航/前台任务职责拆分均已验证。
 - Routing/Presentation 已使用通用 coordinator、commit receipt 和安全条件恢复能力。
 - EventBus 不采用；显式命令、只读 State 和应用服务足够。
 
@@ -73,16 +73,15 @@ City 能力跟随事实、状态和生命周期 owner，而不是最先展示它
 
 | Blocker | Owner | 解除条件 |
 | --- | --- | --- |
-| AtomPix MVVM ownership 未完全收口 | AtomPix | Home/Settings EntryOwned 与导航意图/前台任务职责拆分完成并补齐逐类型证据 |
-| Localization 内容迁移与发布闭环未完成 | AtomPix | 已接通的 8 catalog/registrar/UI bridge 继续完成生产 key/订阅迁移、硬编码扫描 allowlist 与 trim/single-file locpack 验收 |
+| Localization 内容迁移与 catalog 完整性门未完成 | AtomPix | 已接通的 8 catalog/27 keys、应用级 text projection、Shell/Home 生产切片继续扩展到剩余 465 行中文，并完成逐项 allowlist 与 missing/duplicate key 门；当前纵切的 trim/single-file locpack 已验收 |
 | 发布许可证闭环未完成 | AtomPix/AtomUI | 字体与 Svg 清理、替代授权、Notice/源码/SBOM gate 通过 |
 
 ## 6. 解锁和施工顺序
 
 1. 已完成：City 四项 framework blocker、Release gate 和固定 SHA。
 2. 已完成：同 SHA Build 包、provenance、State/Host、Routing/Presentation 与发布功能门。
-3. 当前：收口 AtomPix MVVM ownership 和导航/前台任务职责。
-4. 当前：八个 Localization catalog、generated registrar 与 UI bridge 已接通；继续迁移生产文案和订阅，并完成发布闭环。
+3. 已完成：AtomPix MVVM ownership、Home/Settings EntryOwned 与导航/前台任务职责拆分。
+4. 当前：八个 Localization catalog、27 keys、generated registrar、UI bridge、Shell/Home 生产切片及其发布物 locpack 查询已接通；继续迁移其余生产文案，并补齐逐项 allowlist 与 missing/duplicate key 门。
 5. Release 前：关闭字体/Svg、Notice/源码/SBOM 合规 blocker；只有真实证据存在时才转为 `已`。
 
 ## 7. 专项文档

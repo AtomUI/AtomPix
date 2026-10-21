@@ -234,10 +234,14 @@ internal sealed class PreparedRoutePlanFactory : IRoutePresentationPlanFactory
             throw;
         }
 
+        var lease = _viewModel is HomePageViewModel or SettingsPageViewModel
+            ? ViewModelLease.EntryOwned(_viewModel)
+            : ViewModelLease.Borrowed(_viewModel);
+
         return RouteOutletCommitPlan.Replace(
             context.OutletName,
             handle,
-            ViewModelLease.Borrowed(_viewModel),
+            lease,
             context.Navigation.Route.RouteId);
     }
 }

@@ -2,7 +2,7 @@
 
 > 设计状态：Design Frozen
 >
-> 交付状态：Implementation In Progress；City 前置门已全部关闭，AtomPix ownership map 尚待最终收口
+> 交付状态：Verified；City 前置门、AtomPix ownership map 与职责拆分均已通过验证
 
 ## 1. 基类、激活与通知
 
@@ -14,7 +14,7 @@
 
 ## 2. 命令合同与共享执行域
 
-City 的 `Reject`、`Allow`、`RejectByKey` 只对单个 Command 实例生效；固定 SHA `9097d9d0` 已新增最小 `CommandExecutionDomain` 来协调不同 Command：
+City 的 `Reject`、`Allow`、`RejectByKey` 只对单个 Command 实例生效；固定 SHA `c2e41761` 包含最小 `CommandExecutionDomain` 来协调不同 Command：
 
 ```text
 ActivationScope / BrowserWorkspace owner
@@ -50,7 +50,7 @@ ActivationScope / BrowserWorkspace owner
 
 ## 4. City composition 发布前置门
 
-City composition 在固定 SHA `9097d9d0` 已从 `Release Validation Pending` 提升为 `Release Verified`，完成了以下验证：
+City composition 在固定 SHA `c2e41761` 已从 `Release Validation Pending` 提升为 `Release Verified`，完成了以下验证：
 
 1. root/child/grandchild leaf-to-root 释放与 task drain。
 2. 任一 child 激活失败后的 sibling、parent 和候选 lease 回滚。
@@ -61,10 +61,12 @@ City composition 在固定 SHA `9097d9d0` 已从 `Release Validation Pending` �
 7. cleanup/diagnostic handler 自身失败时不丢 registry、不挂死共享关闭任务。
 8. 真实 `PresentationRuntime`、`WindowSession`、RouteOutlet 和 activation scope 集成测试。
 
-AtomPix 已使用 `WindowSession -> Shell root -> editors/Batch -> ToolDrawer session` 结构，并通过 Settings 往返重建 activation 的 Headless UI 验证。剩余工作是把 Home/Settings 的 acquisition 与本文 EntryOwned ownership map 完全对齐，并拆开遗留导航意图与前台任务门禁职责。
+AtomPix 已使用 `WindowSession -> Shell root -> editors/Batch -> ToolDrawer session` 结构。Home/Settings 由 transient `DesktopEntryViewModelFactory` 按 route 获取，City plan 使用 `EntryOwned` lease；Headless UI 已证明进入 Settings 时旧 Home 被释放、返回时生成新 Home/View/activation scope、离开时 Settings 被释放，同时 Browser workspace 保持同一对象。导航意图由 `DesktopNavigationIntentHub` 发出，前台任务互斥由独立 `DesktopForegroundTaskGate` 决策；编辑器分别注入 `IDesktopNavigator` 与 `IDesktopForegroundTaskGate`，不再存在混合职责的生产 coordinator。
 
 ## 5. 删除与验收
 
 最终删除 AtomPix `ObservableObject`、`RelayCommand<T>`、`AsyncCommand`、`AsyncCommand<T>`、无 owner 的 `_ = XxxAsync()` 和非事件型 `async void`。Core 的 `OperationResult`/错误模型保持不变。
 
 验收覆盖激活/停用/再次激活、订阅计数、迟到提交、domain 跨命令替换、用户取消、route leave、host shutdown、命令异常、CanExecute 线程、参数校验、dispose 后拒绝执行和错误只展示一次。
+
+2026-10-21 Release 验证：Desktop 无窗口测试 `77/77`、Desktop Headless UI 非压力测试 `18/18`、UI virtualization 压力测试 `1/1`；完整非压力基线 `410`、压力基线 `4`，Release build `0` 警告/`0` 错误。`APX-CITY-MVVM-002` 据此转为 `Verified`。

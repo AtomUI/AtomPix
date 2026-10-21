@@ -11,7 +11,7 @@ using AtomUI.City.Presentation;
 /// </summary>
 public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
 {
-    private readonly DesktopNavigationCoordinator _navigation;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
     private readonly Func<CancellationToken, Task<bool>> _prepareBatch;
     private readonly Action _synchronizeSingleFromBatch;
     private readonly IToolEditorActions _singleActions;
@@ -25,7 +25,7 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
         int itemCount,
         Func<CancellationToken, Task<bool>> prepareBatch,
         Action synchronizeSingleFromBatch,
-        DesktopNavigationCoordinator navigation,
+        IDesktopForegroundTaskGate foregroundTasks,
         IUiCommandFactory? commandFactory = null)
     {
         SingleContent = singleContent ?? throw new ArgumentNullException(nameof(singleContent));
@@ -36,12 +36,12 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
         _itemCount = itemCount;
         _prepareBatch = prepareBatch ?? throw new ArgumentNullException(nameof(prepareBatch));
         _synchronizeSingleFromBatch = synchronizeSingleFromBatch ?? throw new ArgumentNullException(nameof(synchronizeSingleFromBatch));
-        _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
         StartBatchCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance).CreateAsync(
             StartBatchAsync,
             () => CanStartBatch,
             activationOwner: HeadlessUiCommandFactory.ResolveActivationOwner(commandFactory, this));
-        _navigation.NavigationLockChanged += HandleNavigationLockChanged;
+        _foregroundTasks.ForegroundTaskStateChanged += HandleForegroundTaskStateChanged;
         BatchContent.PropertyChanged += HandleBatchPropertyChanged;
         if (_singleNotifier is not null) _singleNotifier.PropertyChanged += HandleSinglePropertyChanged;
         _singleActions.StartActionCommand.CanExecuteChanged += HandleSingleCanExecuteChanged;
@@ -76,7 +76,7 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
     public bool CanStartBatch =>
         HasBatchOption
         && IsIdle
-        && !_navigation.IsNavigationLocked
+        && !_foregroundTasks.IsForegroundTaskActive
         && _singleActions.StartActionCommand.CanExecute(null);
     public double BatchProgressRatio => BatchContent.ProgressRatio;
     public string BatchProgressSummary => IsPreparingBatch ? $"正在准备 {ItemCount} 张图片" : BatchContent.ProgressSummary;
@@ -111,7 +111,7 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
 
     protected override void OnDisposed()
     {
-        _navigation.NavigationLockChanged -= HandleNavigationLockChanged;
+        _foregroundTasks.ForegroundTaskStateChanged -= HandleForegroundTaskStateChanged;
         BatchContent.PropertyChanged -= HandleBatchPropertyChanged;
         if (_singleNotifier is not null) _singleNotifier.PropertyChanged -= HandleSinglePropertyChanged;
         _singleActions.StartActionCommand.CanExecuteChanged -= HandleSingleCanExecuteChanged;
@@ -134,7 +134,7 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
         }
     }
 
-    private void HandleNavigationLockChanged(object? sender, bool value) => NotifyState();
+    private void HandleForegroundTaskStateChanged(object? sender, bool value) => NotifyState();
 
     private void HandleSinglePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

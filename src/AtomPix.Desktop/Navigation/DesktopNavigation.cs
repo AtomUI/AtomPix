@@ -41,13 +41,61 @@ public interface IDesktopNavigator
     bool Navigate(DesktopNavigationRequest request);
 }
 
-public sealed class DesktopNavigationCoordinator : IDesktopNavigator
+public interface IDesktopNavigationIntentSource : IDesktopNavigator
+{
+    public event EventHandler<DesktopNavigationRequest>? NavigationRequested;
+}
+
+public interface IDesktopForegroundTaskGate
+{
+    event EventHandler<bool>? ForegroundTaskStateChanged;
+
+    bool IsForegroundTaskActive { get; }
+
+    bool TryBeginForegroundTask();
+
+    void EndForegroundTask();
+
+    void SetForegroundTaskActive(bool value);
+}
+
+public sealed class DesktopForegroundTaskGate : IDesktopForegroundTaskGate
+{
+    public event EventHandler<bool>? ForegroundTaskStateChanged;
+
+    public bool IsForegroundTaskActive { get; private set; }
+
+    public bool TryBeginForegroundTask()
+    {
+        if (IsForegroundTaskActive)
+        {
+            return false;
+        }
+
+        SetForegroundTaskActive(true);
+        return true;
+    }
+
+    public void EndForegroundTask() => SetForegroundTaskActive(false);
+
+    public void SetForegroundTaskActive(bool value)
+    {
+        if (IsForegroundTaskActive == value)
+        {
+            return;
+        }
+
+        IsForegroundTaskActive = value;
+        ForegroundTaskStateChanged?.Invoke(this, value);
+    }
+}
+
+public sealed class DesktopNavigationIntentHub(
+    IDesktopForegroundTaskGate foregroundTasks) : IDesktopNavigationIntentSource
 {
     public event EventHandler<DesktopNavigationRequest>? NavigationRequested;
 
-    public event EventHandler<bool>? NavigationLockChanged;
-
-    public bool IsNavigationLocked { get; private set; }
+    public bool IsNavigationLocked => foregroundTasks.IsForegroundTaskActive;
 
     public bool Navigate(DesktopNavigationRequest request)
     {
@@ -59,29 +107,5 @@ public sealed class DesktopNavigationCoordinator : IDesktopNavigator
 
         NavigationRequested?.Invoke(this, request);
         return true;
-    }
-
-    public bool TryBeginForegroundTask()
-    {
-        if (IsNavigationLocked)
-        {
-            return false;
-        }
-
-        SetNavigationLocked(true);
-        return true;
-    }
-
-    public void EndForegroundTask() => SetNavigationLocked(false);
-
-    public void SetNavigationLocked(bool value)
-    {
-        if (IsNavigationLocked == value)
-        {
-            return;
-        }
-
-        IsNavigationLocked = value;
-        NavigationLockChanged?.Invoke(this, value);
     }
 }

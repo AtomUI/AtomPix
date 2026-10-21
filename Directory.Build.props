@@ -18,8 +18,8 @@
          the parent Debug/Release configuration across those project edges. -->
     <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
     <RestorePackagesPath>$(MSBuildThisFileDirectory)eng\nuget-cache</RestorePackagesPath>
-    <AtomUICityCommit>9097d9d0d8244a864e5b7944ef2bf7ab2be70ae3</AtomUICityCommit>
-    <AtomUICityBuildPackageVersion>1.0.0-atompix.9097d9d</AtomUICityBuildPackageVersion>
-    <AtomUICityBuildPackageSha256>97087E411C1FFDB7B264A45D057333BF67EC031FD409B885D2DBA6753FD2FB66</AtomUICityBuildPackageSha256>
+    <AtomUICityCommit>c2e4176159b9b441af2d7ce065d5acde6a888543</AtomUICityCommit>
+    <AtomUICityBuildPackageVersion>1.0.0-atompix.c2e4176</AtomUICityBuildPackageVersion>
+    <AtomUICityBuildPackageSha256>5ED32116E11204D782740DA84FA4560E674FB49BCD2358D7E445FEBA08BA9F8E</AtomUICityBuildPackageSha256>
   </PropertyGroup>
 </Project>

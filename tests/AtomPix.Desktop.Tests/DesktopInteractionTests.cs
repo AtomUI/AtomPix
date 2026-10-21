@@ -10,6 +10,7 @@ using AtomPix.Core.Resize;
 using AtomPix.Core.Results;
 using AtomPix.Core.Settings;
 using AtomPix.Core.ValueObjects;
+using AtomPix.Desktop.Composition;
 using AtomPix.Desktop.Navigation;
 using AtomPix.Desktop.Platform;
 using AtomPix.Desktop.Shell;
@@ -22,6 +23,33 @@ using AtomUI.Labs.Controls.ImageGallery;
 
 public sealed class DesktopInteractionTests
 {
+    [Fact]
+    public void Navigation_intent_hub_and_foreground_task_gate_have_distinct_responsibilities()
+    {
+        var gate = new DesktopForegroundTaskGate();
+        var navigation = new DesktopNavigationIntentHub(gate);
+        var request = new DesktopNavigationRequest(DesktopRoute.Settings);
+        var observed = new List<DesktopNavigationRequest>();
+        var gateTransitions = new List<bool>();
+        navigation.NavigationRequested += (_, value) => observed.Add(value);
+        gate.ForegroundTaskStateChanged += (_, value) => gateTransitions.Add(value);
+
+        Assert.True(navigation.Navigate(request));
+        Assert.Same(request, Assert.Single(observed));
+        Assert.True(gate.TryBeginForegroundTask());
+        Assert.False(gate.TryBeginForegroundTask());
+        Assert.True(navigation.IsNavigationLocked);
+        Assert.False(navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Browse)));
+        Assert.Single(observed);
+
+        gate.EndForegroundTask();
+
+        Assert.False(navigation.IsNavigationLocked);
+        Assert.Equal([true, false], gateTransitions);
+        Assert.True(navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Browse)));
+        Assert.Equal(2, observed.Count);
+    }
+
     [Fact]
     public async Task Home_open_image_builds_lightweight_browser_collection_without_eager_probe()
     {
@@ -1281,20 +1309,21 @@ public sealed class DesktopInteractionTests
         var crop = new CropEditorViewModel(
             picker, launcher, dialogs, clipboard, outputGuard,
             new OpenImageWorkflow(processor), new LoadSettingsWorkflow(settingsStore),
-            new CropImageWorkflow(services), navigation);
+            new CropImageWorkflow(services), navigation, navigation);
         var batch = CreateBatch(picker, processor, fileSystem, dialogs, clipboard, navigation);
         var settings = CreateSettings(settingsStore, dialogs);
+        var home = CreateHome(picker, processor, navigation, fileSystem);
         var feedback = new TestFeedback();
         using var shell = new ShellViewModel(
             navigation,
-            CreateHome(picker, processor, navigation, fileSystem),
+            navigation,
+            new FixedDesktopEntryViewModelFactory(home, settings),
             browser,
             compress,
             convert,
             resize,
             crop,
             batch,
-            settings,
             dialogs,
             feedback);
 
@@ -1345,19 +1374,20 @@ public sealed class DesktopInteractionTests
         var crop = new CropEditorViewModel(
             picker, launcher, dialogs, clipboard, outputGuard,
             new OpenImageWorkflow(processor), new LoadSettingsWorkflow(settingsStore),
-            new CropImageWorkflow(services), navigation);
+            new CropImageWorkflow(services), navigation, navigation);
         var batch = CreateBatch(picker, processor, fileSystem, dialogs, clipboard, navigation);
         var settings = CreateSettings(settingsStore, dialogs);
+        var home = CreateHome(picker, processor, navigation, fileSystem);
         using var shell = new ShellViewModel(
             navigation,
-            CreateHome(picker, processor, navigation, fileSystem),
+            navigation,
+            new FixedDesktopEntryViewModelFactory(home, settings),
             browser,
             compress,
             convert,
             resize,
             crop,
             batch,
-            settings,
             dialogs,
             new TestFeedback());
 
@@ -1878,6 +1908,7 @@ public sealed class DesktopInteractionTests
             new OpenImageWorkflow(processor),
             new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new CompressImageWorkflow(services),
+            navigation,
             navigation);
     }
 
@@ -1897,6 +1928,7 @@ public sealed class DesktopInteractionTests
             new OpenImageWorkflow(processor),
             new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new ConvertImageWorkflow(services),
+            navigation,
             navigation);
     }
 
@@ -1916,6 +1948,7 @@ public sealed class DesktopInteractionTests
             new OpenImageWorkflow(processor),
             new LoadSettingsWorkflow(settingsStore ?? new TestSettingsStore()),
             new CropImageWorkflow(services),
+            navigation,
             navigation);
     }
 
@@ -2367,4 +2400,64 @@ public sealed class DesktopInteractionTests
                 2048)));
         }
     }
+}
+
+internal sealed class DesktopNavigationCoordinator :
+    IDesktopNavigationIntentSource,
+    IDesktopForegroundTaskGate
+{
+    public event EventHandler<DesktopNavigationRequest>? NavigationRequested;
+
+    public event EventHandler<bool>? ForegroundTaskStateChanged;
+
+    public bool IsForegroundTaskActive { get; private set; }
+
+    public bool IsNavigationLocked => IsForegroundTaskActive;
+
+    public bool Navigate(DesktopNavigationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (IsForegroundTaskActive)
+        {
+            return false;
+        }
+
+        NavigationRequested?.Invoke(this, request);
+        return true;
+    }
+
+    public bool TryBeginForegroundTask()
+    {
+        if (IsForegroundTaskActive)
+        {
+            return false;
+        }
+
+        SetForegroundTaskActive(true);
+        return true;
+    }
+
+    public void EndForegroundTask() => SetForegroundTaskActive(false);
+
+    public void SetForegroundTaskActive(bool value)
+    {
+        if (IsForegroundTaskActive == value)
+        {
+            return;
+        }
+
+        IsForegroundTaskActive = value;
+        ForegroundTaskStateChanged?.Invoke(this, value);
+    }
+
+    public void SetNavigationLocked(bool value) => SetForegroundTaskActive(value);
+}
+
+internal sealed class FixedDesktopEntryViewModelFactory(
+    HomePageViewModel home,
+    SettingsPageViewModel settings) : IDesktopEntryViewModelFactory
+{
+    public HomePageViewModel CreateHome() => home;
+
+    public SettingsPageViewModel CreateSettings() => settings;
 }

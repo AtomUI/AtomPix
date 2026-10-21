@@ -23,7 +23,8 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     private readonly OpenImageWorkflow _openImage;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly ConvertImageWorkflow _convert;
-    private readonly DesktopNavigationCoordinator _navigation;
+    private readonly IDesktopNavigator _navigator;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -49,7 +50,8 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         OpenImageWorkflow openImage,
         LoadSettingsWorkflow loadSettings,
         ConvertImageWorkflow convert,
-        DesktopNavigationCoordinator navigation,
+        IDesktopNavigator navigator,
+        IDesktopForegroundTaskGate foregroundTasks,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
@@ -60,7 +62,8 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _convert = convert ?? throw new ArgumentNullException(nameof(convert));
-        _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
         var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
         Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
@@ -272,7 +275,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
             ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
             return;
         }
-        if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
+        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
         ErrorMessage = null;
@@ -301,7 +304,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
         finally
         {
             _executionCancellation = null;
-            _navigation.EndForegroundTask();
+            _foregroundTasks.EndForegroundTask();
         }
     }
 
@@ -347,7 +350,7 @@ public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorAction
     {
         var opened = await _openImage.ExecuteAsync(new OpenImageRequest(output), CancellationToken.None);
         if (!opened.Succeeded) { SetError(opened.Error); return; }
-        _navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
+        _navigator.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
     }
 
     private async Task CopyDiagnosticIdAsync(CancellationToken cancellationToken)

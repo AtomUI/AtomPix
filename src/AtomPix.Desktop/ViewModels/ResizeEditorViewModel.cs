@@ -35,7 +35,7 @@ public sealed class ResizeEditorViewModel : ViewModelBase, IToolEditorActions, I
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly ResizeImageWorkflow _resize;
     private readonly IImageProcessor _imageProcessor;
-    private readonly DesktopNavigationCoordinator _taskGate;
+    private readonly IDesktopForegroundTaskGate _taskGate;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -67,7 +67,7 @@ public sealed class ResizeEditorViewModel : ViewModelBase, IToolEditorActions, I
         LoadSettingsWorkflow loadSettings,
         ResizeImageWorkflow resize,
         IImageProcessor imageProcessor,
-        DesktopNavigationCoordinator taskGate,
+        IDesktopForegroundTaskGate taskGate,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));

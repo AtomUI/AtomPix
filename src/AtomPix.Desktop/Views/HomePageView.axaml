@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:atom="https://atomui.net"
              xmlns:antdicons="https://atomui.net/icons/antdesign"
+             xmlns:loc="using:AtomPix.Desktop.Localization"
              xmlns:controls="using:AtomPix.Desktop.Controls"
              xmlns:vm="using:AtomPix.Desktop.ViewModels"
              x:Class="AtomPix.Desktop.Views.HomePageView"
@@ -23,15 +24,15 @@
                   VerticalAlignment="Center">
                 <Grid Margin="54,30,54,38" RowDefinitions="Auto,*">
                     <StackPanel x:Name="HomeHeader" HorizontalAlignment="Center" Spacing="6">
-                        <TextBlock Text="开始使用 AtomPix" FontSize="28" FontWeight="SemiBold"
+                        <TextBlock Text="{loc:Loc Home.Title}" FontSize="28" FontWeight="SemiBold"
                                    HorizontalAlignment="Center" />
-                        <TextBlock Text="打开图片或文件夹，开始本地图片处理" FontSize="14" Opacity="0.62"
+                        <TextBlock Text="{loc:Loc Home.Subtitle}" FontSize="14" Opacity="0.62"
                                    HorizontalAlignment="Center" />
                     </StackPanel>
 
                     <atom:DashedBorder x:Name="HomeDropArea"
                                        Grid.Row="1"
-                                       AutomationProperties.Name="拖入图片或文件夹"
+                                       AutomationProperties.Name="{loc:Loc Home.Drop.Prompt}"
                                        Margin="0,28,0,0"
                                        HorizontalAlignment="Stretch"
                                        VerticalAlignment="Stretch"
@@ -47,14 +48,14 @@
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Source="/Assets/Branding/AtomPix-128.png" />
                             </Border>
-                            <TextBlock Text="拖入图片或文件夹" FontSize="21" FontWeight="SemiBold"
+                            <TextBlock Text="{loc:Loc Home.Drop.Prompt}" FontSize="21" FontWeight="SemiBold"
                                        HorizontalAlignment="Center" />
                             <StackPanel Orientation="Horizontal" Spacing="12"
                                         HorizontalAlignment="Center" Margin="0,4,0,0">
-                                <atom:Button Content="打开图片" Width="166" Height="44" ButtonType="Primary"
+                                <atom:Button Content="{loc:Loc Home.Action.OpenImage}" Width="166" Height="44" ButtonType="Primary"
                                              Icon="{antdicons:AntDesignIconProvider Kind=PictureOutlined}"
                                              Command="{Binding OpenImageCommand}" />
-                                <atom:Button Content="打开文件夹" Width="166" Height="44"
+                                <atom:Button Content="{loc:Loc Home.Action.OpenFolder}" Width="166" Height="44"
                                              Icon="{antdicons:AntDesignIconProvider Kind=FolderOpenOutlined}"
                                              Command="{Binding OpenFolderCommand}" />
                             </StackPanel>
@@ -66,7 +67,7 @@
             <StackPanel MaxWidth="760" Margin="0,18,0,0"
                         HorizontalAlignment="Center" VerticalAlignment="Top" ZIndex="10">
                 <atom:Alert Type="Error" IsShowIcon="True"
-                            Message="无法打开图片来源" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
+                            Message="{loc:Loc Home.Error.OpenSource}" Description="{Binding ErrorMessage}" IsVisible="{Binding HasError}" />
                 <controls:DiagnosticIdView DataContext="{Binding Diagnostic}" />
             </StackPanel>
         </Grid>
@@ -76,7 +77,7 @@
                 CornerRadius="26" BorderThickness="2"
                 BorderBrush="#1677FF" Background="#181677FF"
                 IsHitTestVisible="False" IsVisible="{Binding IsDragOver}" ZIndex="20">
-            <TextBlock Text="松开以打开图片来源" FontSize="22" FontWeight="SemiBold"
+            <TextBlock Text="{loc:Loc Home.Drop.Release}" FontSize="22" FontWeight="SemiBold"
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
     </Grid>

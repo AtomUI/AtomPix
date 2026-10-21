@@ -23,7 +23,8 @@ public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActio
     private readonly OpenImageWorkflow _openImage;
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly CompressImageWorkflow _compress;
-    private readonly DesktopNavigationCoordinator _navigation;
+    private readonly IDesktopNavigator _navigator;
+    private readonly IDesktopForegroundTaskGate _foregroundTasks;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _executionCancellation;
     private int _loadGeneration;
@@ -48,7 +49,8 @@ public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActio
         OpenImageWorkflow openImage,
         LoadSettingsWorkflow loadSettings,
         CompressImageWorkflow compress,
-        DesktopNavigationCoordinator navigation,
+        IDesktopNavigator navigator,
+        IDesktopForegroundTaskGate foregroundTasks,
         IUiCommandFactory? commandFactory = null)
     {
         _picker = picker ?? throw new ArgumentNullException(nameof(picker));
@@ -59,7 +61,8 @@ public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActio
         _openImage = openImage ?? throw new ArgumentNullException(nameof(openImage));
         _loadSettings = loadSettings ?? throw new ArgumentNullException(nameof(loadSettings));
         _compress = compress ?? throw new ArgumentNullException(nameof(compress));
-        _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        _navigator = navigator ?? throw new ArgumentNullException(nameof(navigator));
+        _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
         var commands = commandFactory ?? HeadlessUiCommandFactory.Instance;
         var activationOwner = commandFactory is null ? null : this;
         Output = new OutputPolicyEditorViewModel(_picker, OutputDraftChanged, ResultFeedback.ShowWarning, commands);
@@ -301,7 +304,7 @@ public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActio
             ResultFeedback.ShowWarning(outputError ?? "当前输出配置无效。");
             return;
         }
-        if (!_navigation.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
+        if (!_foregroundTasks.TryBeginForegroundTask()) { ErrorMessage = "已有任务正在运行，请等待其结束。"; return; }
 
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _executionCancellation = executionCancellation;
@@ -339,7 +342,7 @@ public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActio
         finally
         {
             _executionCancellation = null;
-            _navigation.EndForegroundTask();
+            _foregroundTasks.EndForegroundTask();
         }
     }
 
@@ -391,7 +394,7 @@ public sealed class CompressionEditorViewModel : ViewModelBase, IToolEditorActio
     {
         var opened = await _openImage.ExecuteAsync(new OpenImageRequest(output), CancellationToken.None);
         if (!opened.Succeeded) { SetError(opened.Error); return; }
-        _navigation.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
+        _navigator.Navigate(new DesktopNavigationRequest(DesktopRoute.Resize, new SingleImageNavigationContext(output, opened.Value!.ProbeResult)));
     }
 
     private async Task CopyDiagnosticIdAsync(CancellationToken cancellationToken)

@@ -38,6 +38,9 @@ public sealed class AtomPixDesktopModule : ModuleBase
             options.DefaultUICulture = fallback;
         });
         services.AddSingleton<IPresentationLocalizationBridge, AvaloniaPresentationLocalizationBridge>();
+        services.AddSingleton<AtomPixLocalizedTextProjection>();
+        services.AddSingleton<IAtomPixLocalizedText>(provider =>
+            provider.GetRequiredService<AtomPixLocalizedTextProjection>());
         services.AddRouting(AtomPixRoutes.Descriptors);
 
         services.AddSingleton<IDesktopPickerService, AvaloniaDesktopPickerService>();
@@ -50,31 +53,50 @@ public sealed class AtomPixDesktopModule : ModuleBase
             provider.GetRequiredService<AvaloniaDesktopFeedbackService>());
         services.AddSingleton<ResultOutputGuard>();
         services.AddSingleton<DesktopExceptionBoundary>();
-        services.AddSingleton<DesktopNavigationCoordinator>();
+        services.AddSingleton<IDesktopForegroundTaskGate, DesktopForegroundTaskGate>();
+        services.AddSingleton<DesktopNavigationIntentHub>();
+        services.AddSingleton<IDesktopNavigationIntentSource>(provider =>
+            provider.GetRequiredService<DesktopNavigationIntentHub>());
         services.AddSingleton<IDesktopNavigator>(provider =>
-            provider.GetRequiredService<DesktopNavigationCoordinator>());
+            provider.GetRequiredService<DesktopNavigationIntentHub>());
         services.AddSingleton<BrowserNavigationSessionStore>();
         services.AddSingleton<AtomPixViewCatalog>();
         services.AddSingleton<AtomPixCityNavigator>();
+        services.AddSingleton<IDesktopEntryViewModelFactory, DesktopEntryViewModelFactory>();
 
-        services.AddSingleton<HomePageViewModel>();
+        services.AddTransient<HomePageViewModel>();
         services.AddSingleton<ImageBrowserViewModel>();
         services.AddSingleton<CompressionEditorViewModel>();
         services.AddSingleton<ConversionEditorViewModel>();
         services.AddSingleton<ResizeEditorViewModel>();
         services.AddSingleton<CropEditorViewModel>();
         services.AddSingleton<BatchTaskViewModel>();
-        services.AddSingleton<SettingsPageViewModel>();
+        services.AddTransient<SettingsPageViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<MainWindow>();
     }
 
-    public override void OnApplicationInitialization(ApplicationInitializationContext context)
+    public override async ValueTask OnApplicationInitializationAsync(
+        ApplicationInitializationContext context,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
         AtomUI.City.Generated.GeneratedLocalizationManifest.RegisterPackages(
             context.Services.GetRequiredService<LanguagePackageRegistry>(),
             AtomPixLocalization.OwnerId);
+        var localization = context.Services.GetRequiredService<AtomPixLocalizedTextProjection>();
+        await localization.InitializeAsync(
+            AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys,
+            cancellationToken).ConfigureAwait(false);
+        LocalizationHost.Initialize(localization);
         context.Services.GetRequiredService<AtomPixViewCatalog>().Register();
+    }
+
+    public override void OnApplicationShutdown(ApplicationShutdownContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        LocalizationHost.Release(
+            context.Services.GetRequiredService<AtomPixLocalizedTextProjection>());
     }
 }

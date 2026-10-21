@@ -7,7 +7,7 @@
 ## 1. 版本、子模块与包
 
 - City 位于 `external/AtomUI.City`；AtomPix 提交精确 gitlink SHA，不在迁移中漂移跟踪分支。
-- 当前固定 SHA 为 `9097d9d0d8244a864e5b7944ef2bf7ab2be70ae3`；City solution、Public API、package、composition、`CommandExecutionDomain` 与 Routing-Presentation release gate 均已通过。
+- 当前固定 SHA 为 `c2e4176159b9b441af2d7ce065d5acde6a888543`；City Release build、2252 项测试（沙箱网络失败项在允许网络的同配置下定向复验）、Build package provenance、composition、`CommandExecutionDomain` 与 Routing-Presentation gate 已通过。聚合 `check-release.sh` 的 format 首关仍受既有非本次文件格式基线阻断，不把它误记为全绿。
 - CI/Release 递归获取 submodule，并验证目录、SHA 和 clean 状态。
 - runtime 模块使用 `ProjectReference`；构建期只消费同 SHA 生成的本地 `AtomUI.City.Build` 包。完整合同见[接线设计](with-city-build-generators-localization.md)。
 - 每次 City 更新形成独立 AtomPix 提交，同时更新决策登记表、兼容证据、依赖与许可证审计。

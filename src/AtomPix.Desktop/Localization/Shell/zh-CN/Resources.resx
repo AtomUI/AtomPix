@@ -1,6 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
+  <data name="Shell.Application.Workspace" xml:space="preserve">
+    <value>AtomPix 应用工作区</value>
+  </data>
+  <data name="Shell.Navigation.Rail" xml:space="preserve">
+    <value>主功能导航轨</value>
+  </data>
+  <data name="Shell.Navigation.Home" xml:space="preserve">
+    <value>返回首页</value>
+  </data>
+  <data name="Shell.Navigation.HomeTip" xml:space="preserve">
+    <value>首页</value>
+  </data>
+  <data name="Shell.Tool.Compress" xml:space="preserve">
+    <value>压缩体积</value>
+  </data>
+  <data name="Shell.Tool.Convert" xml:space="preserve">
+    <value>转换格式</value>
+  </data>
+  <data name="Shell.Tool.Resize" xml:space="preserve">
+    <value>调整尺寸</value>
+  </data>
+  <data name="Shell.Tool.Crop" xml:space="preserve">
+    <value>剪裁尺寸</value>
+  </data>
   <data name="Shell.Navigation.Settings" xml:space="preserve">
     <value>设置</value>
+  </data>
+  <data name="Shell.Panel.Configuration" xml:space="preserve">
+    <value>图片处理配置面板</value>
+  </data>
+  <data name="Shell.Panel.Close" xml:space="preserve">
+    <value>关闭配置面板</value>
+  </data>
+  <data name="Shell.Settings.Separator" xml:space="preserve">
+    <value>设置页面标题栏分割线</value>
+  </data>
+  <data name="Shell.Batch.ResultDetails" xml:space="preserve">
+    <value>批量处理结果详情</value>
+  </data>
+  <data name="Shell.Batch.ResultTitle" xml:space="preserve">
+    <value>批量处理结果</value>
   </data>
 </root>
