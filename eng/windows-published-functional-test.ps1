@@ -170,6 +170,7 @@ if ([string]::IsNullOrWhiteSpace($CaseRoot)) {
 Set-Content -LiteralPath $tracePath -Value "START $($startedAtUtc.ToString('O')) RunId=$runId Only=$Only" -Encoding utf8
 
 $results = [System.Collections.Generic.List[object]]::new()
+$script:CleanupFailure = $null
 
 function Add-Result([string] $case, [string] $status, [string] $details) {
     $results.Add([ordered]@{ Case = $case; Status = $status; Details = $details })
@@ -392,7 +393,8 @@ function Stop-AtomPix($session) {
         if (-not $closedNormally -and -not $session.Process.HasExited) {
             Stop-Process -Id $session.Process.Id -Force
             $session.Process.WaitForExit()
-            throw "AtomPix did not close normally within 10 seconds; forced cleanup was required."
+            $script:CleanupFailure = "AtomPix did not close normally within 10 seconds; forced cleanup was required."
+            Add-Trace "forced-cleanup scenario=$($session.AppData)"
         }
     }
 }
@@ -447,18 +449,39 @@ function Open-SingleImage($session, [string] $folder) {
     Add-Trace "open-image begin $folder"
     Invoke-Button $session.Root "打开图片"
     Start-Sleep -Seconds 1
-    $dialog = Wait-Element $session.Root "添加图片"
     $source = Get-ChildItem -LiteralPath $folder -File | Select-Object -First 1
     if ($null -eq $source) { throw "No image exists in '$folder'." }
     Add-Trace "open-image picker-ready source=$($source.FullName)"
-    $dialogHandle = [IntPtr]$dialog.Current.NativeWindowHandle
-    if ($dialogHandle -eq [IntPtr]::Zero) { throw "Native image picker has no window handle." }
-    $fileName = Wait-Element $dialog "文件名(N):" ([System.Windows.Automation.ControlType]::Pane)
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
+    $dialogHandle = [IntPtr]::Zero
+    while ($dialogHandle -eq [IntPtr]::Zero -and [DateTimeOffset]::UtcNow -lt $deadline) {
+        $dialogHandle = [AtomPixPublishedTestMouse]::GetEnabledPopup($session.Process.MainWindowHandle)
+        if ($dialogHandle -eq $session.Process.MainWindowHandle) { $dialogHandle = [IntPtr]::Zero }
+        if ($dialogHandle -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
+    }
+    if ($dialogHandle -eq [IntPtr]::Zero) {
+        Capture-Desktop "image-picker-missing.png"
+        throw "Native image picker did not appear."
+    }
+
+    [AtomPixPublishedTestMouse]::SetForegroundWindow($dialogHandle) | Out-Null
+    $dialog = [System.Windows.Automation.AutomationElement]::FromHandle($dialogHandle)
+    $fileName = $dialog.FindFirst(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.AndCondition]::new(@(
+            [System.Windows.Automation.PropertyCondition]::new(
+                [System.Windows.Automation.AutomationElement]::AutomationIdProperty, "1148"),
+            [System.Windows.Automation.PropertyCondition]::new(
+                [System.Windows.Automation.AutomationElement]::ClassNameProperty, "Edit"))))
+    if ($null -eq $fileName) {
+        Capture-Desktop "image-picker-submit-failed.png"
+        throw "The native image picker file name control is missing."
+    }
     Click-Element $fileName
     Start-Sleep -Milliseconds 150
     [AtomPixPublishedTestMouse]::SelectAll()
     [AtomPixPublishedTestMouse]::SendUnicodeText($source.FullName)
-    Start-Sleep -Seconds 2
+    Start-Sleep -Milliseconds 300
     Add-Trace "open-image filename-entered"
     [AtomPixPublishedTestMouse]::PressEnter()
     Add-Trace "open-image open-clicked"
@@ -533,10 +556,25 @@ function Open-Tool($session, [string] $name) {
 
 function Run-Scenario([string] $name, [scriptblock] $body) {
     if (-not [string]::IsNullOrEmpty($Only) -and $Only -ne $name) { return }
+    $script:CleanupFailure = $null
     try {
         & $body
+        if (-not [string]::IsNullOrWhiteSpace($script:CleanupFailure)) {
+            throw $script:CleanupFailure
+        }
     } catch {
-        Add-Result $name "FAILED" $_.Exception.Message
+        for ($index = $results.Count - 1; $index -ge 0; $index--) {
+            if ($results[$index].Case -eq $name -and $results[$index].Status -eq "PASSED") {
+                $results.RemoveAt($index)
+                break
+            }
+        }
+        $details = $_.Exception.Message
+        if (-not [string]::IsNullOrWhiteSpace($script:CleanupFailure) -and
+            $details -ne $script:CleanupFailure) {
+            $details = "$details Cleanup: $script:CleanupFailure"
+        }
+        Add-Result $name "FAILED" $details
     }
 }
 
