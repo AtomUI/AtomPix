@@ -134,6 +134,8 @@ jobs:
           $certPath = Join-Path $env:RUNNER_TEMP "AtomPixCodeSign.p12"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:CERT_P12_BASE64))
           security create-keychain -p $env:KEYCHAIN_PASSWORD build.keychain
+          # Intel runners can reach signing after the keychain's default idle timeout.
+          security set-keychain-settings -lut 21600 build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p $env:KEYCHAIN_PASSWORD build.keychain
           security import $certPath -k build.keychain -P $env:CERT_PASSWORD -T /usr/bin/codesign
@@ -187,7 +189,11 @@ jobs:
         shell: pwsh
         env:
           CERT_IDENTITY: ${{ secrets.CERT_IDENTITY }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
+          # Prevent codesign from waiting indefinitely for a headless password prompt.
+          security unlock-keychain -p $env:KEYCHAIN_PASSWORD build.keychain
+          if ($LASTEXITCODE -ne 0) { throw "Unable to unlock the signing keychain." }
           & "${{ env.ATOMUI_TOOLS_MAC_BIN }}" create-dmg `
             --runtime "${{ matrix.rid }}" `
             --config "${{ matrix.installer_root }}/config/InstallerConfig.xml" `
