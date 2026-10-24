@@ -48,7 +48,7 @@ public sealed class DesktopUiAutomationTests
             Assert.Equal(
                 new[] { "zh-CN" },
                 AtomUI.City.Generated.GeneratedLocalizationManifest.SupportedCultures);
-            Assert.Equal(407, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
+            Assert.Equal(408, AtomUI.City.Generated.GeneratedLocalizationManifest.ResourceKeys.Count);
 
             var localization = harness.Services.GetRequiredService<ILocalizationService>();
             var presentationBridge = harness.Services.GetRequiredService<IPresentationLocalizationBridge>();
@@ -536,6 +536,54 @@ public sealed class DesktopUiAutomationTests
     });
 
     [Fact]
+    public Task Batch_progress_bar_disables_reverse_motion_while_a_new_generation_is_preparing() => RunAsync(async () =>
+    {
+        using var services = DesktopCompositionRoot.Build();
+        var batch = services.GetRequiredService<BatchTaskViewModel>();
+        var foregroundTasks = services.GetRequiredService<IDesktopForegroundTaskGate>();
+        var text = services.GetRequiredService<IAtomPixLocalizedText>();
+        var editor = new ReadyToolEditor();
+
+        var preparationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePreparation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var session = new ToolDrawerSessionViewModel(
+            editor,
+            batch,
+            2,
+            async cancellationToken =>
+            {
+                preparationEntered.TrySetResult();
+                return await releasePreparation.Task.WaitAsync(cancellationToken);
+            },
+            static () => { },
+            foregroundTasks,
+            text,
+            resetBatchVisualState: static () => { });
+        var view = new ToolDrawerSessionView { DataContext = session };
+        var window = Show(view);
+        var execution = session.StartBatchCommand.ExecuteAsync();
+        try
+        {
+            await preparationEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            using var frame = window.CaptureRenderedFrame();
+            var progress = Assert.IsType<AtomUI.Desktop.Controls.ProgressBar>(
+                view.FindControl<Control>("BatchProgressBar"));
+
+            Assert.NotNull(frame);
+            Assert.True(progress.IsVisible);
+            Assert.Equal(0, progress.Value);
+            Assert.False(progress.IsMotionEnabled);
+        }
+        finally
+        {
+            releasePreparation.TrySetResult(false);
+            await execution;
+            window.Close();
+        }
+    });
+
+    [Fact]
     public Task Resize_editor_uses_atomui_integer_pixel_guards_and_a_single_percentage_editor() => RunAsync(() =>
     {
         using var services = DesktopCompositionRoot.Build();
@@ -954,6 +1002,23 @@ public sealed class DesktopUiAutomationTests
             Task.FromResult(DesktopSelectionResult.Canceled());
         public Task<DesktopSelectionResult> PickFolderAsync(CancellationToken cancellationToken) =>
             Task.FromResult(DesktopSelectionResult.Canceled());
+    }
+
+    private sealed class ReadyToolEditor : IToolEditorActions
+    {
+        public string StartActionLabel => "单张处理";
+
+        public System.Windows.Input.ICommand StartActionCommand { get; } =
+            new CommunityToolkit.Mvvm.Input.RelayCommand(static () => { });
+
+        public System.Windows.Input.ICommand CancelActionCommand { get; } =
+            new CommunityToolkit.Mvvm.Input.RelayCommand(static () => { });
+
+        public bool IsProcessing => false;
+
+        public void RequestCancellation()
+        {
+        }
     }
 
     private sealed class CityWindowHarness : IAsyncDisposable

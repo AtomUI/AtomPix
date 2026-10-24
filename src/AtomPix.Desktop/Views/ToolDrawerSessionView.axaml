@@ -31,6 +31,7 @@
                                       AutomationProperties.Name="{loc:Loc Batch.Progress.Automation}"
                                       Minimum="0" Maximum="1"
                                       IsProgressInfoVisible="False"
+                                      IsMotionEnabled="{Binding IsBatchProcessing}"
                                       Value="{Binding BatchProgressRatio}" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                         <TextBlock VerticalAlignment="Center"

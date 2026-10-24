@@ -19,7 +19,7 @@ public enum PrimaryWorkspaceKind
     Settings,
 }
 
-public sealed class ShellViewModel : ViewModelBase
+public sealed class ShellViewModel : AtomPixViewModelBase
 {
     private readonly IDesktopNavigationIntentSource _navigation;
     private readonly IDesktopForegroundTaskGate _foregroundTasks;
@@ -580,7 +580,8 @@ public sealed class ShellViewModel : ViewModelBase
                 () => SynchronizeSingleDraftFromBatch(editorContent),
                 _foregroundTasks,
                 _text,
-                _commandFactory);
+                _commandFactory,
+                _browser.ResetBatchStatuses);
             if (_compositionRoot is not null)
             {
                 _toolComposition = await _compositionRoot.AttachChildAsync(

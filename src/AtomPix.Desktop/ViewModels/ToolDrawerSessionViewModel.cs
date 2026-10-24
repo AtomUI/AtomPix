@@ -10,12 +10,13 @@ using AtomUI.City.Presentation;
 /// Keeps one tool editor mounted while projecting single or batch execution into
 /// the same footer. Batch is an execution mode, never a second content page.
 /// </summary>
-public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class ToolDrawerSessionViewModel : AtomPixViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
 {
     private readonly IDesktopForegroundTaskGate _foregroundTasks;
     private readonly IAtomPixLocalizedText _text;
     private readonly Func<CancellationToken, Task<bool>> _prepareBatch;
     private readonly Action _synchronizeSingleFromBatch;
+    private readonly Action _resetBatchVisualState;
     private readonly IToolEditorActions _singleActions;
     private readonly INotifyPropertyChanged? _singleNotifier;
     private bool _isPreparingBatch;
@@ -29,7 +30,8 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
         Action synchronizeSingleFromBatch,
         IDesktopForegroundTaskGate foregroundTasks,
         IAtomPixLocalizedText text,
-        IUiCommandFactory? commandFactory = null)
+        IUiCommandFactory? commandFactory = null,
+        Action? resetBatchVisualState = null)
     {
         SingleContent = singleContent ?? throw new ArgumentNullException(nameof(singleContent));
         _text = text ?? throw new ArgumentNullException(nameof(text));
@@ -40,6 +42,7 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
         _itemCount = itemCount;
         _prepareBatch = prepareBatch ?? throw new ArgumentNullException(nameof(prepareBatch));
         _synchronizeSingleFromBatch = synchronizeSingleFromBatch ?? throw new ArgumentNullException(nameof(synchronizeSingleFromBatch));
+        _resetBatchVisualState = resetBatchVisualState ?? (static () => { });
         _foregroundTasks = foregroundTasks ?? throw new ArgumentNullException(nameof(foregroundTasks));
         StartBatchCommand = (commandFactory ?? HeadlessUiCommandFactory.Instance).CreateAsync(
             StartBatchAsync,
@@ -82,7 +85,7 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
         && IsIdle
         && !_foregroundTasks.IsForegroundTaskActive
         && _singleActions.StartActionCommand.CanExecute(null);
-    public double BatchProgressRatio => BatchContent.ProgressRatio;
+    public double BatchProgressRatio => IsPreparingBatch ? 0 : BatchContent.ProgressRatio;
     public string BatchProgressSummary => IsPreparingBatch
         ? _text.Format("Batch.Progress.Preparing", ItemCount)
         : BatchContent.ProgressSummary;
@@ -126,6 +129,10 @@ public sealed class ToolDrawerSessionViewModel : ViewModelBase, IDesktopForegrou
     private async Task StartBatchAsync(CancellationToken cancellationToken)
     {
         if (!CanStartBatch) return;
+        // The previous result remains available to the batch model until preparation
+        // commits, but none of its terminal visuals may leak into the new generation.
+        // Reset them while the footer is still hidden, then expose Preparing at 0%.
+        _resetBatchVisualState();
         IsPreparingBatch = true;
         try
         {

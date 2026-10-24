@@ -135,6 +135,72 @@ public sealed class DesktopInteractionTests
     }
 
     [Fact]
+    public async Task Home_open_empty_folder_stays_on_home_and_remains_retryable()
+    {
+        var directory = new LocalPath(Path.Combine(Path.GetTempPath(), "empty-pictures"));
+        var processor = new TestImageProcessor(new LocalPath(Path.Combine(directory.Value, "unused.jpg")));
+        var fileSystem = new TestFileSystem([]);
+        var picker = new TestPicker(DesktopSelectionResult.Selected(directory.Value));
+        var navigation = new DesktopNavigationCoordinator();
+        DesktopNavigationRequest? requested = null;
+        navigation.NavigationRequested += (_, request) => requested = request;
+        var viewModel = CreateHome(picker, processor, navigation, fileSystem);
+
+        await viewModel.OpenFolderCommand.ExecuteAsync();
+
+        Assert.Null(requested);
+        Assert.Equal(DesktopContentState.Failure, viewModel.State);
+        Assert.True(viewModel.HasError);
+        Assert.Equal("所选文件夹中没有可打开的图片，请重新选择。", viewModel.ErrorMessage);
+        Assert.True(viewModel.OpenFolderCommand.CanExecute(null));
+        Assert.True(viewModel.OpenImageCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Home_open_folder_with_only_unsupported_files_stays_on_home()
+    {
+        var directory = new LocalPath(Path.Combine(Path.GetTempPath(), "unsupported-pictures"));
+        var unsupported = new LocalPath(Path.Combine(directory.Value, "notes.txt"));
+        var processor = new TestImageProcessor(new LocalPath(Path.Combine(directory.Value, "unused.jpg")));
+        var fileSystem = new TestFileSystem([unsupported]);
+        var picker = new TestPicker(DesktopSelectionResult.Selected(directory.Value));
+        var navigation = new DesktopNavigationCoordinator();
+        var navigated = false;
+        navigation.NavigationRequested += (_, _) => navigated = true;
+        var viewModel = CreateHome(picker, processor, navigation, fileSystem);
+
+        await viewModel.OpenFolderCommand.ExecuteAsync();
+
+        Assert.False(navigated);
+        Assert.Equal(DesktopContentState.Failure, viewModel.State);
+        Assert.Equal("所选文件夹中没有可打开的图片，请重新选择。", viewModel.ErrorMessage);
+        Assert.True(viewModel.OpenFolderCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Home_drop_empty_folder_uses_the_same_recoverable_guard()
+    {
+        var directory = new LocalPath(Path.Combine(Path.GetTempPath(), "dropped-empty-pictures"));
+        var processor = new TestImageProcessor(new LocalPath(Path.Combine(directory.Value, "unused.jpg")));
+        var fileSystem = new TestFileSystem([]);
+        var navigation = new DesktopNavigationCoordinator();
+        var navigated = false;
+        navigation.NavigationRequested += (_, _) => navigated = true;
+        var viewModel = CreateHome(
+            new TestPicker(DesktopSelectionResult.Canceled()),
+            processor,
+            navigation,
+            fileSystem);
+
+        await viewModel.OpenDroppedSourcesCommand.ExecuteAsync([directory.Value]);
+
+        Assert.False(navigated);
+        Assert.Equal(DesktopContentState.Failure, viewModel.State);
+        Assert.Equal("所选文件夹中没有可打开的图片，请重新选择。", viewModel.ErrorMessage);
+        Assert.True(viewModel.CanAcceptDrop);
+    }
+
+    [Fact]
     public async Task Browser_loads_probe_and_exposes_file_backed_gallery_items_without_decoding_in_view_model()
     {
         var path = new LocalPath(Path.Combine(Path.GetTempPath(), "browser.jpg"));
@@ -1219,6 +1285,95 @@ public sealed class DesktopInteractionTests
         Assert.Equal(2, processor.CompressCallCount);
         Assert.True(batch.HasResult);
         Assert.False(session.IsBatchExecuting);
+    }
+
+    [Fact]
+    public async Task Tool_drawer_repeated_batch_starts_with_a_clean_visual_generation_at_zero()
+    {
+        var first = new LocalPath(Path.Combine(Path.GetTempPath(), "session-generation-a.jpg"));
+        var second = new LocalPath(Path.Combine(Path.GetTempPath(), "session-generation-b.jpg"));
+        var processor = new TestImageProcessor(first);
+        var fileSystem = new TestFileSystem([first, second]);
+        var navigation = new DesktopNavigationCoordinator();
+        using var editor = CreateCompressionEditor(processor, fileSystem, navigation);
+        await editor.LoadAsync(new SingleImageNavigationContext(first, processor.Probe));
+        var batch = CreateBatch(new TestPicker(DesktopSelectionResult.Canceled()), processor, fileSystem);
+        var secondPreparationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSecondPreparation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var preparationCount = 0;
+        var visualResetCount = 0;
+        var visualStatus = BrowserTaskStatus.Failed;
+
+        async Task<bool> PrepareBatchAsync(CancellationToken cancellationToken)
+        {
+            preparationCount++;
+            if (preparationCount == 2)
+            {
+                secondPreparationEntered.TrySetResult();
+                return await releaseSecondPreparation.Task.WaitAsync(cancellationToken);
+            }
+
+            if (!ShellViewModel.TryCaptureBatchDraft(editor, batch, out var applyDraft)) return false;
+            await batch.PrepareAsync(BatchTaskKind.Compress, [first, second], cancellationToken);
+            applyDraft!();
+            return batch.DraftError is null && batch.CanAttemptStart;
+        }
+
+        using var session = new ToolDrawerSessionViewModel(
+            editor,
+            batch,
+            2,
+            PrepareBatchAsync,
+            static () => { },
+            navigation,
+            TestLocalizedText.Instance,
+            resetBatchVisualState: () =>
+            {
+                visualResetCount++;
+                visualStatus = BrowserTaskStatus.None;
+            });
+
+        var visibleProgress = new List<double>();
+        session.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ToolDrawerSessionViewModel.BatchProgressRatio)
+                && session.IsBatchExecuting)
+            {
+                visibleProgress.Add(session.BatchProgressRatio);
+            }
+        };
+
+        await session.StartBatchCommand.ExecuteAsync();
+
+        Assert.True(batch.HasResult);
+        Assert.Equal(1, batch.ProgressRatio);
+        Assert.Equal(1, visualResetCount);
+        Assert.NotEmpty(visibleProgress);
+        Assert.Equal(0, visibleProgress[0]);
+        Assert.All(
+            visibleProgress.Zip(visibleProgress.Skip(1)),
+            pair => Assert.True(pair.First <= pair.Second, $"Visible progress regressed from {pair.First} to {pair.Second}."));
+
+        visualStatus = BrowserTaskStatus.Failed;
+        visibleProgress.Clear();
+        var secondExecution = session.StartBatchCommand.ExecuteAsync();
+        await secondPreparationEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(2, visualResetCount);
+        Assert.Equal(BrowserTaskStatus.None, visualStatus);
+        Assert.True(session.IsPreparingBatch);
+        Assert.True(session.IsBatchExecuting);
+        Assert.False(session.IsBatchProcessing);
+        Assert.Equal(0, session.BatchProgressRatio);
+        Assert.Equal("正在准备 2 张图片", session.BatchProgressSummary);
+        Assert.NotEmpty(visibleProgress);
+        Assert.All(visibleProgress, value => Assert.Equal(0, value));
+
+        releaseSecondPreparation.SetResult(false);
+        await secondExecution;
+
+        Assert.False(session.IsBatchExecuting);
+        Assert.Equal(1, batch.ProgressRatio);
     }
 
     [Fact]

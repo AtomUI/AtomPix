@@ -22,7 +22,7 @@ public enum SettingsSection
     About
 }
 
-public sealed class SettingsPageViewModel : ViewModelBase
+public sealed class SettingsPageViewModel : AtomPixViewModelBase
 {
     private readonly LoadSettingsWorkflow _loadSettings;
     private readonly SaveSettingsWorkflow _saveSettings;
