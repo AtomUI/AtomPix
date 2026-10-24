@@ -11,7 +11,7 @@
     <PackageVersion Include="AtomUI.Desktop.Controls.ColorPicker" Version="6.0.8" />
     <PackageVersion Include="AtomUI.Icons.AntDesign" Version="6.0.8" />
     <PackageVersion Include="AtomUI.Labs.Controls.ImageGallery" Version="6.0.8" />
-    <PackageVersion Include="AtomUI.City.Build" Version="1.0.0-atompix.c2e4176" />
+    <PackageVersion Include="AtomUI.City.Build" Version="1.0.0-atompix.7f273ea.1" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="Magick.NET-Q8-AnyCPU" Version="14.16.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />

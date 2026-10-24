@@ -36,4 +36,7 @@
   <data name="Home.Error.NoOpenablePath" xml:space="preserve">
     <value>没有可打开的图片路径，请重新选择。</value>
   </data>
+  <data name="Home.Error.NoOpenableImagesInFolder" xml:space="preserve">
+    <value>所选文件夹中没有可打开的图片，请重新选择。</value>
+  </data>
 </root>

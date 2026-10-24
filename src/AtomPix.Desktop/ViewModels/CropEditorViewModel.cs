@@ -22,7 +22,7 @@ public sealed record CropRatioOption(string Label, int? WidthUnits, int? HeightU
     public override string ToString() => Label;
 }
 
-public sealed class CropEditorViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class CropEditorViewModel : AtomPixViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;

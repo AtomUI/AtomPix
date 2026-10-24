@@ -14,7 +14,7 @@ using AtomPix.Workflows.Images;
 using AtomPix.Workflows.Settings;
 using AtomUI.City.Presentation;
 
-public sealed class ConversionEditorViewModel : ViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class ConversionEditorViewModel : AtomPixViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;

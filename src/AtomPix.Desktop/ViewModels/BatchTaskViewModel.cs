@@ -168,7 +168,7 @@ public sealed record SubmittedBatchSnapshot(
     object ProcessingProfile,
     OutputPolicy OutputPolicy);
 
-public sealed class BatchTaskViewModel : ViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
+public sealed class BatchTaskViewModel : AtomPixViewModelBase, IDesktopForegroundTask, IResultAvailabilityAware
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopDialogService _dialogs;

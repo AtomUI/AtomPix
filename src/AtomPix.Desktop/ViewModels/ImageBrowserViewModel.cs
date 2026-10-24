@@ -123,7 +123,7 @@ public sealed class BrowserItemViewModel : ObservableObject
     }
 }
 
-public sealed class ImageBrowserViewModel : ViewModelBase
+public sealed class ImageBrowserViewModel : AtomPixViewModelBase
 {
     private readonly OpenImageWorkflow _openImage;
     private readonly ImageProcessorCapabilities _capabilities;

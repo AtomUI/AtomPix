@@ -1225,6 +1225,26 @@ public sealed class WorkflowContractTests
     }
 
     [Fact]
+    public async Task OpenFolderWorkflow_reports_a_successful_empty_collection_when_directory_has_no_supported_images()
+    {
+        var fs = new FakeFileSystemService();
+        var image = new FakeImageProcessor();
+        var directory = Path.GetFullPath("empty-gallery");
+        fs.DirectoryFiles[directory] = [];
+        var workflow = new OpenFolderWorkflow(fs, image);
+
+        var result = await workflow.ExecuteAsync(
+            new OpenFolderRequest(new LocalPath(directory)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new LocalPath(directory), result.Value!.DirectoryPath);
+        Assert.Empty(result.Value.Items);
+        Assert.Equal(0, result.Value.UnsupportedFileCount);
+        Assert.False(image.ProbeCalled);
+    }
+
+    [Fact]
     public async Task AppendBatchInputsWorkflow_appends_multiple_sources_and_reports_skips()
     {
         var fs = new FakeFileSystemService();

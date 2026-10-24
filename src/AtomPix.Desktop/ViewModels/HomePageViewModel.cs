@@ -9,7 +9,7 @@ using AtomPix.Desktop.Platform;
 using AtomPix.Workflows.Images;
 using AtomUI.City.Presentation;
 
-public sealed class HomePageViewModel : ViewModelBase
+public sealed class HomePageViewModel : AtomPixViewModelBase
 {
     private readonly IDesktopPickerService _picker;
     private readonly IFileSystemService _fileSystem;
@@ -293,10 +293,16 @@ public sealed class HomePageViewModel : ViewModelBase
             return;
         }
 
+        if (result.Value!.Items.Count == 0)
+        {
+            Fail(_text.GetString("Home.Error.NoOpenableImagesInFolder"));
+            return;
+        }
+
         State = DesktopContentState.Ready;
         _navigator.Navigate(new DesktopNavigationRequest(
             DesktopRoute.Browse,
-            new BrowserNavigationContext(result.Value!.DirectoryPath, result.Value.Items)));
+            new BrowserNavigationContext(result.Value.DirectoryPath, result.Value.Items)));
     }
 
     private void BeginLoading()

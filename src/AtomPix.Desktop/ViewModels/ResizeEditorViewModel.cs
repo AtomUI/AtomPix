@@ -25,7 +25,7 @@ public enum PixelDimensionAnchor
     Height
 }
 
-public sealed class ResizeEditorViewModel : ViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
+public sealed class ResizeEditorViewModel : AtomPixViewModelBase, IToolEditorActions, IResultAvailabilityAware, IOperationResultFeedbackSource
 {
     private readonly IDesktopPickerService _picker;
     private readonly IDesktopLauncherService _launcher;
