@@ -138,7 +138,9 @@ public sealed class DesktopUiAutomationTests
             window.MouseDown(clickPoint.Value, MouseButton.Left, RawInputModifiers.None);
             window.MouseUp(clickPoint.Value, MouseButton.Left, RawInputModifiers.None);
             await WaitUntilAsync(() => shell.IsSettingsOpen
-                && workspace.GetVisualDescendants().OfType<SettingsPageView>().Count() == 1);
+                && workspace.GetVisualDescendants().OfType<SettingsPageView>().Count() == 1
+                && initialHome.IsDisposed
+                && !initialHome.IsActive);
             Assert.True(shell.IsSettingsOpen);
             Assert.True(initialHome.IsDisposed);
             Assert.False(initialHome.IsActive);
